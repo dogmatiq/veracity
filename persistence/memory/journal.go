@@ -1,12 +1,14 @@
-package journal
+package memory
 
 import (
 	"context"
 	"sync"
+
+	"github.com/dogmatiq/veracity/persistence"
 )
 
-// MemoryJournal is an in-memory implementation of a journal.
-type MemoryJournal struct {
+// Journal is an in-memory implementation of a persistence.Journal.
+type Journal struct {
 	recordsM sync.RWMutex
 	records  [][]byte
 
@@ -16,15 +18,15 @@ type MemoryJournal struct {
 
 // Open returns a reader used to read journal records in order, beginning at
 // the given offset.
-func (j *MemoryJournal) Open(ctx context.Context, offset uint64) (Reader, error) {
-	return &memoryReader{
+func (j *Journal) Open(ctx context.Context, offset uint64) (persistence.Reader, error) {
+	return &reader{
 		journal: j,
 		offset:  offset,
 	}, nil
 }
 
 // Append adds a record to the end of the journal.
-func (j *MemoryJournal) Append(ctx context.Context, rec []byte) (uint64, error) {
+func (j *Journal) Append(ctx context.Context, rec []byte) (uint64, error) {
 	j.recordsM.Lock()
 	defer j.recordsM.Unlock()
 
@@ -62,10 +64,10 @@ func (j *MemoryJournal) Append(ctx context.Context, rec []byte) (uint64, error) 
 	return offset, nil
 }
 
-// memoryReader is an implementation of the Reader interface that reads from a
-// MemoryJournal.
-type memoryReader struct {
-	journal    *MemoryJournal
+// reader is an implementation of the persistence.Reader interface that reads
+// from an in-memory journal.
+type reader struct {
+	journal    *Journal
 	offset     uint64
 	historical [][]byte
 	realtime   <-chan []byte
@@ -75,7 +77,7 @@ type memoryReader struct {
 //
 // It blocks until a record becomes available, an error occurs, or ctx is
 // canceled.
-func (r *memoryReader) Next(ctx context.Context) (uint64, []byte, error) {
+func (r *reader) Next(ctx context.Context) (uint64, []byte, error) {
 	rec, err := r.next(ctx)
 	if err != nil {
 		return 0, nil, err
@@ -86,7 +88,7 @@ func (r *memoryReader) Next(ctx context.Context) (uint64, []byte, error) {
 	return offset, rec, nil
 }
 
-func (r *memoryReader) next(ctx context.Context) ([]byte, error) {
+func (r *reader) next(ctx context.Context) ([]byte, error) {
 	for {
 		// We are already "tailing" the journal. We can read directly from the
 		// channel to get records in "real-time".
@@ -135,6 +137,6 @@ func (r *memoryReader) next(ctx context.Context) ([]byte, error) {
 }
 
 // Close closes the reader.
-func (r *memoryReader) Close() error {
+func (r *reader) Close() error {
 	return nil
 }

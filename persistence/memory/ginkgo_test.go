@@ -1,4 +1,4 @@
-package journal_test
+package memory_test
 
 import (
 	"reflect"

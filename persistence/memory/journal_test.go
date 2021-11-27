@@ -1,25 +1,25 @@
-package journal_test
+package memory_test
 
 import (
 	"context"
 	"time"
 
-	. "github.com/dogmatiq/veracity/persistence/journal"
+	. "github.com/dogmatiq/veracity/persistence/memory"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"golang.org/x/sync/errgroup"
 )
 
-var _ = Describe("type MemoryJournal", func() {
+var _ = Describe("type Journal", func() {
 	var (
 		ctx     context.Context
 		cancel  context.CancelFunc
-		journal *MemoryJournal
+		journal *Journal
 	)
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-		journal = &MemoryJournal{}
+		journal = &Journal{}
 	})
 
 	AfterEach(func() {
