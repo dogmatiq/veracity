@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	. "github.com/dogmatiq/veracity/journal"
+	. "github.com/dogmatiq/veracity/persistence/journal"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"golang.org/x/sync/errgroup"
