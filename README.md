@@ -6,6 +6,6 @@
 [![Documentation](https://img.shields.io/badge/go.dev-reference-007d9c)](https://pkg.go.dev/github.com/dogmatiq/veracity)
 [![Go Report Card](https://goreportcard.com/badge/github.com/dogmatiq/veracity)](https://goreportcard.com/report/github.com/dogmatiq/veracity)
 
-Verity is an event-sourced [Dogma](https://github.com/dogmatiq/dogma)
-[engine](https://github.com/dogmatiq/dogma#engine) with a journaling persistence
-layer.
+Veracity is an event-sourced [Dogma](https://github.com/dogmatiq/dogma)
+[engine](https://github.com/dogmatiq/dogma#engine) that uses an append-only
+journal for persistence.
