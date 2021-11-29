@@ -2,6 +2,7 @@ package memory_test
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	. "github.com/dogmatiq/veracity/persistence/memory"
@@ -31,17 +32,17 @@ var _ = Describe("type Journal", func() {
 			for i := byte(0); i < 100; i++ {
 				offset, err := journal.Append(ctx, []byte{i})
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(offset).To(BeNumerically("==", i))
+				Expect(offset).To(Equal(fmt.Sprintf("%d", i)))
 			}
 
-			r, err := journal.Open(ctx, 0)
+			r, err := journal.Open(ctx, "")
 			Expect(err).ShouldNot(HaveOccurred())
 			defer r.Close()
 
 			for i := byte(0); i < 100; i++ {
 				offset, rec, err := r.Next(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(offset).To(BeNumerically("==", i))
+				Expect(offset).To(Equal(fmt.Sprintf("%d", i)))
 				Expect(rec).To(Equal([]byte{i}))
 			}
 		})
@@ -50,17 +51,17 @@ var _ = Describe("type Journal", func() {
 			for i := byte(0); i < 100; i++ {
 				offset, err := journal.Append(ctx, []byte{i})
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(offset).To(BeNumerically("==", i))
+				Expect(offset).To(Equal(fmt.Sprintf("%d", i)))
 			}
 
-			r, err := journal.Open(ctx, 50)
+			r, err := journal.Open(ctx, "50")
 			Expect(err).ShouldNot(HaveOccurred())
 			defer r.Close()
 
 			for i := byte(50); i < 100; i++ {
 				offset, rec, err := r.Next(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(offset).To(BeNumerically("==", i))
+				Expect(offset).To(Equal(fmt.Sprintf("%d", i)))
 				Expect(rec).To(Equal([]byte{i}))
 			}
 		})
@@ -70,17 +71,17 @@ var _ = Describe("type Journal", func() {
 		It("returns the offset of the record", func() {
 			offset, err := journal.Append(ctx, []byte("<record>"))
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(offset).To(BeNumerically("==", 0))
+			Expect(offset).To(Equal("0"))
 
 			offset, err = journal.Append(ctx, []byte("<record>"))
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(offset).To(BeNumerically("==", 1))
+			Expect(offset).To(Equal("1"))
 		})
 
 		It("does not block if there is a stalled reader", func() {
 			By("opening a reader")
 
-			r, err := journal.Open(ctx, 0)
+			r, err := journal.Open(ctx, "")
 			Expect(err).ShouldNot(HaveOccurred())
 			defer r.Close()
 
@@ -96,7 +97,7 @@ var _ = Describe("type Journal", func() {
 			for i := byte(0); i < 100; i++ {
 				offset, err := journal.Append(ctx, []byte{i})
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(offset).To(BeNumerically("==", i))
+				Expect(offset).To(Equal(fmt.Sprintf("%d", i)))
 			}
 
 			By("resuming reading")
@@ -104,7 +105,7 @@ var _ = Describe("type Journal", func() {
 			for i := byte(0); i < 100; i++ {
 				offset, rec, err := r.Next(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(offset).To(BeNumerically("==", i))
+				Expect(offset).To(Equal(fmt.Sprintf("%d", i)))
 				Expect(rec).To(Equal([]byte{i}))
 			}
 		})
@@ -115,7 +116,7 @@ var _ = Describe("type Journal", func() {
 			read := func() error {
 				defer GinkgoRecover()
 
-				r, err := journal.Open(ctx, 0)
+				r, err := journal.Open(ctx, "")
 				Expect(err).ShouldNot(HaveOccurred())
 				defer r.Close()
 
@@ -124,7 +125,7 @@ var _ = Describe("type Journal", func() {
 					return err
 				}
 
-				Expect(offset).To(BeNumerically("==", 0))
+				Expect(offset).To(Equal("0"))
 				Expect(rec).To(Equal([]byte("<record>")))
 				return nil
 			}

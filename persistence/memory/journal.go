@@ -2,6 +2,8 @@ package memory
 
 import (
 	"context"
+	"errors"
+	"strconv"
 	"sync"
 
 	"github.com/dogmatiq/veracity/persistence"
@@ -17,8 +19,19 @@ type Journal struct {
 }
 
 // Open returns a reader used to read journal records in order, beginning at
-// the given offset.
-func (j *Journal) Open(ctx context.Context, offset uint64) (persistence.Reader, error) {
+// the given record ID.
+//
+// If id is empty, the reader is opened at the first available record.
+func (j *Journal) Open(ctx context.Context, id string) (persistence.Reader, error) {
+	if id == "" {
+		id = "0"
+	}
+
+	offset, err := strconv.ParseUint(id, 10, 64)
+	if err != nil {
+		return nil, errors.New("invalid record ID")
+	}
+
 	return &reader{
 		journal: j,
 		offset:  offset,
@@ -26,7 +39,7 @@ func (j *Journal) Open(ctx context.Context, offset uint64) (persistence.Reader, 
 }
 
 // Append adds a record to the end of the journal.
-func (j *Journal) Append(ctx context.Context, rec []byte) (uint64, error) {
+func (j *Journal) Append(ctx context.Context, rec []byte) (string, error) {
 	j.recordsM.Lock()
 	defer j.recordsM.Unlock()
 
@@ -61,7 +74,7 @@ func (j *Journal) Append(ctx context.Context, rec []byte) (uint64, error) {
 		}
 	}
 
-	return offset, nil
+	return strconv.FormatUint(offset, 10), nil
 }
 
 // reader is an implementation of the persistence.Reader interface that reads
@@ -75,11 +88,11 @@ type reader struct {
 
 // Next returns the next record in the journal or blocks until it
 // becomes available.
-func (r *reader) Next(ctx context.Context) (offset uint64, data []byte, err error) {
+func (r *reader) Next(ctx context.Context) (id string, data []byte, err error) {
 	for {
 		data, ok, err := r.waitNext(ctx)
 		if err != nil {
-			return 0, nil, err
+			return "", nil, err
 		}
 
 		if !ok {
@@ -89,7 +102,8 @@ func (r *reader) Next(ctx context.Context) (offset uint64, data []byte, err erro
 		if ok {
 			offset := r.offset
 			r.offset++
-			return offset, data, nil
+
+			return strconv.FormatUint(offset, 10), data, nil
 		}
 	}
 }
