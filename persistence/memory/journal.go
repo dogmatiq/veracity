@@ -73,52 +73,57 @@ type reader struct {
 	realtime   <-chan []byte
 }
 
-// Next returns the next record in the journal.
-//
-// It blocks until a record becomes available, an error occurs, or ctx is
-// canceled.
-func (r *reader) Next(ctx context.Context) (uint64, []byte, error) {
-	rec, err := r.next(ctx)
-	if err != nil {
-		return 0, nil, err
-	}
+// Next returns the next record in the journal or blocks until it
+// becomes available.
+func (r *reader) Next(ctx context.Context) (offset uint64, data []byte, err error) {
+	for {
+		data, ok, err := r.waitNext(ctx)
+		if err != nil {
+			return 0, nil, err
+		}
 
-	offset := r.offset
-	r.offset++
-	return offset, rec, nil
+		if !ok {
+			data, ok = r.readHistorical()
+		}
+
+		if ok {
+			offset := r.offset
+			r.offset++
+			return offset, data, nil
+		}
+	}
 }
 
-func (r *reader) next(ctx context.Context) ([]byte, error) {
-	for {
-		// We are already "tailing" the journal. We can read directly from the
-		// channel to get records in "real-time".
-		if r.realtime != nil {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
+func (r *reader) waitNext(ctx context.Context) ([]byte, bool, error) {
+	// We are already "tailing" the journal. We can read directly from the
+	// channel to get records in "real-time".
+	if r.realtime != nil {
+		select {
+		case <-ctx.Done():
+			return nil, false, ctx.Err()
 
-			case rec, ok := <-r.realtime:
-				if ok {
-					return rec, nil
-				}
-
-				// The channel was closed, meaning that this reader was unable
-				// to keep up with the velocity of new records, we fall-back to
-				// reading historical records.
-				r.realtime = nil
+		case data, ok := <-r.realtime:
+			if ok {
+				return data, true, nil
 			}
-		}
 
-		// Return an historical record if one is available.
-		if len(r.historical) > 0 {
-			rec := r.historical[0]
-			r.historical = r.historical[1:]
-			return rec, nil
+			// The channel was closed, meaning that this reader was unable
+			// to keep up with the velocity of new records, we fall-back to
+			// reading historical records.
+			r.realtime = nil
 		}
+	}
 
-		// Otherwise, check if there are any more historical records in the
-		// journal that we can copy.
+	return nil, false, nil
+}
+
+func (r *reader) readHistorical() ([]byte, bool) {
+	if len(r.historical) == 0 {
+		// We don't have a local copy of any historical records, attempt to
+		// obtain more from the journal.
 		r.journal.recordsM.RLock()
+		defer r.journal.recordsM.RUnlock()
+
 		r.historical = r.journal.records[r.offset:]
 
 		if len(r.historical) == 0 {
@@ -128,12 +133,18 @@ func (r *reader) next(ctx context.Context) ([]byte, error) {
 			r.realtime = ch
 
 			r.journal.tailersM.Lock()
-			r.journal.tailers = append(r.journal.tailers, ch)
-			r.journal.tailersM.Unlock()
-		}
+			defer r.journal.tailersM.Unlock()
 
-		r.journal.recordsM.RUnlock()
+			r.journal.tailers = append(r.journal.tailers, ch)
+
+			return nil, false
+		}
 	}
+
+	data := r.historical[0]
+	r.historical = r.historical[1:]
+
+	return data, true
 }
 
 // Close closes the reader.
