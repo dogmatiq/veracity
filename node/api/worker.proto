@@ -1,0 +1,61 @@
+syntax = "proto3";
+package veracity.node.v1;
+
+import "github.com/dogmatiq/interopspec/envelopespec/envelope.proto";
+
+option go_package = "github.com/dogmatiq/veracity/node/api";
+
+// WorkerAPI is the API provided by all nodes acting as workers.
+service WorkerAPI {
+    rpc HandleAggregateCommand(HandleAggregateCommandRequest) returns (HandleAggregateCommandResponse);
+    rpc HandleIntegrationCommand(HandleIntegrationCommandRequest) returns (HandleIntegrationCommandResponse);
+    rpc HandleProcessEventStream(HandleProcessEventStreamRequest) returns (stream HandleProcessEventStreamResponse);
+    rpc HandleProcessTimeout(HandleProcessTimeoutRequest) returns (HandleProcessTimeoutResponse);
+}
+
+message HandleAggregateCommandRequest {
+    dogma.interop.v1.envelope.Envelope command = 1;
+    string handler_key = 2;
+    string instance_id = 3;
+    uint64 revision = 4;
+}
+
+message HandleAggregateCommandResponse {
+    repeated dogma.interop.v1.envelope.Envelope events = 1;
+    bool destroyed = 2;
+}
+
+message HandleIntegrationCommandRequest {
+    dogma.interop.v1.envelope.Envelope command = 1;
+    string handler_key = 2;
+}
+
+message HandleIntegrationCommandResponse {
+    repeated dogma.interop.v1.envelope.Envelope events = 1;
+}
+
+message HandleProcessEventStreamRequest {
+    dogma.interop.v1.envelope.Envelope event = 1;
+    string handler_key = 2;
+
+
+message HandleProcessEventStreamResponse {
+    repeated dogma.interop.v1.envelope.Envelope commands = 1;
+    repeated dogma.interop.v1.envelope.Envelope timeouts = 2;
+    string instance_id = 3;
+    uint64 revision = 4;
+}   bool ended = 5;
+}
+
+message HandleProcessTimeoutRequest {
+    dogma.interop.v1.envelope.Envelope timeout = 1;
+    string handler_key = 2;
+    string instance_id = 3;
+    uint64 revision = 4;
+}
+
+message HandleProcessTimeoutResponse {
+    repeated dogma.interop.v1.envelope.Envelope commands = 1;
+    repeated dogma.interop.v1.envelope.Envelope timeouts = 2;
+    bool ended = 3;
+}

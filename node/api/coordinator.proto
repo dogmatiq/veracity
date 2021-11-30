@@ -1,0 +1,18 @@
+syntax = "proto3";
+package veracity.node.v1;
+
+import "github.com/dogmatiq/interopspec/envelopespec/envelope.proto";
+
+option go_package = "github.com/dogmatiq/veracity/node/api";
+
+// CoordinatorAPI is the API provided by the elected coordinator node.
+service CoordinatorAPI {
+    rpc EnqueueCommand(EnqueueCommandRequest) returns (EnqueueCommandResponse);
+}
+
+message EnqueueCommandRequest {
+    dogma.interop.v1.envelope.Envelope command = 1;
+}
+
+message EnqueueCommandResponse {
+}
