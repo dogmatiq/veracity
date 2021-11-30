@@ -10,6 +10,11 @@ type Journal interface {
 	// If id is empty, the reader is opened at the first available record.
 	Open(ctx context.Context, id string) (JournalReader, error)
 
+	// LastID returns the ID of the last record in the journal.
+	//
+	// If the ID is an empty string the journal is empty.
+	LastID(ctx context.Context) (string, error)
+
 	// Append adds a record to the end of the journal.
 	//
 	// lastID is the ID of the last record known to be in the journal. If it
@@ -21,11 +26,7 @@ type Journal interface {
 type JournalReader interface {
 	// Next returns the next record in the journal or blocks until it becomes
 	// available.
-	//
-	// If more is true there are guaranteed to be additional records in the
-	// journal after the one returned. A value of false does NOT guarantee there
-	// are no additional records.
-	Next(ctx context.Context) (id string, data []byte, more bool, err error)
+	Next(ctx context.Context) (id string, data []byte, err error)
 
 	// Close closes the reader.
 	Close() error

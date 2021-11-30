@@ -34,13 +34,36 @@ func (j *Journal) Open(ctx context.Context, id string) (persistence.JournalReade
 
 	if id != "" {
 		var err error
-		r.index, err = strconv.ParseUint(id, 10, 64)
+		r.index, err = strconv.Atoi(id)
 		if err != nil {
 			return nil, fmt.Errorf("%#v is not a valid record ID", id)
 		}
 	}
 
 	return r, nil
+}
+
+// LastID returns the ID of the last record in the journal.
+//
+// If the ID is an empty string the journal is empty.
+func (j *Journal) LastID(ctx context.Context) (string, error) {
+	j.recordsM.RLock()
+	defer j.recordsM.RUnlock()
+
+	return j.lastID(), nil
+}
+
+// lastID returns the ID of the last record in the journal.
+//
+// It expects j.recordsM to be locked.
+func (j *Journal) lastID() string {
+	n := len(j.records)
+
+	if n == 0 {
+		return ""
+	}
+
+	return strconv.Itoa(n - 1)
 }
 
 // Append adds a record to the end of the journal.
@@ -51,33 +74,26 @@ func (j *Journal) Append(ctx context.Context, lastID string, rec []byte) (string
 	j.recordsM.Lock()
 	defer j.recordsM.Unlock()
 
-	// Determine the index of the new record.
-	index := uint64(len(j.records))
-
-	// Verify that lastID is matches the actual last record.
-	var expectedLastID string
-	if index == 0 {
-		expectedLastID = ""
-	} else {
-		expectedLastID = strconv.FormatUint(index-1, 10)
-	}
-
-	if lastID != expectedLastID {
+	if expect := j.lastID(); lastID != expect {
 		return "", fmt.Errorf(
 			"last ID does not match (expected %#v, got %#v)",
-			expectedLastID,
+			expect,
 			lastID,
 		)
 	}
 
 	// Only now that lastID has been validated can we append the record.
 	j.records = append(j.records, rec)
+	j.notifyReaders(rec)
 
-	// Notify any readers that are "tailing" the journal of the new record.
-	//
-	// There's no need to lock tailersM, as it is only ever locked by goroutines
-	// that already hold a lock on recordsM, which we currently have locked
-	// exclusively.
+	return j.lastID(), nil
+}
+
+// Notify any readers that are "tailing" the journal of a new record.
+func (j *Journal) notifyReaders(rec []byte) {
+	j.tailersM.Lock()
+	defer j.tailersM.Unlock()
+
 	i := 0
 	n := len(j.tailers)
 
@@ -99,55 +115,64 @@ func (j *Journal) Append(ctx context.Context, lastID string, rec []byte) (string
 			j.tailers = j.tailers[:n]     // shrink the slice
 		}
 	}
-
-	return strconv.FormatUint(index, 10), nil
 }
 
-// reader is an implementation of the persistence.Reader interface that reads
-// from an in-memory journal.
+// reader is an implementation of the persistence.JournalReader interface that
+// reads from an in-memory journal.
 type reader struct {
-	journal    *Journal
-	index      uint64
+	// journal is the the Journal that from which the Reader gets its records.
+	journal *Journal
+
+	// index is the index into the records that the reader will return next.
+	index int
+
+	// historical is a copy of a subset of the journals records, starting at the
+	// index above. This is used to allow fast reads without locking the
+	// journal.
 	historical [][]byte
-	realtime   <-chan []byte
+
+	// realtime is channel used to obtain records from the journal in
+	// "real-time". It is only created when the list of historical events is
+	// entirely exhausted.
+	realtime <-chan []byte
 }
 
 // Next returns the next record in the journal or blocks until it becomes
 // available.
-//
-// If more is true there are guaranteed to be additional records in the journal
-// after the one returned. A value of false does NOT guarantee there are no
-// additional records.
-func (r *reader) Next(ctx context.Context) (id string, data []byte, more bool, err error) {
+func (r *reader) Next(ctx context.Context) (id string, data []byte, err error) {
 	for {
-		data, ok, more, err := r.waitNext(ctx)
+		data, ok, err := r.waitNext(ctx)
 		if err != nil {
-			return "", nil, false, err
+			return "", nil, err
 		}
 
 		if !ok {
-			data, ok, more = r.readHistorical()
+			data, ok = r.readHistorical()
 		}
 
 		if ok {
-			id := strconv.FormatUint(r.index, 10)
+			id := strconv.Itoa(r.index)
 			r.index++
-			return id, data, more, nil
+			return id, data, nil
 		}
 	}
 }
 
-func (r *reader) waitNext(ctx context.Context) (data []byte, ok, more bool, err error) {
+// waitNext waits until the next message is appended to the journal.
+//
+// If ok is false, then r.realtime has been closed and the reader should attempt
+// to catch up by reading historical records.
+func (r *reader) waitNext(ctx context.Context) (data []byte, ok bool, err error) {
 	// We are already "tailing" the journal. We can read directly from the
 	// channel to get records in "real-time".
 	if r.realtime != nil {
 		select {
 		case <-ctx.Done():
-			return nil, false, false, ctx.Err()
+			return nil, false, ctx.Err()
 
 		case data, ok := <-r.realtime:
 			if ok {
-				return data, true, len(r.realtime) > 0, nil
+				return data, true, nil
 			}
 
 			// The channel was closed, meaning that this reader was unable
@@ -157,10 +182,11 @@ func (r *reader) waitNext(ctx context.Context) (data []byte, ok, more bool, err 
 		}
 	}
 
-	return nil, false, false, nil
+	return nil, false, nil
 }
 
-func (r *reader) readHistorical() (data []byte, ok, more bool) {
+// readHistorical reads the next historical record from the journal.
+func (r *reader) readHistorical() (data []byte, ok bool) {
 	if len(r.historical) == 0 {
 		// We don't have a local copy of any historical records, attempt to
 		// obtain more from the journal.
@@ -180,14 +206,15 @@ func (r *reader) readHistorical() (data []byte, ok, more bool) {
 
 			r.journal.tailers = append(r.journal.tailers, ch)
 
-			return nil, false, false
+			return nil, false
 		}
 	}
 
+	// Pop the first record from the historical list and return it.
 	data = r.historical[0]
 	r.historical = r.historical[1:]
 
-	return data, true, len(r.historical) > 0
+	return data, true
 }
 
 // Close closes the reader.
