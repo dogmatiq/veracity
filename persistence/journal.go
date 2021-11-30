@@ -11,14 +11,21 @@ type Journal interface {
 	Open(ctx context.Context, id string) (JournalReader, error)
 
 	// Append adds a record to the end of the journal.
-	Append(ctx context.Context, data []byte) (id string, err error)
+	//
+	// lastID is the ID of the last record known to be in the journal. If it
+	// does not match the ID of the last record, the append operation fails.
+	Append(ctx context.Context, lastID string, data []byte) (id string, err error)
 }
 
 // A JournalReader is used to read journal record in order.
 type JournalReader interface {
 	// Next returns the next record in the journal or blocks until it becomes
 	// available.
-	Next(ctx context.Context) (id string, data []byte, err error)
+	//
+	// If more is true there are guaranteed to be additional records in the
+	// journal after the one returned. A value of false does NOT guarantee there
+	// are no additional records.
+	Next(ctx context.Context) (id string, data []byte, more bool, err error)
 
 	// Close closes the reader.
 	Close() error
