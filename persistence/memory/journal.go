@@ -22,7 +22,7 @@ type Journal struct {
 // the given record ID.
 //
 // If id is empty, the reader is opened at the first available record.
-func (j *Journal) Open(ctx context.Context, id string) (persistence.Reader, error) {
+func (j *Journal) Open(ctx context.Context, id string) (persistence.JournalReader, error) {
 	if id == "" {
 		id = "0"
 	}
