@@ -5,54 +5,60 @@ import "github.com/dogmatiq/interopspec/envelopespec/envelope.proto";
 
 option go_package = "github.com/dogmatiq/veracity/persistence/record";
 
-message Record {
-    oneof op {
-        EnqueueCommand enqueue_command = 1;
-        MarkAggregateCommandHandled mark_aggregate_command_handled = 2;
-        MarkIntegrationCommandHandled mark_integration_command_handled = 3;
-        MarkProcessEventHandled mark_process_event_handled = 4;
-        MarkProcessTimeoutHandled mark_process_timeout_handled = 5;
+message RecordContainer {
+    oneof elem {
+        ExecutorExecuteCommand executor_execute_command = 2;
+        AggregateHandleCommand aggregate_handle_command = 3;
+        IntegrationHandleCommand integration_handle_command = 4;
+        ProcessHandleEvent process_handle_event = 5;
+        ProcessHandleTimeout process_handle_timeout = 6;
     }
 }
 
-message EnqueueCommand {
+message ExecutorExecuteCommand {
     dogma.interop.v1.envelope.Envelope Envelope = 1;
 }
 
-message MarkAggregateCommandHandled {
+message AggregateHandleCommand {
     string message_id = 1;
     dogma.interop.v1.envelope.Identity handler = 2;
-    string instance_id = 3;
-    uint64 revision = 4;
-    bool exists = 5;
-    repeated dogma.interop.v1.envelope.Envelope events = 6;
+    AggregateInstance instance = 3;
+    repeated dogma.interop.v1.envelope.Envelope events = 4;
 }
 
-message MarkIntegrationCommandHandled {
+message IntegrationHandleCommand {
     string message_id = 1;
     dogma.interop.v1.envelope.Identity handler = 2;
     repeated dogma.interop.v1.envelope.Envelope events = 3;
 }
 
-message MarkProcessEventHandled {
+message ProcessHandleEvent {
     dogma.interop.v1.envelope.Identity source_application = 1;
-    uint64 source_offset = 1;
+    uint64 source_offset = 2;
+    dogma.interop.v1.envelope.Identity handler = 3;
+    ProcessInstance instance = 4;
+    repeated dogma.interop.v1.envelope.Envelope commands = 5;
+    repeated dogma.interop.v1.envelope.Envelope timeouts = 6;
+}
+
+message ProcessHandleTimeout {
+    string message_id = 1;
     dogma.interop.v1.envelope.Identity handler = 2;
-    string instance_id = 3;
-    uint64 revision = 4;
-    string media_type = 5;
-    bytes data = 6;
+    ProcessInstance instance = 4;
     repeated dogma.interop.v1.envelope.Envelope commands = 7;
     repeated dogma.interop.v1.envelope.Envelope timeouts = 8;
 }
 
-message MarkProcessTimeoutHandled {
-    string message_id = 1;
-    dogma.interop.v1.envelope.Identity handler = 2;
-    string instance_id = 3;
-    uint64 revision = 4;
-    string media_type = 5;
-    bytes data = 6;
-    repeated dogma.interop.v1.envelope.Envelope commands = 7;
-    repeated dogma.interop.v1.envelope.Envelope timeouts = 8;
+message AggregateInstance {
+    string id = 1;
+    uint64 revision = 2;
+    bool destroyed = 3;
+}
+
+message ProcessInstance {
+    string id = 1;
+    uint64 revision = 2;
+    bool ended = 3;
+    string media_type = 4;
+    bytes data = 5;
 }
