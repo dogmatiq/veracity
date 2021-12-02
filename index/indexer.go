@@ -1,7 +1,6 @@
 package index
 
 import (
-	"bytes"
 	"context"
 
 	"github.com/dogmatiq/veracity/journal"
@@ -19,95 +18,70 @@ type Builder struct {
 
 // Build updates the index to reflect the records from the journal.
 func (b *Builder) Build(ctx context.Context) (lastRecordID []byte, err error) {
-	// Find the current end of the journal so we know when we're done.
-	lastID, err := b.Journal.LastID(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// There are no records in the journal.
-	if len(lastID) == 0 {
-		return lastID, nil
-	}
-
 	// Find the last record ID that we know has been indexed fully.
-	lastIndexedRecordID, err := b.Index.Get(ctx, journalRecordIDKey)
+	lastRecordID, err = b.Index.Get(ctx, journalRecordIDKey)
 	if err != nil {
 		return nil, err
 	}
 
-	// Bail if the key/value store is already up to date with the journal.
-	if bytes.Equal(lastIndexedRecordID, lastID) {
-		return lastID, nil
-	}
-
-	// Otherwise open the journal immediately after the last indexed record and
-	// begin indexing.
-	r, err := b.Journal.Open(ctx, lastIndexedRecordID)
+	// Read from the journal immediately after the last indexed record and begin
+	// indexing.
+	lastRecordID, err = journal.Read(
+		ctx,
+		b.Journal,
+		lastRecordID,
+		indexer{b.Index},
+	)
 	if err != nil {
 		return nil, err
 	}
-	defer r.Close()
 
-	// Read, unmarshal and index records until we reach the end of the journal.
-	for {
-		id, rec, err := journal.Read(ctx, r)
-		if err != nil {
-			return nil, err
-		}
-
-		p := processor{
-			Index: b.Index,
-		}
-
-		if err := rec.Process(ctx, p); err != nil {
-			return nil, err
-		}
-
-		if err := b.Index.Set(ctx, journalRecordIDKey, id); err != nil {
-			return nil, err
-		}
-
-		if bytes.Equal(id, lastID) {
-			return lastID, nil
-		}
+	if err := b.Index.Set(ctx, journalRecordIDKey, lastRecordID); err != nil {
+		return nil, err
 	}
+
+	return lastRecordID, nil
 }
 
-type processor struct {
+type indexer struct {
 	Index Index
 }
 
-func (p processor) ProcessExecutorExecuteCommandRecord(
+func (i indexer) VisitExecutorExecuteCommandRecord(
 	ctx context.Context,
+	id []byte,
 	rec *journal.ExecutorExecuteCommand,
 ) error {
-	return addMessageToQueue(ctx, p.Index, rec.Envelope)
+	return addMessageToQueue(ctx, i.Index, rec.Envelope)
 }
 
-func (p processor) ProcessAggregateHandleCommandRecord(
+func (i indexer) VisitAggregateHandleCommandRecord(
 	ctx context.Context,
+	id []byte,
 	rec *journal.AggregateHandleCommand,
 ) error {
-	return removeMessageFromQueue(ctx, p.Index, rec.MessageId)
+	return removeMessageFromQueue(ctx, i.Index, rec.MessageId)
 }
 
-func (p processor) ProcessIntegrationHandleCommandRecord(
+func (i indexer) VisitIntegrationHandleCommandRecord(
 	ctx context.Context,
+	id []byte,
 	rec *journal.IntegrationHandleCommand,
 ) error {
-	return removeMessageFromQueue(ctx, p.Index, rec.MessageId)
+	return removeMessageFromQueue(ctx, i.Index, rec.MessageId)
 }
 
-func (p processor) ProcessProcessHandleEventRecord(
+func (i indexer) VisitProcessHandleEventRecord(
 	ctx context.Context,
+	id []byte,
 	rec *journal.ProcessHandleEvent,
 ) error {
 	return nil
 }
 
-func (p processor) ProcessProcessHandleTimeoutRecord(
+func (i indexer) VisitProcessHandleTimeoutRecord(
 	ctx context.Context,
+	id []byte,
 	rec *journal.ProcessHandleTimeout,
 ) error {
 	return nil
