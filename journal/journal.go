@@ -18,18 +18,25 @@ type Journal interface {
 	// fails.
 	Append(ctx context.Context, lastID, data []byte) (id []byte, err error)
 
-	// Scan reads the records in the journal in the order they were appended.
+	// OpenReader returns a reader that reads the records in the journal in the
+	// order they were appended.
 	//
 	// If afterID is empty reading starts at the first record; otherwise,
 	// reading starts at the record immediately after afterID.
+	OpenReader(ctx context.Context, afterID []byte) (Reader, error)
+}
+
+// A Reader reads records from a journal in the order they were appended.
+//
+// Readers are not safe for concurrent use.
+type Reader interface {
+	// Next returns the next record in the journal.
 	//
-	// fn is called for each record until the end of the journal is reached, an
-	// error occurs, or ctx is canceled.
-	Scan(
-		ctx context.Context,
-		afterID []byte,
-		fn func(ctx context.Context, id, data []byte) error,
-	) (lastID []byte, err error)
+	// ok is false if there are no more records.
+	Next(ctx context.Context) (id, data []byte, ok bool, err error)
+
+	// Close closes the reader.
+	Close() error
 }
 
 // Append adds a record to the end of the journal.
@@ -52,26 +59,43 @@ func Append(
 	return j.Append(ctx, lastID, data)
 }
 
-// Scan visits the records in the journal in the order they were appended.
+// VisitRecords visits the records in the journal in the order they were
+// appended.
 //
 // If afterID is empty reading starts at the first record; otherwise, reading
 // starts at the record immediately after afterID.
-func Scan(
+func VisitRecords(
 	ctx context.Context,
 	j Journal,
 	afterID []byte,
 	v Visitor,
 ) (lastID []byte, err error) {
-	return j.Scan(
-		ctx,
-		afterID,
-		func(ctx context.Context, id, data []byte) error {
-			c := &Container{}
-			if err := proto.Unmarshal(data, c); err != nil {
-				return err
-			}
+	r, err := j.OpenReader(ctx, afterID)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
 
-			return c.Elem.(element).acceptVisitor(ctx, id, v)
-		},
-	)
+	container := &Container{}
+
+	for {
+		id, data, ok, err := r.Next(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		if !ok {
+			return lastID, nil
+		}
+
+		if err := proto.Unmarshal(data, container); err != nil {
+			return nil, err
+		}
+
+		if err := container.Elem.(element).acceptVisitor(ctx, id, v); err != nil {
+			return nil, err
+		}
+
+		lastID = id
+	}
 }

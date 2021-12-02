@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+
+	"github.com/dogmatiq/veracity/journal"
 )
 
 // Journal is an in-memory implementation of the journal.Journal interface.
@@ -45,44 +47,59 @@ func (j *Journal) Append(ctx context.Context, lastID, rec []byte) ([]byte, error
 	return indexToRecordID(n), nil
 }
 
-// Scan reads the records in the journal in the order they were appended.
+// OpenReader returns a reader that reads the records in the journal in the
+// order they were appended.
 //
-// If afterID is empty reading starts at the first record; otherwise, reading
-// starts at the record immediately after afterID.
-//
-// fn is called for each record until the end of the journal is reached, an
-// error occurs, or ctx is canceled.
-func (j *Journal) Scan(
-	ctx context.Context,
-	afterID []byte,
-	fn func(ctx context.Context, id, data []byte) error,
-) (lastID []byte, err error) {
+// If afterID is empty reading starts at the first record; otherwise,
+// reading starts at the record immediately after afterID.
+func (j *Journal) OpenReader(ctx context.Context, afterID []byte) (journal.Reader, error) {
 	index, err := recordIDToIndex(afterID)
 	if err != nil {
 		return nil, err
 	}
 
-	var records [][]byte
+	index++
 
-	for {
-		index++
+	return &reader{
+		journal: j,
+		index:   index,
+	}, nil
+}
 
-		if index >= len(records) {
-			j.m.RLock()
-			records = j.records
-			j.m.RUnlock()
-		}
+// reader is an implementation of journal.Reader that readers from an in-memory
+// journal.
+type reader struct {
+	journal *Journal
+	index   int
+	records [][]byte
+}
 
-		if index >= len(records) {
-			return indexToRecordID(index - 1), nil
-		}
+// Next returns the next record in the journal.
+//
+// ok is false if there are no more records.
+func (r *reader) Next(ctx context.Context) (id, data []byte, ok bool, err error) {
+	if len(r.records) == 0 {
+		r.journal.m.RLock()
+		r.records = r.journal.records[r.index:]
+		r.journal.m.RUnlock()
 
-		id := indexToRecordID(index)
-
-		if err := fn(ctx, id, records[index]); err != nil {
-			return nil, err
+		if len(r.records) == 0 {
+			return nil, nil, false, nil
 		}
 	}
+
+	id = indexToRecordID(r.index)
+	r.index++
+
+	data = r.records[0]
+	r.records = r.records[1:]
+
+	return id, data, true, nil
+}
+
+// Close closes the reader.
+func (r *reader) Close() error {
+	return nil
 }
 
 // indexToRecordID converts an index to a record ID.

@@ -41,16 +41,13 @@ var _ = Describe("type Journal", func() {
 			_, err := journal.Append(ctx, []byte("0"), []byte("<record>"))
 			Expect(err).To(MatchError(`optimistic lock failure, the last record ID is "" but the caller provided "0"`))
 
-			lastID, err := journal.Scan(
-				ctx,
-				nil,
-				func(ctx context.Context, id, data []byte) error {
-					Fail("unexpected record")
-					return nil
-				},
-			)
+			r, err := journal.OpenReader(ctx, nil)
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(lastID).To(BeEmpty())
+			defer r.Close()
+
+			_, _, ok, err := r.Next(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeFalse())
 		})
 
 		It("does not block if there is a stalled reader", func() {
@@ -68,16 +65,16 @@ var _ = Describe("type Journal", func() {
 				defer GinkgoRecover()
 				defer close(barrier)
 
-				_, err := journal.Scan(
-					ctx,
-					nil,
-					func(ctx context.Context, id, data []byte) error {
-						barrier <- struct{}{} // notify reader has entered function
-						barrier <- struct{}{} // stall
-						return nil
-					},
-				)
+				r, err := journal.OpenReader(ctx, nil)
 				Expect(err).ShouldNot(HaveOccurred())
+				defer r.Close()
+
+				_, _, ok, err := r.Next(ctx)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(ok).To(BeTrue())
+
+				barrier <- struct{}{} // signal that reader obtained a record
+				barrier <- struct{}{} // stall until unblocked
 			}()
 
 			By("waiting for the reader to begin")
@@ -94,7 +91,7 @@ var _ = Describe("type Journal", func() {
 		})
 	})
 
-	Describe("func Scan()", func() {
+	Describe("func OpenReader()", func() {
 		BeforeEach(func() {
 			var (
 				lastID []byte
@@ -107,36 +104,40 @@ var _ = Describe("type Journal", func() {
 			}
 		})
 
-		It("calls the function for each record in the journal", func() {
-			index := byte(0)
-			lastID, err := journal.Scan(
-				ctx,
-				nil,
-				func(ctx context.Context, id, data []byte) error {
-					Expect(id).To(Equal([]byte(fmt.Sprintf("%d", index))))
-					Expect(data).To(Equal([]byte{index}))
-					index++
-					return nil
-				},
-			)
+		It("can read from the start of the journal", func() {
+			r, err := journal.OpenReader(ctx, nil)
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(lastID).To(Equal([]byte("99")))
+			defer r.Close()
+
+			for index := byte(0); index < 100; index++ {
+				id, data, ok, err := r.Next(ctx)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(id).To(Equal([]byte(fmt.Sprintf("%d", index))))
+				Expect(data).To(Equal([]byte{index}))
+				Expect(ok).To(BeTrue())
+			}
+
+			_, _, ok, err := r.Next(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeFalse())
 		})
 
 		It("can start reading midway through the journal", func() {
-			index := byte(50)
-			lastID, err := journal.Scan(
-				ctx,
-				[]byte("49"),
-				func(ctx context.Context, id, data []byte) error {
-					Expect(id).To(Equal([]byte(fmt.Sprintf("%d", index))))
-					Expect(data).To(Equal([]byte{index}))
-					index++
-					return nil
-				},
-			)
+			r, err := journal.OpenReader(ctx, []byte("49"))
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(lastID).To(Equal([]byte("99")))
+			defer r.Close()
+
+			for index := byte(50); index < 100; index++ {
+				id, data, ok, err := r.Next(ctx)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(id).To(Equal([]byte(fmt.Sprintf("%d", index))))
+				Expect(data).To(Equal([]byte{index}))
+				Expect(ok).To(BeTrue())
+			}
+
+			_, _, ok, err := r.Next(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeFalse())
 		})
 	})
 })

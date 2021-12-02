@@ -26,7 +26,7 @@ func (b *Builder) Build(ctx context.Context) (lastRecordID []byte, err error) {
 
 	// Read from the journal immediately after the last indexed record and begin
 	// indexing.
-	lastRecordID, err = journal.Scan(
+	lastRecordID, err = journal.VisitRecords(
 		ctx,
 		b.Journal,
 		lastRecordID,
