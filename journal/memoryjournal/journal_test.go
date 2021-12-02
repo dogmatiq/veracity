@@ -41,7 +41,7 @@ var _ = Describe("type Journal", func() {
 			_, err := journal.Append(ctx, []byte("0"), []byte("<record>"))
 			Expect(err).To(MatchError(`optimistic lock failure, the last record ID is "" but the caller provided "0"`))
 
-			lastID, err := journal.Read(
+			lastID, err := journal.Scan(
 				ctx,
 				nil,
 				func(ctx context.Context, id, data []byte) error {
@@ -68,7 +68,7 @@ var _ = Describe("type Journal", func() {
 				defer GinkgoRecover()
 				defer close(barrier)
 
-				_, err := journal.Read(
+				_, err := journal.Scan(
 					ctx,
 					nil,
 					func(ctx context.Context, id, data []byte) error {
@@ -94,7 +94,7 @@ var _ = Describe("type Journal", func() {
 		})
 	})
 
-	Describe("func Read()", func() {
+	Describe("func Scan()", func() {
 		BeforeEach(func() {
 			var (
 				lastID []byte
@@ -109,7 +109,7 @@ var _ = Describe("type Journal", func() {
 
 		It("calls the function for each record in the journal", func() {
 			index := byte(0)
-			lastID, err := journal.Read(
+			lastID, err := journal.Scan(
 				ctx,
 				nil,
 				func(ctx context.Context, id, data []byte) error {
@@ -125,7 +125,7 @@ var _ = Describe("type Journal", func() {
 
 		It("can start reading midway through the journal", func() {
 			index := byte(50)
-			lastID, err := journal.Read(
+			lastID, err := journal.Scan(
 				ctx,
 				[]byte("49"),
 				func(ctx context.Context, id, data []byte) error {

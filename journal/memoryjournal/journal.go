@@ -19,8 +19,9 @@ type Journal struct {
 
 // Append adds a record to the end of the journal.
 //
-// lastID is the ID of the last record in the journal. If it does not match the
-// ID of the last record, the append operation fails.
+// lastID is the ID of the last record that is expected to be in the journal. If
+// it does not match the ID of the actual last record, the append operation
+// fails.
 func (j *Journal) Append(ctx context.Context, lastID, rec []byte) ([]byte, error) {
 	lastIndex, err := recordIDToIndex(lastID)
 	if err != nil {
@@ -45,11 +46,14 @@ func (j *Journal) Append(ctx context.Context, lastID, rec []byte) ([]byte, error
 	return indexToRecordID(n), nil
 }
 
-// Read calls fn for each record in the journal, beginning at the record
-// after the given record ID.
+// Scan reads the records in the journal in the order they were appended.
 //
-// If afterID is empty, reading starts at the first record.
-func (j *Journal) Read(
+// If afterID is empty reading starts at the first record; otherwise, reading
+// starts at the record immediately after afterID.
+//
+// fn is called for each record until the end of the journal is reached, an
+// error occurs, or ctx is canceled.
+func (j *Journal) Scan(
 	ctx context.Context,
 	afterID []byte,
 	fn func(ctx context.Context, id, data []byte) error,
