@@ -7,9 +7,11 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Index is an interface for persisting the index.
+// Index is an interface for storing indexes that allow the engine to
+// efficiently reference information contained in the application's journal.
 //
-// It is a simple binary key/value store.
+// The index can always be fully recovered from an in-tact journal, however
+// rebuilding the index may take a long time.
 type Index interface {
 	// Set sets the value associated with k to v.
 	//

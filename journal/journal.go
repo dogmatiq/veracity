@@ -7,17 +7,24 @@ import (
 )
 
 // A Journal is an append-only immutable sequence of records.
+//
+// The journal is the engine's authoratative data store. All records must be
+// kept indefinitely.
 type Journal interface {
 	// Append adds a record to the end of the journal.
 	//
-	// lastID is the ID of the last record in the journal. If it does not match
-	// the ID of the last record, the append operation fails.
+	// lastID is the ID of the last record that is expected to be in the
+	// journal. If it does not match the ID of the actual last record, the
+	// append operation fails.
 	Append(ctx context.Context, lastID, data []byte) (id []byte, err error)
 
-	// Read calls fn for each record in the journal, beginning at the record
-	// after the given record ID.
+	// Read reads the records in the journal, beginning at the record after the
+	// given record ID.
 	//
 	// If afterID is empty, reading starts at the first record.
+	//
+	// It calls fn for each record until the last record is reached, an error
+	// occurs, or ctx is canceled.
 	Read(
 		ctx context.Context,
 		afterID []byte,
