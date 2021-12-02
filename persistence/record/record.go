@@ -3,7 +3,6 @@ package record
 import (
 	"context"
 
-	"github.com/dogmatiq/veracity/persistence"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -95,39 +94,17 @@ func (r *ProcessHandleTimeout) Process(ctx context.Context, p Processor) error {
 	return p.ProcessProcessHandleTimeoutRecord(ctx, r)
 }
 
-// Append appends a record container containing r to j.
-func Append(
-	ctx context.Context,
-	j persistence.Journal,
-	lastID string,
-	r Record,
-) (string, error) {
-	c := &RecordContainer{
+func Marshal(r Record) ([]byte, error) {
+	return proto.Marshal(&RecordContainer{
 		Elem: r.wrap(),
-	}
-
-	data, err := proto.Marshal(c)
-	if err != nil {
-		return "", err
-	}
-
-	return j.Append(ctx, lastID, data)
+	})
 }
 
-// Next reads the next record from j.
-func Next(
-	ctx context.Context,
-	r persistence.JournalReader,
-) (string, Record, error) {
-	id, data, err := r.Next(ctx)
-	if err != nil {
-		return "", nil, err
-	}
-
+func Unmarshal(data []byte) (Record, error) {
 	var c RecordContainer
 	if err := proto.Unmarshal(data, &c); err != nil {
-		return "", nil, err
+		return nil, err
 	}
 
-	return id, c.unwrap(), nil
+	return c.unwrap(), nil
 }
