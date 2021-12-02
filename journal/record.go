@@ -6,62 +6,12 @@ import (
 
 // Record is an interface for a journal record.
 type Record interface {
-	toElem() element
-}
+	// AcceptVisitor calls the VisitXXX() method on v that relates to this
+	// record type.
+	AcceptVisitor(context.Context, []byte, Visitor) error
 
-func (r *ExecutorExecuteCommand) toElem() element {
-	return &Container_ExecutorExecuteCommand{
-		ExecutorExecuteCommand: r,
-	}
-}
-
-func (r *AggregateHandleCommand) toElem() element {
-	return &Container_AggregateHandleCommand{
-		AggregateHandleCommand: r,
-	}
-}
-
-func (r *IntegrationHandleCommand) toElem() element {
-	return &Container_IntegrationHandleCommand{
-		IntegrationHandleCommand: r,
-	}
-}
-
-func (r *ProcessHandleEvent) toElem() element {
-	return &Container_ProcessHandleEvent{
-		ProcessHandleEvent: r,
-	}
-}
-
-func (r *ProcessHandleTimeout) toElem() element {
-	return &Container_ProcessHandleTimeout{
-		ProcessHandleTimeout: r,
-	}
-}
-
-type element interface {
-	isContainer_Elem
-	acceptVisitor(context.Context, []byte, Visitor) error
-}
-
-func (e *Container_ExecutorExecuteCommand) acceptVisitor(ctx context.Context, id []byte, v Visitor) error {
-	return v.VisitExecutorExecuteCommandRecord(ctx, id, e.ExecutorExecuteCommand)
-}
-
-func (e *Container_AggregateHandleCommand) acceptVisitor(ctx context.Context, id []byte, v Visitor) error {
-	return v.VisitAggregateHandleCommandRecord(ctx, id, e.AggregateHandleCommand)
-}
-
-func (e *Container_IntegrationHandleCommand) acceptVisitor(ctx context.Context, id []byte, v Visitor) error {
-	return v.VisitIntegrationHandleCommandRecord(ctx, id, e.IntegrationHandleCommand)
-}
-
-func (e *Container_ProcessHandleEvent) acceptVisitor(ctx context.Context, id []byte, v Visitor) error {
-	return v.VisitProcessHandleEventRecord(ctx, id, e.ProcessHandleEvent)
-}
-
-func (e *Container_ProcessHandleTimeout) acceptVisitor(ctx context.Context, id []byte, v Visitor) error {
-	return v.VisitProcessHandleTimeoutRecord(ctx, id, e.ProcessHandleTimeout)
+	// Pack returns a container that contains this record.
+	Pack() *RecordContainer
 }
 
 // Visitor is an interface for processing records in a journal.
@@ -71,4 +21,106 @@ type Visitor interface {
 	VisitIntegrationHandleCommandRecord(context.Context, []byte, *IntegrationHandleCommand) error
 	VisitProcessHandleEventRecord(context.Context, []byte, *ProcessHandleEvent) error
 	VisitProcessHandleTimeoutRecord(context.Context, []byte, *ProcessHandleTimeout) error
+}
+
+// AcceptVisitor calls v.VisitExecutorExecuteCommandRecord(ctx, id, r).
+func (r *ExecutorExecuteCommand) AcceptVisitor(ctx context.Context, id []byte, v Visitor) error {
+	return v.VisitExecutorExecuteCommandRecord(ctx, id, r)
+}
+
+// AcceptVisitor calls v.VisitAggregateHandleCommandRecord(ctx, id, r).
+func (r *AggregateHandleCommand) AcceptVisitor(ctx context.Context, id []byte, v Visitor) error {
+	return v.VisitAggregateHandleCommandRecord(ctx, id, r)
+}
+
+// AcceptVisitor calls v.VisitIntegrationHandleCommandRecord(ctx, id, r).
+func (r *IntegrationHandleCommand) AcceptVisitor(ctx context.Context, id []byte, v Visitor) error {
+	return v.VisitIntegrationHandleCommandRecord(ctx, id, r)
+}
+
+// AcceptVisitor calls v.VisitProcessHandleEventRecord(ctx, id, r).
+func (r *ProcessHandleEvent) AcceptVisitor(ctx context.Context, id []byte, v Visitor) error {
+	return v.VisitProcessHandleEventRecord(ctx, id, r)
+}
+
+// AcceptVisitor calls v.VisitProcessHandleTimeoutRecord(ctx, id, r).
+func (r *ProcessHandleTimeout) AcceptVisitor(ctx context.Context, id []byte, v Visitor) error {
+	return v.VisitProcessHandleTimeoutRecord(ctx, id, r)
+}
+
+// Pack returns a container that contains this record.
+func (r *ExecutorExecuteCommand) Pack() *RecordContainer {
+	return &RecordContainer{
+		Elem: &RecordContainer_ExecutorExecuteCommand{
+			ExecutorExecuteCommand: r,
+		},
+	}
+}
+
+// Pack returns a container that contains this record.
+func (r *AggregateHandleCommand) Pack() *RecordContainer {
+	return &RecordContainer{
+		Elem: &RecordContainer_AggregateHandleCommand{
+			AggregateHandleCommand: r,
+		},
+	}
+}
+
+// Pack returns a container that contains this record.
+func (r *IntegrationHandleCommand) Pack() *RecordContainer {
+	return &RecordContainer{
+		Elem: &RecordContainer_IntegrationHandleCommand{
+			IntegrationHandleCommand: r,
+		},
+	}
+}
+
+// Pack returns a container that contains this record.
+func (r *ProcessHandleEvent) Pack() *RecordContainer {
+	return &RecordContainer{
+		Elem: &RecordContainer_ProcessHandleEvent{
+			ProcessHandleEvent: r,
+		},
+	}
+}
+
+// Pack returns a container that contains this record.
+func (r *ProcessHandleTimeout) Pack() *RecordContainer {
+	return &RecordContainer{
+		Elem: &RecordContainer_ProcessHandleTimeout{
+			ProcessHandleTimeout: r,
+		},
+	}
+}
+
+// Unpack returns the record contained in the container.
+func (c *RecordContainer) Unpack() Record {
+	return c.Elem.(element).unpack()
+}
+
+// element is an interface for the wrapper types used to store records in a
+// record container.
+type element interface {
+	isRecordContainer_Elem
+	unpack() Record
+}
+
+func (e *RecordContainer_ExecutorExecuteCommand) unpack() Record {
+	return e.ExecutorExecuteCommand
+}
+
+func (e *RecordContainer_AggregateHandleCommand) unpack() Record {
+	return e.AggregateHandleCommand
+}
+
+func (e *RecordContainer_IntegrationHandleCommand) unpack() Record {
+	return e.IntegrationHandleCommand
+}
+
+func (e *RecordContainer_ProcessHandleEvent) unpack() Record {
+	return e.ProcessHandleEvent
+}
+
+func (e *RecordContainer_ProcessHandleTimeout) unpack() Record {
+	return e.ProcessHandleTimeout
 }

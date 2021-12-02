@@ -5,7 +5,7 @@ import "github.com/dogmatiq/interopspec/envelopespec/envelope.proto";
 
 option go_package = "github.com/dogmatiq/veracity/journal";
 
-message Container {
+message RecordContainer {
     oneof elem {
         ExecutorExecuteCommand executor_execute_command = 2;
         AggregateHandleCommand aggregate_handle_command = 3;

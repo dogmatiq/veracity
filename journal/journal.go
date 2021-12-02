@@ -49,9 +49,7 @@ func Append(
 	lastID []byte,
 	rec Record,
 ) ([]byte, error) {
-	data, err := proto.Marshal(&Container{
-		Elem: rec.toElem(),
-	})
+	data, err := proto.Marshal(rec.Pack())
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +74,7 @@ func VisitRecords(
 	}
 	defer r.Close()
 
-	container := &Container{}
+	container := &RecordContainer{}
 
 	for {
 		id, data, ok, err := r.Next(ctx)
@@ -92,7 +90,7 @@ func VisitRecords(
 			return nil, err
 		}
 
-		if err := container.Elem.(element).acceptVisitor(ctx, id, v); err != nil {
+		if err := container.Unpack().AcceptVisitor(ctx, id, v); err != nil {
 			return nil, err
 		}
 
