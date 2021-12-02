@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strconv"
@@ -12,7 +13,9 @@ import (
 // Journal is an in-memory implementation of a persistence.Journal.
 type Journal struct {
 	// records contains all records in the journal.
-	// record IDs are simply the record's index represented as a string.
+	//
+	// record IDs are simply the string representation of the record's index,
+	// converted to a byte slice.
 	recordsM sync.RWMutex
 	records  [][]byte
 
@@ -27,15 +30,15 @@ type Journal struct {
 // the record after the given record ID.
 //
 // If afterID is empty, the reader is opened at the first available record.
-func (j *Journal) Open(ctx context.Context, afterID string) (persistence.JournalReader, error) {
+func (j *Journal) Open(ctx context.Context, afterID []byte) (persistence.JournalReader, error) {
 	r := &reader{
 		journal: j,
 	}
 
-	if afterID != "" {
-		index, err := strconv.Atoi(afterID)
+	if len(afterID) != 0 {
+		index, err := recordIDToIndex(afterID)
 		if err != nil {
-			return nil, fmt.Errorf("%#v is not a valid record ID", afterID)
+			return nil, err
 		}
 
 		r.index = index + 1
@@ -46,8 +49,8 @@ func (j *Journal) Open(ctx context.Context, afterID string) (persistence.Journal
 
 // LastID returns the ID of the last record in the journal.
 //
-// If the ID is an empty string the journal is empty.
-func (j *Journal) LastID(ctx context.Context) (string, error) {
+// If the ID is empty the journal is empty.
+func (j *Journal) LastID(ctx context.Context) ([]byte, error) {
 	j.recordsM.RLock()
 	defer j.recordsM.RUnlock()
 
@@ -57,29 +60,29 @@ func (j *Journal) LastID(ctx context.Context) (string, error) {
 // lastID returns the ID of the last record in the journal.
 //
 // It expects j.recordsM to be locked.
-func (j *Journal) lastID() string {
+func (j *Journal) lastID() []byte {
 	n := len(j.records)
 
 	if n == 0 {
-		return ""
+		return nil
 	}
 
-	return strconv.Itoa(n - 1)
+	return indexToRecordID(n - 1)
 }
 
 // Append adds a record to the end of the journal.
 //
 // lastID is the ID of the last record in the journal. If it does not match the
 // ID of the last record, the append operation fails.
-func (j *Journal) Append(ctx context.Context, lastID string, rec []byte) (string, error) {
+func (j *Journal) Append(ctx context.Context, lastID, rec []byte) ([]byte, error) {
 	j.recordsM.Lock()
 	defer j.recordsM.Unlock()
 
-	if expect := j.lastID(); lastID != expect {
-		return "", fmt.Errorf(
+	if expect := j.lastID(); !bytes.Equal(lastID, expect) {
+		return nil, fmt.Errorf(
 			"last ID does not match (expected %#v, got %#v)",
-			expect,
-			lastID,
+			string(expect),
+			string(lastID),
 		)
 	}
 
@@ -140,11 +143,11 @@ type reader struct {
 
 // Next returns the next record in the journal or blocks until it becomes
 // available.
-func (r *reader) Next(ctx context.Context) (id string, data []byte, err error) {
+func (r *reader) Next(ctx context.Context) (id, data []byte, err error) {
 	for {
 		data, ok, err := r.waitNext(ctx)
 		if err != nil {
-			return "", nil, err
+			return nil, nil, err
 		}
 
 		if !ok {
@@ -152,7 +155,7 @@ func (r *reader) Next(ctx context.Context) (id string, data []byte, err error) {
 		}
 
 		if ok {
-			id := strconv.Itoa(r.index)
+			id := indexToRecordID(r.index)
 			r.index++
 			return id, data, nil
 		}
@@ -221,4 +224,19 @@ func (r *reader) readHistorical() (data []byte, ok bool) {
 // Close closes the reader.
 func (r *reader) Close() error {
 	return nil
+}
+
+// indexToRecordID converts an index to a record ID.
+func indexToRecordID(index int) []byte {
+	return []byte(strconv.Itoa(index))
+}
+
+// recordID converts a record ID to an index.
+func recordIDToIndex(id []byte) (int, error) {
+	index, err := strconv.Atoi(string(id))
+	if err != nil {
+		return 0, fmt.Errorf("%#v is not a valid record ID", id)
+	}
+
+	return index, nil
 }

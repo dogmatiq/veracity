@@ -29,43 +29,43 @@ var _ = Describe("type Journal", func() {
 
 	Describe("func Open()", func() {
 		It("returns a reader that can read historical records", func() {
-			lastID := ""
+			var lastID []byte
 			for i := byte(0); i < 100; i++ {
 				var err error
 				lastID, err = journal.Append(ctx, lastID, []byte{i})
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(lastID).To(Equal(fmt.Sprintf("%d", i)))
+				Expect(lastID).To(Equal([]byte(fmt.Sprintf("%d", i))))
 			}
 
-			r, err := journal.Open(ctx, "")
+			r, err := journal.Open(ctx, nil)
 			Expect(err).ShouldNot(HaveOccurred())
 			defer r.Close()
 
 			for i := byte(0); i < 100; i++ {
 				id, rec, err := r.Next(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(id).To(Equal(fmt.Sprintf("%d", i)))
+				Expect(id).To(Equal([]byte(fmt.Sprintf("%d", i))))
 				Expect(rec).To(Equal([]byte{i}))
 			}
 		})
 
 		It("returns a reader that starts reading from the given record ID", func() {
-			lastID := ""
+			var lastID []byte
 			for i := byte(0); i < 100; i++ {
 				var err error
 				lastID, err = journal.Append(ctx, lastID, []byte{i})
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(lastID).To(Equal(fmt.Sprintf("%d", i)))
+				Expect(lastID).To(Equal([]byte(fmt.Sprintf("%d", i))))
 			}
 
-			r, err := journal.Open(ctx, "49")
+			r, err := journal.Open(ctx, []byte("49"))
 			Expect(err).ShouldNot(HaveOccurred())
 			defer r.Close()
 
 			for i := byte(50); i < 100; i++ {
 				id, rec, err := r.Next(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(id).To(Equal(fmt.Sprintf("%d", i)))
+				Expect(id).To(Equal([]byte(fmt.Sprintf("%d", i))))
 				Expect(rec).To(Equal([]byte{i}))
 			}
 		})
@@ -75,16 +75,16 @@ var _ = Describe("type Journal", func() {
 		It("returns an empty string when the journal is empty", func() {
 			id, err := journal.LastID(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(id).To(Equal(""))
+			Expect(id).To(BeEmpty())
 		})
 
 		It("returns the ID of the last record", func() {
-			lastID := ""
+			var lastID []byte
 			for i := byte(0); i < 100; i++ {
 				var err error
 				lastID, err = journal.Append(ctx, lastID, []byte{i})
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(lastID).To(Equal(fmt.Sprintf("%d", i)))
+				Expect(lastID).To(Equal([]byte(fmt.Sprintf("%d", i))))
 			}
 
 			id, err := journal.LastID(ctx)
@@ -95,28 +95,28 @@ var _ = Describe("type Journal", func() {
 
 	Describe("func Append()", func() {
 		It("returns the ID of the record", func() {
-			id, err := journal.Append(ctx, "", []byte("<record>"))
+			id, err := journal.Append(ctx, nil, []byte("<record>"))
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(id).To(Equal("0"))
+			Expect(id).To(Equal([]byte("0")))
 
 			id, err = journal.Append(ctx, id, []byte("<record>"))
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(id).To(Equal("1"))
+			Expect(id).To(Equal([]byte("1")))
 		})
 
 		It("does not append the event if the supplied last ID is incorrect", func() {
-			_, err := journal.Append(ctx, "<incorrect>", []byte("<record>"))
+			_, err := journal.Append(ctx, []byte("<incorrect>"), []byte("<record>"))
 			Expect(err).To(MatchError(`last ID does not match (expected "", got "<incorrect>")`))
 
 			lastID, err := journal.LastID(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(lastID).To(Equal(""))
+			Expect(lastID).To(BeEmpty())
 		})
 
 		It("does not block if there is a stalled reader", func() {
 			By("opening a reader")
 
-			r, err := journal.Open(ctx, "")
+			r, err := journal.Open(ctx, nil)
 			Expect(err).ShouldNot(HaveOccurred())
 			defer r.Close()
 
@@ -129,12 +129,12 @@ var _ = Describe("type Journal", func() {
 
 			By("appending enough new records to fill the reader's buffer")
 
-			lastID := ""
+			var lastID []byte
 			for i := byte(0); i < 100; i++ {
 				var err error
 				lastID, err = journal.Append(ctx, lastID, []byte{i})
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(lastID).To(Equal(fmt.Sprintf("%d", i)))
+				Expect(lastID).To(Equal([]byte(fmt.Sprintf("%d", i))))
 			}
 
 			By("resuming reading")
@@ -142,7 +142,7 @@ var _ = Describe("type Journal", func() {
 			for i := byte(0); i < 100; i++ {
 				id, rec, err := r.Next(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(id).To(Equal(fmt.Sprintf("%d", i)))
+				Expect(id).To(Equal([]byte(fmt.Sprintf("%d", i))))
 				Expect(rec).To(Equal([]byte{i}))
 			}
 		})
@@ -153,7 +153,7 @@ var _ = Describe("type Journal", func() {
 			read := func() error {
 				defer GinkgoRecover()
 
-				r, err := journal.Open(ctx, "")
+				r, err := journal.Open(ctx, nil)
 				Expect(err).ShouldNot(HaveOccurred())
 				defer r.Close()
 
@@ -162,7 +162,7 @@ var _ = Describe("type Journal", func() {
 					return err
 				}
 
-				Expect(id).To(Equal("0"))
+				Expect(id).To(Equal([]byte("0")))
 				Expect(rec).To(Equal([]byte("<record>")))
 				return nil
 			}
@@ -172,7 +172,7 @@ var _ = Describe("type Journal", func() {
 
 			time.Sleep(100 * time.Millisecond)
 
-			_, err := journal.Append(ctx, "", []byte("<record>"))
+			_, err := journal.Append(ctx, nil, []byte("<record>"))
 			Expect(err).ShouldNot(HaveOccurred())
 
 			err = g.Wait()
