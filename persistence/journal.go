@@ -5,10 +5,10 @@ import "context"
 // A Journal is an append-only immutable sequence of records.
 type Journal interface {
 	// Open returns a reader used to read journal records in order, beginning at
-	// the given record ID.
+	// the record after the given record ID.
 	//
-	// If id is empty, the reader is opened at the first available record.
-	Open(ctx context.Context, id string) (JournalReader, error)
+	// If afterID is empty, the reader is opened at the first available record.
+	Open(ctx context.Context, afterID string) (JournalReader, error)
 
 	// LastID returns the ID of the last record in the journal.
 	//
@@ -17,8 +17,8 @@ type Journal interface {
 
 	// Append adds a record to the end of the journal.
 	//
-	// lastID is the ID of the last record known to be in the journal. If it
-	// does not match the ID of the last record, the append operation fails.
+	// lastID is the ID of the last record in the journal. If it does not match
+	// the ID of the last record, the append operation fails.
 	Append(ctx context.Context, lastID string, data []byte) (id string, err error)
 }
 

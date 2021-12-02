@@ -58,7 +58,7 @@ var _ = Describe("type Journal", func() {
 				Expect(lastID).To(Equal(fmt.Sprintf("%d", i)))
 			}
 
-			r, err := journal.Open(ctx, "50")
+			r, err := journal.Open(ctx, "49")
 			Expect(err).ShouldNot(HaveOccurred())
 			defer r.Close()
 

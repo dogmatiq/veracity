@@ -24,20 +24,21 @@ type Journal struct {
 }
 
 // Open returns a reader used to read journal records in order, beginning at
-// the given record ID.
+// the record after the given record ID.
 //
-// If id is empty, the reader is opened at the first available record.
-func (j *Journal) Open(ctx context.Context, id string) (persistence.JournalReader, error) {
+// If afterID is empty, the reader is opened at the first available record.
+func (j *Journal) Open(ctx context.Context, afterID string) (persistence.JournalReader, error) {
 	r := &reader{
 		journal: j,
 	}
 
-	if id != "" {
-		var err error
-		r.index, err = strconv.Atoi(id)
+	if afterID != "" {
+		index, err := strconv.Atoi(afterID)
 		if err != nil {
-			return nil, fmt.Errorf("%#v is not a valid record ID", id)
+			return nil, fmt.Errorf("%#v is not a valid record ID", afterID)
 		}
+
+		r.index = index + 1
 	}
 
 	return r, nil
@@ -68,8 +69,8 @@ func (j *Journal) lastID() string {
 
 // Append adds a record to the end of the journal.
 //
-// lastID is the ID of the last record known to be in the journal. If it
-// does not match the ID of the last record, the append operation fails.
+// lastID is the ID of the last record in the journal. If it does not match the
+// ID of the last record, the append operation fails.
 func (j *Journal) Append(ctx context.Context, lastID string, rec []byte) (string, error) {
 	j.recordsM.Lock()
 	defer j.recordsM.Unlock()
