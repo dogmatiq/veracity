@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/dogmatiq/veracity/persistence/journal"
+	"github.com/dogmatiq/veracity/journal"
 )
 
 // Journal is an in-memory implementation of a persistence.Journal.

@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.27.1
 // 	protoc        v3.19.1
-// source: github.com/dogmatiq/veracity/persistence/journal/record.proto
+// source: github.com/dogmatiq/veracity/journal/record.proto
 
 package journal
 

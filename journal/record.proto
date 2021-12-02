@@ -3,7 +3,7 @@ package veracity.journal.v1;
 
 import "github.com/dogmatiq/interopspec/envelopespec/envelope.proto";
 
-option go_package = "github.com/dogmatiq/veracity/persistence/journal";
+option go_package = "github.com/dogmatiq/veracity/journal";
 
 message Container {
     oneof elem {

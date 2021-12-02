@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	. "github.com/dogmatiq/veracity/persistence/journal/memoryjournal"
+	. "github.com/dogmatiq/veracity/journal/memoryjournal"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"golang.org/x/sync/errgroup"
