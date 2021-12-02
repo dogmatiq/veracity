@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.27.1
 // 	protoc        v3.19.1
-// source: github.com/dogmatiq/veracity/persistence/record/record.proto
+// source: github.com/dogmatiq/veracity/coordinator/record/record.proto
 
 package record
 
@@ -38,7 +38,7 @@ type RecordContainer struct {
 func (x *RecordContainer) Reset() {
 	*x = RecordContainer{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[0]
+		mi := &file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[0]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -51,7 +51,7 @@ func (x *RecordContainer) String() string {
 func (*RecordContainer) ProtoMessage() {}
 
 func (x *RecordContainer) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[0]
+	mi := &file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[0]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -64,7 +64,7 @@ func (x *RecordContainer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordContainer.ProtoReflect.Descriptor instead.
 func (*RecordContainer) Descriptor() ([]byte, []int) {
-	return file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDescGZIP(), []int{0}
+	return file_github_com_dogmatiq_veracity_coordinator_record_record_proto_rawDescGZIP(), []int{0}
 }
 
 func (m *RecordContainer) GetElem() isRecordContainer_Elem {
@@ -154,7 +154,7 @@ type ExecutorExecuteCommand struct {
 func (x *ExecutorExecuteCommand) Reset() {
 	*x = ExecutorExecuteCommand{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[1]
+		mi := &file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[1]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -167,7 +167,7 @@ func (x *ExecutorExecuteCommand) String() string {
 func (*ExecutorExecuteCommand) ProtoMessage() {}
 
 func (x *ExecutorExecuteCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[1]
+	mi := &file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[1]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -180,7 +180,7 @@ func (x *ExecutorExecuteCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecutorExecuteCommand.ProtoReflect.Descriptor instead.
 func (*ExecutorExecuteCommand) Descriptor() ([]byte, []int) {
-	return file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDescGZIP(), []int{1}
+	return file_github_com_dogmatiq_veracity_coordinator_record_record_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *ExecutorExecuteCommand) GetEnvelope() *envelopespec.Envelope {
@@ -204,7 +204,7 @@ type AggregateHandleCommand struct {
 func (x *AggregateHandleCommand) Reset() {
 	*x = AggregateHandleCommand{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[2]
+		mi := &file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[2]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -217,7 +217,7 @@ func (x *AggregateHandleCommand) String() string {
 func (*AggregateHandleCommand) ProtoMessage() {}
 
 func (x *AggregateHandleCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[2]
+	mi := &file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[2]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -230,7 +230,7 @@ func (x *AggregateHandleCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AggregateHandleCommand.ProtoReflect.Descriptor instead.
 func (*AggregateHandleCommand) Descriptor() ([]byte, []int) {
-	return file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDescGZIP(), []int{2}
+	return file_github_com_dogmatiq_veracity_coordinator_record_record_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *AggregateHandleCommand) GetMessageId() string {
@@ -274,7 +274,7 @@ type IntegrationHandleCommand struct {
 func (x *IntegrationHandleCommand) Reset() {
 	*x = IntegrationHandleCommand{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[3]
+		mi := &file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[3]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -287,7 +287,7 @@ func (x *IntegrationHandleCommand) String() string {
 func (*IntegrationHandleCommand) ProtoMessage() {}
 
 func (x *IntegrationHandleCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[3]
+	mi := &file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[3]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -300,7 +300,7 @@ func (x *IntegrationHandleCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IntegrationHandleCommand.ProtoReflect.Descriptor instead.
 func (*IntegrationHandleCommand) Descriptor() ([]byte, []int) {
-	return file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDescGZIP(), []int{3}
+	return file_github_com_dogmatiq_veracity_coordinator_record_record_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *IntegrationHandleCommand) GetMessageId() string {
@@ -340,7 +340,7 @@ type ProcessHandleEvent struct {
 func (x *ProcessHandleEvent) Reset() {
 	*x = ProcessHandleEvent{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[4]
+		mi := &file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[4]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -353,7 +353,7 @@ func (x *ProcessHandleEvent) String() string {
 func (*ProcessHandleEvent) ProtoMessage() {}
 
 func (x *ProcessHandleEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[4]
+	mi := &file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[4]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -366,7 +366,7 @@ func (x *ProcessHandleEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessHandleEvent.ProtoReflect.Descriptor instead.
 func (*ProcessHandleEvent) Descriptor() ([]byte, []int) {
-	return file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDescGZIP(), []int{4}
+	return file_github_com_dogmatiq_veracity_coordinator_record_record_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ProcessHandleEvent) GetSourceApplication() *envelopespec.Identity {
@@ -426,7 +426,7 @@ type ProcessHandleTimeout struct {
 func (x *ProcessHandleTimeout) Reset() {
 	*x = ProcessHandleTimeout{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[5]
+		mi := &file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[5]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -439,7 +439,7 @@ func (x *ProcessHandleTimeout) String() string {
 func (*ProcessHandleTimeout) ProtoMessage() {}
 
 func (x *ProcessHandleTimeout) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[5]
+	mi := &file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[5]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -452,7 +452,7 @@ func (x *ProcessHandleTimeout) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessHandleTimeout.ProtoReflect.Descriptor instead.
 func (*ProcessHandleTimeout) Descriptor() ([]byte, []int) {
-	return file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDescGZIP(), []int{5}
+	return file_github_com_dogmatiq_veracity_coordinator_record_record_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ProcessHandleTimeout) GetMessageId() string {
@@ -503,7 +503,7 @@ type AggregateInstance struct {
 func (x *AggregateInstance) Reset() {
 	*x = AggregateInstance{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[6]
+		mi := &file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[6]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -516,7 +516,7 @@ func (x *AggregateInstance) String() string {
 func (*AggregateInstance) ProtoMessage() {}
 
 func (x *AggregateInstance) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[6]
+	mi := &file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[6]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -529,7 +529,7 @@ func (x *AggregateInstance) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AggregateInstance.ProtoReflect.Descriptor instead.
 func (*AggregateInstance) Descriptor() ([]byte, []int) {
-	return file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDescGZIP(), []int{6}
+	return file_github_com_dogmatiq_veracity_coordinator_record_record_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *AggregateInstance) GetId() string {
@@ -568,7 +568,7 @@ type ProcessInstance struct {
 func (x *ProcessInstance) Reset() {
 	*x = ProcessInstance{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[7]
+		mi := &file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[7]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -581,7 +581,7 @@ func (x *ProcessInstance) String() string {
 func (*ProcessInstance) ProtoMessage() {}
 
 func (x *ProcessInstance) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[7]
+	mi := &file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[7]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -594,7 +594,7 @@ func (x *ProcessInstance) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessInstance.ProtoReflect.Descriptor instead.
 func (*ProcessInstance) Descriptor() ([]byte, []int) {
-	return file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDescGZIP(), []int{7}
+	return file_github_com_dogmatiq_veracity_coordinator_record_record_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ProcessInstance) GetId() string {
@@ -632,12 +632,12 @@ func (x *ProcessInstance) GetData() []byte {
 	return nil
 }
 
-var File_github_com_dogmatiq_veracity_persistence_record_record_proto protoreflect.FileDescriptor
+var File_github_com_dogmatiq_veracity_coordinator_record_record_proto protoreflect.FileDescriptor
 
-var file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDesc = []byte{
+var file_github_com_dogmatiq_veracity_coordinator_record_record_proto_rawDesc = []byte{
 	0x0a, 0x3c, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x6f, 0x67,
-	0x6d, 0x61, 0x74, 0x69, 0x71, 0x2f, 0x76, 0x65, 0x72, 0x61, 0x63, 0x69, 0x74, 0x79, 0x2f, 0x70,
-	0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x63, 0x65, 0x2f, 0x72, 0x65, 0x63, 0x6f, 0x72,
+	0x6d, 0x61, 0x74, 0x69, 0x71, 0x2f, 0x76, 0x65, 0x72, 0x61, 0x63, 0x69, 0x74, 0x79, 0x2f, 0x63,
+	0x6f, 0x6f, 0x72, 0x64, 0x69, 0x6e, 0x61, 0x74, 0x6f, 0x72, 0x2f, 0x72, 0x65, 0x63, 0x6f, 0x72,
 	0x64, 0x2f, 0x72, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x12,
 	0x76, 0x65, 0x72, 0x61, 0x63, 0x69, 0x74, 0x79, 0x2e, 0x72, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x2e,
 	0x76, 0x31, 0x1a, 0x3b, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64,
@@ -771,25 +771,25 @@ var file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDesc = 
 	0x79, 0x70, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x64, 0x61, 0x74, 0x61, 0x18, 0x05, 0x20, 0x01, 0x28,
 	0x0c, 0x52, 0x04, 0x64, 0x61, 0x74, 0x61, 0x42, 0x31, 0x5a, 0x2f, 0x67, 0x69, 0x74, 0x68, 0x75,
 	0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x6f, 0x67, 0x6d, 0x61, 0x74, 0x69, 0x71, 0x2f, 0x76,
-	0x65, 0x72, 0x61, 0x63, 0x69, 0x74, 0x79, 0x2f, 0x70, 0x65, 0x72, 0x73, 0x69, 0x73, 0x74, 0x65,
-	0x6e, 0x63, 0x65, 0x2f, 0x72, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74,
+	0x65, 0x72, 0x61, 0x63, 0x69, 0x74, 0x79, 0x2f, 0x63, 0x6f, 0x6f, 0x72, 0x64, 0x69, 0x6e, 0x61,
+	0x74, 0x6f, 0x72, 0x2f, 0x72, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74,
 	0x6f, 0x33,
 }
 
 var (
-	file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDescOnce sync.Once
-	file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDescData = file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDesc
+	file_github_com_dogmatiq_veracity_coordinator_record_record_proto_rawDescOnce sync.Once
+	file_github_com_dogmatiq_veracity_coordinator_record_record_proto_rawDescData = file_github_com_dogmatiq_veracity_coordinator_record_record_proto_rawDesc
 )
 
-func file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDescGZIP() []byte {
-	file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDescOnce.Do(func() {
-		file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDescData = protoimpl.X.CompressGZIP(file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDescData)
+func file_github_com_dogmatiq_veracity_coordinator_record_record_proto_rawDescGZIP() []byte {
+	file_github_com_dogmatiq_veracity_coordinator_record_record_proto_rawDescOnce.Do(func() {
+		file_github_com_dogmatiq_veracity_coordinator_record_record_proto_rawDescData = protoimpl.X.CompressGZIP(file_github_com_dogmatiq_veracity_coordinator_record_record_proto_rawDescData)
 	})
-	return file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDescData
+	return file_github_com_dogmatiq_veracity_coordinator_record_record_proto_rawDescData
 }
 
-var file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
-var file_github_com_dogmatiq_veracity_persistence_record_record_proto_goTypes = []interface{}{
+var file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_github_com_dogmatiq_veracity_coordinator_record_record_proto_goTypes = []interface{}{
 	(*RecordContainer)(nil),          // 0: veracity.record.v1.RecordContainer
 	(*ExecutorExecuteCommand)(nil),   // 1: veracity.record.v1.ExecutorExecuteCommand
 	(*AggregateHandleCommand)(nil),   // 2: veracity.record.v1.AggregateHandleCommand
@@ -801,7 +801,7 @@ var file_github_com_dogmatiq_veracity_persistence_record_record_proto_goTypes = 
 	(*envelopespec.Envelope)(nil),    // 8: dogma.interop.v1.envelope.Envelope
 	(*envelopespec.Identity)(nil),    // 9: dogma.interop.v1.envelope.Identity
 }
-var file_github_com_dogmatiq_veracity_persistence_record_record_proto_depIdxs = []int32{
+var file_github_com_dogmatiq_veracity_coordinator_record_record_proto_depIdxs = []int32{
 	1,  // 0: veracity.record.v1.RecordContainer.executor_execute_command:type_name -> veracity.record.v1.ExecutorExecuteCommand
 	2,  // 1: veracity.record.v1.RecordContainer.aggregate_handle_command:type_name -> veracity.record.v1.AggregateHandleCommand
 	3,  // 2: veracity.record.v1.RecordContainer.integration_handle_command:type_name -> veracity.record.v1.IntegrationHandleCommand
@@ -829,13 +829,13 @@ var file_github_com_dogmatiq_veracity_persistence_record_record_proto_depIdxs = 
 	0,  // [0:20] is the sub-list for field type_name
 }
 
-func init() { file_github_com_dogmatiq_veracity_persistence_record_record_proto_init() }
-func file_github_com_dogmatiq_veracity_persistence_record_record_proto_init() {
-	if File_github_com_dogmatiq_veracity_persistence_record_record_proto != nil {
+func init() { file_github_com_dogmatiq_veracity_coordinator_record_record_proto_init() }
+func file_github_com_dogmatiq_veracity_coordinator_record_record_proto_init() {
+	if File_github_com_dogmatiq_veracity_coordinator_record_record_proto != nil {
 		return
 	}
 	if !protoimpl.UnsafeEnabled {
-		file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
+		file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*RecordContainer); i {
 			case 0:
 				return &v.state
@@ -847,7 +847,7 @@ func file_github_com_dogmatiq_veracity_persistence_record_record_proto_init() {
 				return nil
 			}
 		}
-		file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
+		file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*ExecutorExecuteCommand); i {
 			case 0:
 				return &v.state
@@ -859,7 +859,7 @@ func file_github_com_dogmatiq_veracity_persistence_record_record_proto_init() {
 				return nil
 			}
 		}
-		file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
+		file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*AggregateHandleCommand); i {
 			case 0:
 				return &v.state
@@ -871,7 +871,7 @@ func file_github_com_dogmatiq_veracity_persistence_record_record_proto_init() {
 				return nil
 			}
 		}
-		file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
+		file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*IntegrationHandleCommand); i {
 			case 0:
 				return &v.state
@@ -883,7 +883,7 @@ func file_github_com_dogmatiq_veracity_persistence_record_record_proto_init() {
 				return nil
 			}
 		}
-		file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+		file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*ProcessHandleEvent); i {
 			case 0:
 				return &v.state
@@ -895,7 +895,7 @@ func file_github_com_dogmatiq_veracity_persistence_record_record_proto_init() {
 				return nil
 			}
 		}
-		file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+		file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*ProcessHandleTimeout); i {
 			case 0:
 				return &v.state
@@ -907,7 +907,7 @@ func file_github_com_dogmatiq_veracity_persistence_record_record_proto_init() {
 				return nil
 			}
 		}
-		file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
+		file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*AggregateInstance); i {
 			case 0:
 				return &v.state
@@ -919,7 +919,7 @@ func file_github_com_dogmatiq_veracity_persistence_record_record_proto_init() {
 				return nil
 			}
 		}
-		file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
+		file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*ProcessInstance); i {
 			case 0:
 				return &v.state
@@ -932,7 +932,7 @@ func file_github_com_dogmatiq_veracity_persistence_record_record_proto_init() {
 			}
 		}
 	}
-	file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes[0].OneofWrappers = []interface{}{
+	file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes[0].OneofWrappers = []interface{}{
 		(*RecordContainer_ExecutorExecuteCommand)(nil),
 		(*RecordContainer_AggregateHandleCommand)(nil),
 		(*RecordContainer_IntegrationHandleCommand)(nil),
@@ -943,18 +943,18 @@ func file_github_com_dogmatiq_veracity_persistence_record_record_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDesc,
+			RawDescriptor: file_github_com_dogmatiq_veracity_coordinator_record_record_proto_rawDesc,
 			NumEnums:      0,
 			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_github_com_dogmatiq_veracity_persistence_record_record_proto_goTypes,
-		DependencyIndexes: file_github_com_dogmatiq_veracity_persistence_record_record_proto_depIdxs,
-		MessageInfos:      file_github_com_dogmatiq_veracity_persistence_record_record_proto_msgTypes,
+		GoTypes:           file_github_com_dogmatiq_veracity_coordinator_record_record_proto_goTypes,
+		DependencyIndexes: file_github_com_dogmatiq_veracity_coordinator_record_record_proto_depIdxs,
+		MessageInfos:      file_github_com_dogmatiq_veracity_coordinator_record_record_proto_msgTypes,
 	}.Build()
-	File_github_com_dogmatiq_veracity_persistence_record_record_proto = out.File
-	file_github_com_dogmatiq_veracity_persistence_record_record_proto_rawDesc = nil
-	file_github_com_dogmatiq_veracity_persistence_record_record_proto_goTypes = nil
-	file_github_com_dogmatiq_veracity_persistence_record_record_proto_depIdxs = nil
+	File_github_com_dogmatiq_veracity_coordinator_record_record_proto = out.File
+	file_github_com_dogmatiq_veracity_coordinator_record_record_proto_rawDesc = nil
+	file_github_com_dogmatiq_veracity_coordinator_record_record_proto_goTypes = nil
+	file_github_com_dogmatiq_veracity_coordinator_record_record_proto_depIdxs = nil
 }

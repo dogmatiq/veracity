@@ -3,7 +3,7 @@ package veracity.record.v1;
 
 import "github.com/dogmatiq/interopspec/envelopespec/envelope.proto";
 
-option go_package = "github.com/dogmatiq/veracity/persistence/record";
+option go_package = "github.com/dogmatiq/veracity/coordinator/record";
 
 message RecordContainer {
     oneof elem {
