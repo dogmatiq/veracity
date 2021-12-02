@@ -13,9 +13,9 @@ import (
 type Journal interface {
 	// Append adds a record to the end of the journal.
 	//
-	// lastID is the ID of the last record that is expected to be in the
-	// journal. If it does not match the ID of the actual last record, the
-	// append operation fails.
+	// lastID must be the ID of the last record in the journal, or an empty
+	// slice if the journal is currently empty; otherwise, the append operation
+	// fails.
 	Append(ctx context.Context, lastID, data []byte) (id []byte, err error)
 
 	// Scan reads the records in the journal in the order they were appended.
@@ -34,9 +34,8 @@ type Journal interface {
 
 // Append adds a record to the end of the journal.
 //
-// lastID is the ID of the last record that is expected to be in the journal. If
-// it does not match the ID of the actual last record, the append operation
-// fails.
+// lastID must be the ID of the last record in the journal, or an empty slice if
+// the journal is currently empty; otherwise, the append operation fails.
 func Append(
 	ctx context.Context,
 	j Journal,

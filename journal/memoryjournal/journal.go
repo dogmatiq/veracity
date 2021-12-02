@@ -19,9 +19,8 @@ type Journal struct {
 
 // Append adds a record to the end of the journal.
 //
-// lastID is the ID of the last record that is expected to be in the journal. If
-// it does not match the ID of the actual last record, the append operation
-// fails.
+// lastID must be the ID of the last record in the journal, or an empty slice if
+// the journal is currently empty; otherwise, the append operation fails.
 func (j *Journal) Append(ctx context.Context, lastID, rec []byte) ([]byte, error) {
 	lastIndex, err := recordIDToIndex(lastID)
 	if err != nil {
