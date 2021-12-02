@@ -11,6 +11,16 @@ require (
 )
 
 require (
+	github.com/dogmatiq/configkit v0.11.0 // indirect
+	github.com/dogmatiq/iago v0.4.0 // indirect
+	github.com/fxamacker/cbor/v2 v2.3.0 // indirect
+	github.com/x448/float16 v0.8.4 // indirect
+)
+
+require (
+	github.com/dogmatiq/dapper v0.4.3
+	github.com/dogmatiq/dogma v0.11.1
+	github.com/dogmatiq/marshalkit v0.7.2
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
