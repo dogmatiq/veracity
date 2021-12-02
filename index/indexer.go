@@ -6,10 +6,6 @@ import (
 	"github.com/dogmatiq/veracity/journal"
 )
 
-// journalRecordIDKey is the key used to store the ID of the most recent
-// fully-indexed journal record.
-var journalRecordIDKey = formatKey("journal/last-record-id")
-
 // Builder builds an index from a journal.
 type Builder struct {
 	Journal journal.Journal
@@ -18,29 +14,28 @@ type Builder struct {
 
 // Build updates the index to reflect the records from the journal.
 func (b *Builder) Build(ctx context.Context) (lastRecordID []byte, err error) {
-	// Find the last record ID that we know has been indexed fully.
-	lastRecordID, err = b.Index.Get(ctx, journalRecordIDKey)
+	j, err := loadJournal(ctx, b.Index)
 	if err != nil {
 		return nil, err
 	}
 
 	// Read from the journal immediately after the last indexed record and begin
 	// indexing.
-	lastRecordID, err = journal.VisitRecords(
+	j.CommittedRecordId, err = journal.VisitRecords(
 		ctx,
 		b.Journal,
-		lastRecordID,
+		j.CommittedRecordId,
 		indexer{b.Index},
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := b.Index.Set(ctx, journalRecordIDKey, lastRecordID); err != nil {
+	if err := saveJournal(ctx, b.Index, j); err != nil {
 		return nil, err
 	}
 
-	return lastRecordID, nil
+	return j.CommittedRecordId, nil
 }
 
 type indexer struct {

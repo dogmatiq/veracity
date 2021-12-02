@@ -4,15 +4,16 @@ import (
 	"context"
 
 	"github.com/dogmatiq/interopspec/envelopespec"
+	"github.com/dogmatiq/veracity/index/internal/indexpb"
 )
 
 // queueKey is the key used to store the queue itself.
-var queueKey = formatKey("queue")
+var queueKey = makeKey("queue")
 
 // queueMessageKey returns the key used to store the envelope for the given
 // message ID on the queue.
 func queueMessageKey(messageID string) []byte {
-	return formatKey("%s/message/%s", queueKey, messageID)
+	return makeKey("queue", "message", messageID)
 }
 
 // addMessageToQueue adds a message to the queue.
@@ -31,7 +32,7 @@ func addMessageToQueue(
 		return err
 	}
 
-	queue := &Queue{}
+	queue := &indexpb.Queue{}
 	if err := getProto(ctx, index, queueKey, queue); err != nil {
 		return err
 	}
@@ -65,7 +66,7 @@ func removeMessageFromQueue(
 	}
 
 	// Load the queue itself.
-	queue := &Queue{}
+	queue := &indexpb.Queue{}
 	if err := getProto(ctx, index, queueKey, queue); err != nil {
 		return err
 	}

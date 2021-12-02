@@ -1,8 +1,0 @@
-syntax = "proto3";
-package veracity.index.v1;
-
-option go_package = "github.com/dogmatiq/veracity/index";
-
-message Queue {
-    repeated string message_ids = 1;
-}

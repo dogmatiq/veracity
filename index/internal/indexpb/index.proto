@@ -1,0 +1,12 @@
+syntax = "proto3";
+package veracity.index.v1;
+
+option go_package = "github.com/dogmatiq/veracity/index/internal/indexpb";
+
+message Journal {
+    bytes committed_record_id = 1;
+}
+
+message Queue {
+    repeated string message_ids = 1;
+}

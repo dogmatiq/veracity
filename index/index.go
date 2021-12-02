@@ -1,8 +1,8 @@
 package index
 
 import (
+	"bytes"
 	"context"
-	"fmt"
 
 	"google.golang.org/protobuf/proto"
 )
@@ -26,18 +26,18 @@ type Index interface {
 }
 
 // setProto sets the value of k to v's binary representation.
-func setProto(ctx context.Context, i Index, k []byte, v proto.Message) error {
+func setProto(ctx context.Context, index Index, k []byte, v proto.Message) error {
 	data, err := proto.Marshal(v)
 	if err != nil {
 		return err
 	}
 
-	return i.Set(ctx, k, data)
+	return index.Set(ctx, k, data)
 }
 
 // getProto reads the value of k into v.
-func getProto(ctx context.Context, i Index, k []byte, v proto.Message) error {
-	data, err := i.Get(ctx, k)
+func getProto(ctx context.Context, index Index, k []byte, v proto.Message) error {
+	data, err := index.Get(ctx, k)
 	if err != nil {
 		return err
 	}
@@ -45,7 +45,17 @@ func getProto(ctx context.Context, i Index, k []byte, v proto.Message) error {
 	return proto.Unmarshal(data, v)
 }
 
-// formatKey formats a string for use as a key.
-func formatKey(f string, v ...interface{}) []byte {
-	return []byte(fmt.Sprintf(f, v...))
+// makeKey returns a key made from slash-separated parts.
+func makeKey(parts ...string) []byte {
+	var buf bytes.Buffer
+
+	for i, p := range parts {
+		if i > 0 {
+			buf.WriteByte('/')
+		}
+
+		buf.WriteString(p)
+	}
+
+	return buf.Bytes()
 }
