@@ -1,11 +1,11 @@
-package memory_test
+package memoryjournal_test
 
 import (
 	"context"
 	"fmt"
 	"time"
 
-	. "github.com/dogmatiq/veracity/persistence/memory"
+	. "github.com/dogmatiq/veracity/persistence/journal/memoryjournal"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"golang.org/x/sync/errgroup"

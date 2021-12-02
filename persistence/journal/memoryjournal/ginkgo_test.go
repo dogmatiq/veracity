@@ -1,4 +1,4 @@
-package memory_test
+package memoryjournal_test
 
 import (
 	"reflect"

@@ -1,4 +1,4 @@
-package memory
+package memoryjournal
 
 import (
 	"bytes"
@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/dogmatiq/veracity/persistence"
+	"github.com/dogmatiq/veracity/persistence/journal"
 )
 
 // Journal is an in-memory implementation of a persistence.Journal.
@@ -30,7 +30,7 @@ type Journal struct {
 // the record after the given record ID.
 //
 // If afterID is empty, the reader is opened at the first available record.
-func (j *Journal) Open(ctx context.Context, afterID []byte) (persistence.JournalReader, error) {
+func (j *Journal) Open(ctx context.Context, afterID []byte) (journal.Reader, error) {
 	r := &reader{
 		journal: j,
 	}
@@ -121,8 +121,8 @@ func (j *Journal) notifyReaders(rec []byte) {
 	}
 }
 
-// reader is an implementation of the persistence.JournalReader interface that
-// reads from an in-memory journal.
+// reader is an implementation of the journal.Reader interface that reads from
+// an in-memory journal.
 type reader struct {
 	// journal is the the Journal that from which the Reader gets its records.
 	journal *Journal

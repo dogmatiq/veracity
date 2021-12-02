@@ -1,4 +1,4 @@
-package persistence
+package journal
 
 import "context"
 
@@ -8,7 +8,7 @@ type Journal interface {
 	// the record after the given record ID.
 	//
 	// If afterID is empty, the reader is opened at the first available record.
-	Open(ctx context.Context, afterID []byte) (JournalReader, error)
+	Open(ctx context.Context, afterID []byte) (Reader, error)
 
 	// LastID returns the ID of the last record in the journal.
 	//
@@ -22,8 +22,8 @@ type Journal interface {
 	Append(ctx context.Context, lastID, data []byte) (id []byte, err error)
 }
 
-// A JournalReader is used to read journal record in order.
-type JournalReader interface {
+// A Reader is used to read journal record in order.
+type Reader interface {
 	// Next returns the next record in the journal or blocks until it becomes
 	// available.
 	Next(ctx context.Context) (id, data []byte, err error)
