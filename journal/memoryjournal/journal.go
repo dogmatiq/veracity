@@ -10,7 +10,7 @@ import (
 	"github.com/dogmatiq/veracity/journal"
 )
 
-// Journal is an in-memory implementation of a persistence.Journal.
+// Journal is an in-memory implementation of the journal.Journal interface.
 type Journal struct {
 	// records contains all records in the journal.
 	//
