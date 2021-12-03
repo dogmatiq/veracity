@@ -9,12 +9,13 @@ import (
 	"github.com/dogmatiq/veracity/persistence"
 )
 
-// Log is an in-memory append-only sequence of immutable, opaque binary records.
+// Journal is an in-memory append-only sequence of immutable, opaque binary
+// records.
 //
-// It is an implementation of the persistence.Log interface intended for testing
-// purposes.
-type Log struct {
-	// records contains all records in the log.
+// It is an implementation of the persistence.Journal interface intended for
+// testing purposes.
+type Journal struct {
+	// records contains all records in the journal.
 	//
 	// record IDs are simply the string representation of the record's index,
 	// converted to a byte slice.
@@ -22,20 +23,20 @@ type Log struct {
 	records [][]byte
 }
 
-// Append adds a record to the end of the log.
+// Append adds a record to the end of the journal.
 //
 // prevID must be the ID of the most recent record, or an empty slice if the
-// log is currently empty; otherwise, the append operation fails.
-func (l *Log) Append(ctx context.Context, prevID, rec []byte) ([]byte, error) {
+// journal is currently empty; otherwise, the append operation fails.
+func (j *Journal) Append(ctx context.Context, prevID, rec []byte) ([]byte, error) {
 	prevIndex, err := recordIDToIndex(prevID)
 	if err != nil {
 		return nil, err
 	}
 
-	l.m.Lock()
-	defer l.m.Unlock()
+	j.m.Lock()
+	defer j.m.Unlock()
 
-	count := len(l.records)
+	count := len(j.records)
 
 	if count-1 != prevIndex {
 		return nil, fmt.Errorf(
@@ -45,49 +46,49 @@ func (l *Log) Append(ctx context.Context, prevID, rec []byte) ([]byte, error) {
 		)
 	}
 
-	l.records = append(l.records, rec)
+	j.records = append(j.records, rec)
 
 	return indexToRecordID(count), nil
 }
 
-// Open returns a Reader that reads the records in the log in the order they
+// Open returns a Reader that reads the records in the journal in the order they
 // were appended.
 //
 // If afterID is empty reading starts at the first record; otherwise,
 // reading starts at the record immediately after afterID.
-func (l *Log) Open(ctx context.Context, afterID []byte) (persistence.LogReader, error) {
+func (j *Journal) Open(ctx context.Context, afterID []byte) (persistence.JournalReader, error) {
 	index, err := recordIDToIndex(afterID)
 	if err != nil {
 		return nil, err
 	}
 
 	return &reader{
-		log:   l,
-		index: index + 1,
+		journal: j,
+		index:   index + 1,
 	}, nil
 }
 
-// reader is an implementation of persistence.LogReader that read from an
-// in-memory log.
+// reader is an implementation of persistence.JournalReader that read from an
+// in-memory journal.
 type reader struct {
-	log     *Log
+	journal *Journal
 	index   int
 	records [][]byte
 }
 
-// Next returns the next record in the log.
+// Next returns the next record in the journal.
 //
 // If ok is true, id is the ID of the next record and data is the record data
 // itself.
 //
-// If ok is false the end of the log has been reached. The reader should be
+// If ok is false the end of the journal has been reached. The reader should be
 // closed and discarded; the behavior of subsequent calls to Next() is
 // undefined.
 func (r *reader) Next(ctx context.Context) (id, data []byte, ok bool, err error) {
 	if len(r.records) == 0 {
-		r.log.m.RLock()
-		r.records = r.log.records[r.index:]
-		r.log.m.RUnlock()
+		r.journal.m.RLock()
+		r.records = r.journal.records[r.index:]
+		r.journal.m.RUnlock()
 
 		if len(r.records) == 0 {
 			return nil, nil, false, nil

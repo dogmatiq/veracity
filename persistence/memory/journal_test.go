@@ -10,16 +10,16 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("type Log", func() {
+var _ = Describe("type Journal", func() {
 	var (
-		ctx    context.Context
-		cancel context.CancelFunc
-		log    *Log
+		ctx     context.Context
+		cancel  context.CancelFunc
+		journal *Journal
 	)
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-		log = &Log{}
+		journal = &Journal{}
 	})
 
 	AfterEach(func() {
@@ -28,20 +28,20 @@ var _ = Describe("type Log", func() {
 
 	Describe("func Append()", func() {
 		It("returns the ID of the record", func() {
-			id, err := log.Append(ctx, nil, []byte("<record>"))
+			id, err := journal.Append(ctx, nil, []byte("<record>"))
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(id).To(Equal([]byte("0")))
 
-			id, err = log.Append(ctx, id, []byte("<record>"))
+			id, err = journal.Append(ctx, id, []byte("<record>"))
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(id).To(Equal([]byte("1")))
 		})
 
 		It("does not append the record if the supplied 'previous ID' is incorrect", func() {
-			_, err := log.Append(ctx, []byte("0"), []byte("<record>"))
+			_, err := journal.Append(ctx, []byte("0"), []byte("<record>"))
 			Expect(err).To(MatchError(`optimistic lock failure, the last record ID is "" but the caller provided "0"`))
 
-			r, err := log.Open(ctx, nil)
+			r, err := journal.Open(ctx, nil)
 			Expect(err).ShouldNot(HaveOccurred())
 			defer r.Close()
 
@@ -55,7 +55,7 @@ var _ = Describe("type Log", func() {
 
 			By("appending a record")
 
-			id, err := log.Append(ctx, nil, []byte("<record>"))
+			id, err := journal.Append(ctx, nil, []byte("<record>"))
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(id).To(Equal([]byte("0")))
 
@@ -65,7 +65,7 @@ var _ = Describe("type Log", func() {
 				defer GinkgoRecover()
 				defer close(barrier)
 
-				r, err := log.Open(ctx, nil)
+				r, err := journal.Open(ctx, nil)
 				Expect(err).ShouldNot(HaveOccurred())
 				defer r.Close()
 
@@ -83,7 +83,7 @@ var _ = Describe("type Log", func() {
 
 			By("appending another record")
 
-			_, err = log.Append(ctx, id, []byte("<record>"))
+			_, err = journal.Append(ctx, id, []byte("<record>"))
 			Expect(err).ShouldNot(HaveOccurred()) // would timeout if reader blocked appending
 
 			<-barrier // allow the reader to finish
@@ -99,13 +99,13 @@ var _ = Describe("type Log", func() {
 			)
 
 			for i := byte(0); i < 100; i++ {
-				lastID, err = log.Append(ctx, lastID, []byte{i})
+				lastID, err = journal.Append(ctx, lastID, []byte{i})
 				Expect(err).ShouldNot(HaveOccurred())
 			}
 		})
 
-		It("can read from the start of the log", func() {
-			r, err := log.Open(ctx, nil)
+		It("can read from the start of the journal", func() {
+			r, err := journal.Open(ctx, nil)
 			Expect(err).ShouldNot(HaveOccurred())
 			defer r.Close()
 
@@ -122,8 +122,8 @@ var _ = Describe("type Log", func() {
 			Expect(ok).To(BeFalse())
 		})
 
-		It("can start reading midway through the log", func() {
-			r, err := log.Open(ctx, []byte("49"))
+		It("can start reading midway through the journal", func() {
+			r, err := journal.Open(ctx, []byte("49"))
 			Expect(err).ShouldNot(HaveOccurred())
 			defer r.Close()
 
