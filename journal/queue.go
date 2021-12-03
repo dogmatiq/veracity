@@ -1,10 +1,10 @@
-package index
+package journal
 
 import (
 	"context"
 
 	"github.com/dogmatiq/interopspec/envelopespec"
-	"github.com/dogmatiq/veracity/index/internal/indexpb"
+	"github.com/dogmatiq/veracity/journal/internal/indexpb"
 )
 
 // queueKey is the key used to store the queue itself.
@@ -17,15 +17,9 @@ func queueMessageKey(messageID string) []byte {
 }
 
 // addMessageToQueue adds a message to the queue.
-func addMessageToQueue(
-	ctx context.Context,
-	index Index,
-	env *envelopespec.Envelope,
-) error {
-	// Store the message envelope.
-	if err := setProto(
+func (c *Committer) addMessageToQueue(ctx context.Context, env *envelopespec.Envelope) error {
+	if err := c.setProto(
 		ctx,
-		index,
 		queueMessageKey(env.MessageId),
 		env,
 	); err != nil {
@@ -33,31 +27,25 @@ func addMessageToQueue(
 	}
 
 	queue := &indexpb.Queue{}
-	if err := getProto(ctx, index, queueKey, queue); err != nil {
+	if err := c.getProto(ctx, queueKey, queue); err != nil {
 		return err
 	}
 
-	// Bail if the message ID is already in the queue.
 	for _, id := range queue.MessageIds {
 		if id == env.MessageId {
 			return nil
 		}
 	}
 
-	// Add the message ID to the queue.
 	queue.MessageIds = append(queue.MessageIds, env.MessageId)
 
-	return setProto(ctx, index, queueKey, queue)
+	return c.setProto(ctx, queueKey, queue)
 }
 
 // removeMessageFromQueue removes a message from the queue.
-func removeMessageFromQueue(
-	ctx context.Context,
-	index Index,
-	messageID string,
-) error {
+func (c *Committer) removeMessageFromQueue(ctx context.Context, messageID string) error {
 	// Delete the message envelope.
-	if err := index.Set(
+	if err := c.Index.Set(
 		ctx,
 		queueMessageKey(messageID),
 		nil,
@@ -67,7 +55,7 @@ func removeMessageFromQueue(
 
 	// Load the queue itself.
 	queue := &indexpb.Queue{}
-	if err := getProto(ctx, index, queueKey, queue); err != nil {
+	if err := c.getProto(ctx, queueKey, queue); err != nil {
 		return err
 	}
 
@@ -76,7 +64,7 @@ func removeMessageFromQueue(
 		if id == messageID {
 			n := copy(queue.MessageIds[i:], queue.MessageIds[i+1:])
 			queue.MessageIds = queue.MessageIds[:n]
-			return setProto(ctx, index, queueKey, queue)
+			return c.setProto(ctx, queueKey, queue)
 		}
 	}
 

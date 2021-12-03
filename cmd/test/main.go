@@ -9,17 +9,17 @@ import (
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/marshalkit"
 	marshalfixtures "github.com/dogmatiq/marshalkit/fixtures"
-	"github.com/dogmatiq/veracity/index"
-	"github.com/dogmatiq/veracity/index/memoryindex"
 	"github.com/dogmatiq/veracity/journal"
-	"github.com/dogmatiq/veracity/journal/memoryjournal"
+	"github.com/dogmatiq/veracity/persistence/memory"
 )
 
 func main() {
 	ctx := context.Background()
 
-	jrn := &memoryjournal.Journal{}
-	idx := &memoryindex.Index{}
+	committer := &journal.Committer{
+		Journal: &memory.Journal{},
+		Index:   &memory.KeyValueStore{},
+	}
 
 	m := fixtures.MessageA1
 
@@ -36,10 +36,14 @@ func main() {
 		env,
 	)
 
-	lastID, err := journal.Append(
+	lastID, err := committer.SyncIndex(ctx)
+	if err != nil {
+		panic(err)
+	}
+
+	lastID, err = committer.Append(
 		ctx,
-		jrn,
-		nil,
+		lastID,
 		&journal.ExecutorExecuteCommand{
 			Envelope: env,
 		},
@@ -48,20 +52,10 @@ func main() {
 		panic(err)
 	}
 
-	b := &index.Builder{
-		Journal: jrn,
-		Index:   idx,
-	}
+	dapper.Print(committer.Index)
 
-	if _, err := b.Build(ctx); err != nil {
-		panic(err)
-	}
-
-	dapper.Print(idx)
-
-	_, err = journal.Append(
+	_, err = committer.Append(
 		ctx,
-		jrn,
 		lastID,
 		&journal.AggregateHandleCommand{
 			MessageId: env.MessageId,
@@ -71,9 +65,5 @@ func main() {
 		panic(err)
 	}
 
-	if _, err := b.Build(ctx); err != nil {
-		panic(err)
-	}
-
-	dapper.Print(idx)
+	dapper.Print(committer.Index)
 }

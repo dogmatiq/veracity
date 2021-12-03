@@ -1,0 +1,26 @@
+syntax = "proto3";
+package veracity.index.v1;
+
+option go_package = "github.com/dogmatiq/veracity/journal/internal/indexpb";
+
+// Commit contains information about the last journal record that was
+// fully committed to the index.
+message Commit {
+    // RecordId is the ID of the last journal record that was fully
+    // committed to the index.
+    bytes record_id = 1;
+
+    uint64 eventstream_next_offset = 2;
+    // uint64 eventstream_offset_index_count = 3;
+}
+
+// Queue contains the list of message IDs in the queue.
+message Queue {
+    repeated string message_ids = 1;
+}
+
+// EventStreamOffset maps record IDs to event stream offsets.
+message EventStreamOffset {
+    bytes record_id = 1;
+    uint64 first_offset_in_record = 2;
+}
