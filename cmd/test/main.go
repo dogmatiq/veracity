@@ -4,39 +4,23 @@ import (
 	"context"
 
 	"github.com/dogmatiq/dapper"
-	"github.com/dogmatiq/dogma"
-	"github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/interopspec/envelopespec"
-	"github.com/dogmatiq/marshalkit"
-	marshalfixtures "github.com/dogmatiq/marshalkit/fixtures"
 	"github.com/dogmatiq/veracity/journal"
 	"github.com/dogmatiq/veracity/persistence/memory"
+	"google.golang.org/protobuf/encoding/prototext"
 )
 
 func main() {
 	ctx := context.Background()
 
 	committer := &journal.Committer{
-		Journal: &memory.Journal{},
-		Index:   &memory.KeyValueStore{},
+		Journal:     &memory.Journal{},
+		Index:       &memory.KeyValueStore{},
+		Marshaler:   prototext.MarshalOptions{},
+		Unmarshaler: prototext.UnmarshalOptions{},
 	}
 
-	m := fixtures.MessageA1
-
-	env := &envelopespec.Envelope{
-		MessageId:     "0001",
-		CausationId:   "0001",
-		CorrelationId: "0001",
-		Description:   dogma.DescribeMessage(m),
-	}
-
-	marshalkit.MustMarshalMessageIntoEnvelope(
-		marshalfixtures.Marshaler,
-		m,
-		env,
-	)
-
-	lastID, err := committer.SyncIndex(ctx)
+	lastID, err := committer.Sync(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -45,7 +29,65 @@ func main() {
 		ctx,
 		lastID,
 		&journal.ExecutorExecuteCommand{
-			Envelope: env,
+			Envelope: &envelopespec.Envelope{
+				MessageId: "0001",
+			},
+		},
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	dapper.Print(committer.Index)
+
+	lastID, err = committer.Append(
+		ctx,
+		lastID,
+		&journal.ExecutorExecuteCommand{
+			Envelope: &envelopespec.Envelope{
+				MessageId: "0002",
+			},
+		},
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	dapper.Print(committer.Index)
+
+	lastID, err = committer.Append(
+		ctx,
+		lastID,
+		&journal.ExecutorExecuteCommand{
+			Envelope: &envelopespec.Envelope{
+				MessageId: "0003",
+			},
+		},
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	dapper.Print(committer.Index)
+
+	lastID, err = committer.Append(
+		ctx,
+		lastID,
+		&journal.AggregateHandleCommand{
+			MessageId: "0002",
+		},
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	dapper.Print(committer.Index)
+
+	lastID, err = committer.Append(
+		ctx,
+		lastID,
+		&journal.AggregateHandleCommand{
+			MessageId: "0001",
 		},
 	)
 	if err != nil {
@@ -58,7 +100,7 @@ func main() {
 		ctx,
 		lastID,
 		&journal.AggregateHandleCommand{
-			MessageId: env.MessageId,
+			MessageId: "0003",
 		},
 	)
 	if err != nil {

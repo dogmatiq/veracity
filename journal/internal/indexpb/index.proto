@@ -1,26 +1,27 @@
 syntax = "proto3";
 package veracity.index.v1;
 
+import "github.com/dogmatiq/interopspec/envelopespec/envelope.proto";
+
 option go_package = "github.com/dogmatiq/veracity/journal/internal/indexpb";
 
-// Commit contains information about the last journal record that was
-// fully committed to the index.
-message Commit {
-    // RecordId is the ID of the last journal record that was fully
+// MetaData contains information about index itself.
+message MetaData {
+    // CommittedRecordId is the ID of the last journal record that was fully
     // committed to the index.
-    bytes record_id = 1;
+    bytes committed_record_id = 1;
 
-    uint64 eventstream_next_offset = 2;
-    // uint64 eventstream_offset_index_count = 3;
+    // QueueHeadMessageId is the ID of the message at the start of the queue.
+    string queue_head_message_id = 2;
+
+    // QueueTailMessageId is the ID of the message at the end of the queue.
+    string queue_tail_message_id = 3;
 }
 
-// Queue contains the list of message IDs in the queue.
-message Queue {
-    repeated string message_ids = 1;
-}
-
-// EventStreamOffset maps record IDs to event stream offsets.
-message EventStreamOffset {
-    bytes record_id = 1;
-    uint64 first_offset_in_record = 2;
+// QueueNode is a list node containing a message on the queue, which is
+// implemented as a doubly-linked list.
+message QueueNode {
+    string next_message_id = 1;
+    string prev_message_id = 2;
+    dogma.interop.v1.envelope.Envelope Envelope = 3;
 }

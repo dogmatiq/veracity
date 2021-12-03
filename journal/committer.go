@@ -6,36 +6,37 @@ import (
 
 	"github.com/dogmatiq/veracity/journal/internal/indexpb"
 	"github.com/dogmatiq/veracity/persistence"
-	"google.golang.org/protobuf/proto"
 )
 
 // Committer commits journal entries to the index as they are written to the
 // journal.
 type Committer struct {
-	Journal persistence.Journal
-	Index   persistence.KeyValueStore
+	Journal     persistence.Journal
+	Index       persistence.KeyValueStore
+	Marshaler   Marshaler
+	Unmarshaler Unmarshaler
 
-	commit indexpb.Commit
-	synced bool
+	metaData indexpb.MetaData
+	synced   bool
 }
 
 var (
-	// commitKey is the key used to store information about the most-recent
+	// metaDataKey is the key used to store information about the most-recent
 	// fully-committed journal record.
-	commitKey = makeKey("commit")
+	metaDataKey = makeKey("meta-data")
 )
 
-// SyncIndex synchronizes the index with the journal.
+// Sync synchronizes the index with the journal.
 //
 // The index must be synchronized before new records are appended.
 //
 // It returns the ID of the last record in the journal.
-func (c *Committer) SyncIndex(ctx context.Context) ([]byte, error) {
-	if err := c.getProto(ctx, commitKey, &c.commit); err != nil {
+func (c *Committer) Sync(ctx context.Context) ([]byte, error) {
+	if err := c.get(ctx, metaDataKey, &c.metaData); err != nil {
 		return nil, err
 	}
 
-	r, err := c.Journal.Open(ctx, c.commit.RecordId)
+	r, err := c.Journal.Open(ctx, c.metaData.CommittedRecordId)
 	if err != nil {
 		return nil, err
 	}
@@ -51,10 +52,10 @@ func (c *Committer) SyncIndex(ctx context.Context) ([]byte, error) {
 
 		if !ok {
 			c.synced = true
-			return c.commit.RecordId, nil
+			return c.metaData.CommittedRecordId, nil
 		}
 
-		if err := proto.Unmarshal(data, &container); err != nil {
+		if err := c.unmarshal(data, &container); err != nil {
 			return nil, err
 		}
 
@@ -72,29 +73,38 @@ func (c *Committer) SyncIndex(ctx context.Context) ([]byte, error) {
 //
 // It returns the ID of the newly appended record.
 //
-// It panics if the index has not been synchronized.
+// It may only be called after Sync() has succeeded. If an error is returned the
+// index must be re-sychronized.
 func (c *Committer) Append(
 	ctx context.Context,
 	prevID []byte,
 	rec Record,
 ) ([]byte, error) {
 	if !c.synced {
-		panic("Apply() called without first calling SyncIndex()")
+		panic("Apply() called without first calling Sync()")
 	}
 
-	data, err := proto.Marshal(rec.Pack())
+	// Pre-emptively mark the index as out-of-sync.
+	c.synced = false
+
+	data, err := c.marshal(rec.Pack())
 	if err != nil {
 		return nil, err
 	}
 
 	id, err := c.Journal.Append(ctx, prevID, data)
 	if err != nil {
+		c.synced = false
 		return nil, err
 	}
 
 	if err := c.apply(ctx, id, rec); err != nil {
+		c.synced = false
 		return nil, err
 	}
+
+	// All writes succeeded, mark the index as in-sync.
+	c.synced = true
 
 	return id, nil
 }
@@ -109,9 +119,9 @@ func (c *Committer) apply(ctx context.Context, id []byte, rec Record) error {
 		return err
 	}
 
-	c.commit.RecordId = id
+	c.metaData.CommittedRecordId = id
 
-	return c.setProto(ctx, commitKey, &c.commit)
+	return c.set(ctx, metaDataKey, &c.metaData)
 }
 
 // indexer is an implementation of journal.RecordVisitor that applies records to
@@ -162,26 +172,6 @@ func (i indexer) VisitProcessHandleTimeoutRecord(
 	rec *ProcessHandleTimeout,
 ) error {
 	return nil
-}
-
-// setProto sets the value of k to v's binary representation.
-func (c *Committer) setProto(ctx context.Context, k []byte, v proto.Message) error {
-	data, err := proto.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	return c.Index.Set(ctx, k, data)
-}
-
-// getProto reads the value of k into v.
-func (c *Committer) getProto(ctx context.Context, k []byte, v proto.Message) error {
-	data, err := c.Index.Get(ctx, k)
-	if err != nil {
-		return err
-	}
-
-	return proto.Unmarshal(data, v)
 }
 
 // makeKey returns a key made from slash-separated parts.
