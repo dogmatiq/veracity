@@ -5,6 +5,8 @@ import "github.com/dogmatiq/interopspec/envelopespec/envelope.proto";
 
 option go_package = "github.com/dogmatiq/veracity/journal";
 
+// RecordContainer is a container for a record. It the singular Protocol Buffers
+// message type that is appended to the journal's underlying log.
 message RecordContainer {
     oneof elem {
         ExecutorExecuteCommand executor_execute_command = 2;

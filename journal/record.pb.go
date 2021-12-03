@@ -21,6 +21,8 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// RecordContainer is a container for a record. It the singular Protocol Buffers
+// message type that is appended to the journal's underlying log.
 type RecordContainer struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

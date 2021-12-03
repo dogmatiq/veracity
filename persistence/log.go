@@ -8,6 +8,8 @@ type Log interface {
 	//
 	// prevID must be the ID of the most recent record, or an empty slice if the
 	// log is currently empty; otherwise, the append operation fails.
+	//
+	// It returns the ID of the newly appended record.
 	Append(ctx context.Context, prevID, data []byte) (id []byte, err error)
 
 	// Open returns a Reader that reads the records in the log in the order they
@@ -18,9 +20,9 @@ type Log interface {
 	Open(ctx context.Context, afterID []byte) (LogReader, error)
 }
 
-// LogReader reads records from a Log in the order they were appended.
+// A LogReader reads records from a Log in the order they were appended.
 //
-// Log readers are not safe for concurrent use.
+// It is not safe for concurrent use.
 type LogReader interface {
 	// Next returns the next record in the log.
 	//
