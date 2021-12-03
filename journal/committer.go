@@ -20,6 +20,21 @@ type Committer struct {
 	synced   bool
 }
 
+// makeKey returns a key made from slash-separated parts.
+func makeKey(parts ...string) []byte {
+	var buf bytes.Buffer
+
+	for i, p := range parts {
+		if i > 0 {
+			buf.WriteByte('/')
+		}
+
+		buf.WriteString(p)
+	}
+
+	return buf.Bytes()
+}
+
 var (
 	// metaDataKey is the key used to store information about the most-recent
 	// fully-committed journal record.
@@ -59,7 +74,7 @@ func (c *Committer) Sync(ctx context.Context) ([]byte, error) {
 			return nil, err
 		}
 
-		rec := container.Unpack()
+		rec := container.unpack()
 		if err := c.apply(ctx, id, rec); err != nil {
 			return nil, err
 		}
@@ -87,7 +102,7 @@ func (c *Committer) Append(
 	// Pre-emptively mark the index as out-of-sync.
 	c.synced = false
 
-	data, err := c.marshal(rec.Pack())
+	data, err := c.marshal(rec.pack())
 	if err != nil {
 		return nil, err
 	}
@@ -111,11 +126,22 @@ func (c *Committer) Append(
 
 // apply updates the index to reflrect the next journal record.
 func (c *Committer) apply(ctx context.Context, id []byte, rec Record) error {
-	if err := rec.AcceptVisitor(
-		ctx,
-		id,
-		indexer{c},
-	); err != nil {
+	var err error
+
+	switch rec := rec.(type) {
+	case *ExecutorExecuteCommand:
+		err = c.applyExecutorExecuteCommand(ctx, rec)
+	case *AggregateHandleCommand:
+		err = c.applyAggregateHandleCommand(ctx, rec)
+	case *IntegrationHandleCommand:
+		err = c.applyIntegrationHandleCommand(ctx, rec)
+	case *ProcessHandleEvent:
+		err = c.applyProcessHandleEvent(ctx, rec)
+	case *ProcessHandleTimeout:
+		err = c.applyProcessHandleTimeout(ctx, rec)
+	}
+
+	if err != nil {
 		return err
 	}
 
@@ -124,67 +150,30 @@ func (c *Committer) apply(ctx context.Context, id []byte, rec Record) error {
 	return c.set(ctx, metaDataKey, &c.metaData)
 }
 
-// indexer is an implementation of journal.RecordVisitor that applies records to
-// the index.
-type indexer struct {
-	committer *Committer
+func (c *Committer) applyExecutorExecuteCommand(ctx context.Context, rec *ExecutorExecuteCommand) error {
+	return c.addMessageToQueue(ctx, rec.Envelope)
 }
 
-func (i indexer) VisitExecutorExecuteCommandRecord(ctx context.Context, id []byte, rec *ExecutorExecuteCommand) error {
-	return i.committer.addMessageToQueue(ctx, rec.Envelope)
-}
-
-func (i indexer) VisitAggregateHandleCommandRecord(
-	ctx context.Context,
-	id []byte,
-	rec *AggregateHandleCommand,
-) error {
-	if err := i.committer.removeMessageFromQueue(ctx, rec.MessageId); err != nil {
+func (c *Committer) applyAggregateHandleCommand(ctx context.Context, rec *AggregateHandleCommand) error {
+	if err := c.removeMessageFromQueue(ctx, rec.MessageId); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (i indexer) VisitIntegrationHandleCommandRecord(
-	ctx context.Context,
-	id []byte,
-	rec *IntegrationHandleCommand,
-) error {
-	if err := i.committer.removeMessageFromQueue(ctx, rec.MessageId); err != nil {
+func (c *Committer) applyIntegrationHandleCommand(ctx context.Context, rec *IntegrationHandleCommand) error {
+	if err := c.removeMessageFromQueue(ctx, rec.MessageId); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (i indexer) VisitProcessHandleEventRecord(
-	ctx context.Context,
-	id []byte,
-	rec *ProcessHandleEvent,
-) error {
+func (c *Committer) applyProcessHandleEvent(ctx context.Context, rec *ProcessHandleEvent) error {
 	return nil
 }
 
-func (i indexer) VisitProcessHandleTimeoutRecord(
-	ctx context.Context,
-	id []byte,
-	rec *ProcessHandleTimeout,
-) error {
+func (c *Committer) applyProcessHandleTimeout(ctx context.Context, rec *ProcessHandleTimeout) error {
 	return nil
-}
-
-// makeKey returns a key made from slash-separated parts.
-func makeKey(parts ...string) []byte {
-	var buf bytes.Buffer
-
-	for i, p := range parts {
-		if i > 0 {
-			buf.WriteByte('/')
-		}
-
-		buf.WriteString(p)
-	}
-
-	return buf.Bytes()
 }

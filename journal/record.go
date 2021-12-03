@@ -1,55 +1,18 @@
 package journal
 
-import (
-	"context"
-)
-
 // Record is an interface for a journal record.
 type Record interface {
-	// AcceptVisitor calls the VisitXXX() method on v that relates to this
-	// record type.
-	AcceptVisitor(context.Context, []byte, Visitor) error
-
-	// Pack returns a container that contains this record.
-	Pack() *RecordContainer
+	// pack returns a container that contains this record.
+	pack() *RecordContainer
 }
 
-// Visitor is an interface for processing records in a journal.
-type Visitor interface {
-	VisitExecutorExecuteCommandRecord(context.Context, []byte, *ExecutorExecuteCommand) error
-	VisitAggregateHandleCommandRecord(context.Context, []byte, *AggregateHandleCommand) error
-	VisitIntegrationHandleCommandRecord(context.Context, []byte, *IntegrationHandleCommand) error
-	VisitProcessHandleEventRecord(context.Context, []byte, *ProcessHandleEvent) error
-	VisitProcessHandleTimeoutRecord(context.Context, []byte, *ProcessHandleTimeout) error
+// unpack returns the record contained in the container.
+func (c *RecordContainer) unpack() Record {
+	return c.Elem.(element).unpack()
 }
 
-// AcceptVisitor calls v.VisitExecutorExecuteCommandRecord(ctx, id, r).
-func (r *ExecutorExecuteCommand) AcceptVisitor(ctx context.Context, id []byte, v Visitor) error {
-	return v.VisitExecutorExecuteCommandRecord(ctx, id, r)
-}
-
-// AcceptVisitor calls v.VisitAggregateHandleCommandRecord(ctx, id, r).
-func (r *AggregateHandleCommand) AcceptVisitor(ctx context.Context, id []byte, v Visitor) error {
-	return v.VisitAggregateHandleCommandRecord(ctx, id, r)
-}
-
-// AcceptVisitor calls v.VisitIntegrationHandleCommandRecord(ctx, id, r).
-func (r *IntegrationHandleCommand) AcceptVisitor(ctx context.Context, id []byte, v Visitor) error {
-	return v.VisitIntegrationHandleCommandRecord(ctx, id, r)
-}
-
-// AcceptVisitor calls v.VisitProcessHandleEventRecord(ctx, id, r).
-func (r *ProcessHandleEvent) AcceptVisitor(ctx context.Context, id []byte, v Visitor) error {
-	return v.VisitProcessHandleEventRecord(ctx, id, r)
-}
-
-// AcceptVisitor calls v.VisitProcessHandleTimeoutRecord(ctx, id, r).
-func (r *ProcessHandleTimeout) AcceptVisitor(ctx context.Context, id []byte, v Visitor) error {
-	return v.VisitProcessHandleTimeoutRecord(ctx, id, r)
-}
-
-// Pack returns a container that contains this record.
-func (r *ExecutorExecuteCommand) Pack() *RecordContainer {
+// pack returns a container that contains this record.
+func (r *ExecutorExecuteCommand) pack() *RecordContainer {
 	return &RecordContainer{
 		Elem: &RecordContainer_ExecutorExecuteCommand{
 			ExecutorExecuteCommand: r,
@@ -57,8 +20,8 @@ func (r *ExecutorExecuteCommand) Pack() *RecordContainer {
 	}
 }
 
-// Pack returns a container that contains this record.
-func (r *AggregateHandleCommand) Pack() *RecordContainer {
+// pack returns a container that contains this record.
+func (r *AggregateHandleCommand) pack() *RecordContainer {
 	return &RecordContainer{
 		Elem: &RecordContainer_AggregateHandleCommand{
 			AggregateHandleCommand: r,
@@ -66,8 +29,8 @@ func (r *AggregateHandleCommand) Pack() *RecordContainer {
 	}
 }
 
-// Pack returns a container that contains this record.
-func (r *IntegrationHandleCommand) Pack() *RecordContainer {
+// pack returns a container that contains this record.
+func (r *IntegrationHandleCommand) pack() *RecordContainer {
 	return &RecordContainer{
 		Elem: &RecordContainer_IntegrationHandleCommand{
 			IntegrationHandleCommand: r,
@@ -75,8 +38,8 @@ func (r *IntegrationHandleCommand) Pack() *RecordContainer {
 	}
 }
 
-// Pack returns a container that contains this record.
-func (r *ProcessHandleEvent) Pack() *RecordContainer {
+// pack returns a container that contains this record.
+func (r *ProcessHandleEvent) pack() *RecordContainer {
 	return &RecordContainer{
 		Elem: &RecordContainer_ProcessHandleEvent{
 			ProcessHandleEvent: r,
@@ -84,18 +47,13 @@ func (r *ProcessHandleEvent) Pack() *RecordContainer {
 	}
 }
 
-// Pack returns a container that contains this record.
-func (r *ProcessHandleTimeout) Pack() *RecordContainer {
+// pack returns a container that contains this record.
+func (r *ProcessHandleTimeout) pack() *RecordContainer {
 	return &RecordContainer{
 		Elem: &RecordContainer_ProcessHandleTimeout{
 			ProcessHandleTimeout: r,
 		},
 	}
-}
-
-// Unpack returns the record contained in the container.
-func (c *RecordContainer) Unpack() Record {
-	return c.Elem.(element).unpack()
 }
 
 // element is an interface for the wrapper types used to store records in a
