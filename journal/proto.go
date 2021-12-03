@@ -47,7 +47,7 @@ func (c *Committer) unmarshal(data []byte, m proto.Message) error {
 }
 
 // set sets the value of k to v's binary representation.
-func (c *Committer) set(ctx context.Context, k []byte, v proto.Message) error {
+func (c *Committer) set(ctx context.Context, k string, v proto.Message) error {
 	data, err := c.marshal(v)
 	if err != nil {
 		return err
@@ -57,7 +57,7 @@ func (c *Committer) set(ctx context.Context, k []byte, v proto.Message) error {
 }
 
 // get reads the value of k into v.
-func (c *Committer) get(ctx context.Context, k []byte, v proto.Message) error {
+func (c *Committer) get(ctx context.Context, k string, v proto.Message) error {
 	data, err := c.Index.Get(ctx, k)
 	if err != nil {
 		return err
@@ -70,7 +70,7 @@ func (c *Committer) get(ctx context.Context, k []byte, v proto.Message) error {
 // value.
 func (c *Committer) update(
 	ctx context.Context,
-	k []byte,
+	k string,
 	v proto.Message,
 	update func(),
 ) error {

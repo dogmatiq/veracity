@@ -5,12 +5,13 @@ import (
 
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/journal/internal/indexpb"
+	"github.com/dogmatiq/veracity/persistence"
 )
 
 // queueNodeKey returns the key used to store the envelope for the given
 // message ID on the queue.
-func queueNodeKey(messageID string) []byte {
-	return makeKey("queue", messageID)
+func queueNodeKey(messageID string) string {
+	return persistence.Key("queue", messageID)
 }
 
 // addMessageToQueue adds a message to the queue.

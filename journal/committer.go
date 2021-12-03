@@ -1,7 +1,6 @@
 package journal
 
 import (
-	"bytes"
 	"context"
 
 	"github.com/dogmatiq/veracity/journal/internal/indexpb"
@@ -20,25 +19,10 @@ type Committer struct {
 	synced   bool
 }
 
-// makeKey returns a key made from slash-separated parts.
-func makeKey(parts ...string) []byte {
-	var buf bytes.Buffer
-
-	for i, p := range parts {
-		if i > 0 {
-			buf.WriteByte('/')
-		}
-
-		buf.WriteString(p)
-	}
-
-	return buf.Bytes()
-}
-
 var (
 	// metaDataKey is the key used to store information about the most-recent
 	// fully-committed journal record.
-	metaDataKey = makeKey("meta-data")
+	metaDataKey = persistence.Key("meta-data")
 )
 
 // Sync synchronizes the index with the journal.

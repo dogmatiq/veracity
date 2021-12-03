@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/dogmatiq/veracity/persistence"
 	. "github.com/dogmatiq/veracity/persistence/memory"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -26,25 +27,25 @@ var _ = Describe("type KeyValueStore", func() {
 	})
 
 	It("associates values with keys", func() {
-		err := store.Set(ctx, []byte("<key>"), []byte("<value>"))
+		err := store.Set(ctx, persistence.Key("<key>"), []byte("<value>"))
 		Expect(err).ShouldNot(HaveOccurred())
 
-		x, err := store.Get(ctx, []byte("<key>"))
+		x, err := store.Get(ctx, persistence.Key("<key>"))
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(x).To(Equal([]byte("<value>")))
 	})
 
 	It("deletes the key when set to an empty value", func() {
-		err := store.Set(ctx, []byte("<key>"), nil)
+		err := store.Set(ctx, persistence.Key("<key>"), nil)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		v, err := store.Get(ctx, []byte("<key>"))
+		v, err := store.Get(ctx, persistence.Key("<key>"))
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(v).To(BeEmpty())
 	})
 
 	It("allows getting a key that has never been set", func() {
-		v, err := store.Get(ctx, []byte("<key>"))
+		v, err := store.Get(ctx, persistence.Key("<key>"))
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(v).To(BeEmpty())
 	})
