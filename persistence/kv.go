@@ -27,6 +27,9 @@ type KeyValueStore interface {
 	// It returns an empty value if there is no value associated with k. There
 	// is no distinction made between an empty slice and a nil slice.
 	Get(ctx context.Context, k string) (v []byte, err error)
+
+	// Exists returns true if there is a non-empty value associated with k.
+	Exists(ctx context.Context, k string) (exists bool, err error)
 }
 
 // Key returns a key containing slash-separated atoms. Each atom is URL encoded.

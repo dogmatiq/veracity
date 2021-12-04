@@ -33,15 +33,19 @@ var _ = Describe("type KeyValueStore", func() {
 		x, err := store.Get(ctx, persistence.Key("<key>"))
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(x).To(Equal([]byte("<value>")))
+
+		exists, err := store.Exists(ctx, persistence.Key("<key>"))
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(exists).To(BeTrue())
 	})
 
 	It("deletes the key when set to an empty value", func() {
 		err := store.Set(ctx, persistence.Key("<key>"), nil)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		v, err := store.Get(ctx, persistence.Key("<key>"))
+		exists, err := store.Exists(ctx, persistence.Key("<key>"))
 		Expect(err).ShouldNot(HaveOccurred())
-		Expect(v).To(BeEmpty())
+		Expect(exists).To(BeFalse())
 	})
 
 	It("allows getting a key that has never been set", func() {

@@ -52,3 +52,12 @@ func (s *KeyValueStore) Get(_ context.Context, k string) (v []byte, err error) {
 
 	return s.values[k], nil
 }
+
+// Exists returns true if there is a non-empty value associated with k.
+func (s *KeyValueStore) Exists(ctx context.Context, k string) (exists bool, err error) {
+	s.m.RLock()
+	defer s.m.RUnlock()
+
+	_, exists = s.values[k]
+	return exists, nil
+}
