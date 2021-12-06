@@ -28,7 +28,7 @@ func main() {
 	lastID, err = committer.Append(
 		ctx,
 		lastID,
-		&journal.ExecutorExecuteCommand{
+		&journal.CommandEnqueued{
 			Envelope: &envelopespec.Envelope{
 				MessageId: "0001",
 			},
@@ -43,7 +43,7 @@ func main() {
 	lastID, err = committer.Append(
 		ctx,
 		lastID,
-		&journal.ExecutorExecuteCommand{
+		&journal.CommandEnqueued{
 			Envelope: &envelopespec.Envelope{
 				MessageId: "0002",
 			},
@@ -58,7 +58,7 @@ func main() {
 	lastID, err = committer.Append(
 		ctx,
 		lastID,
-		&journal.ExecutorExecuteCommand{
+		&journal.CommandEnqueued{
 			Envelope: &envelopespec.Envelope{
 				MessageId: "0003",
 			},
@@ -73,7 +73,7 @@ func main() {
 	lastID, err = committer.Append(
 		ctx,
 		lastID,
-		&journal.AggregateHandleCommand{
+		&journal.CommandHandledByAggregate{
 			MessageId: "0002",
 		},
 	)
@@ -86,7 +86,7 @@ func main() {
 	lastID, err = committer.Append(
 		ctx,
 		lastID,
-		&journal.AggregateHandleCommand{
+		&journal.CommandHandledByAggregate{
 			MessageId: "0001",
 		},
 	)
@@ -99,7 +99,7 @@ func main() {
 	_, err = committer.Append(
 		ctx,
 		lastID,
-		&journal.AggregateHandleCommand{
+		&journal.CommandHandledByAggregate{
 			MessageId: "0003",
 		},
 	)

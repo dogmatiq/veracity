@@ -3,30 +3,28 @@ package journal
 import (
 	"context"
 
-	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/journal/internal/indexpb"
 	"github.com/dogmatiq/veracity/persistence"
 )
 
-// queueNodeKey returns the key used to store the envelope for the given
-// message ID on the queue.
 func queueNodeKey(messageID string) string {
 	return persistence.Key("queue", messageID)
 }
 
-// addMessageToQueue adds a message to the queue.
-func (c *Committer) addMessageToQueue(ctx context.Context, env *envelopespec.Envelope) error {
+func (c *Committer) commandEnqueued(ctx context.Context, id []byte, rec *CommandEnqueued) error {
+	messageID := rec.Envelope.MessageId
+
 	node := &indexpb.QueueNode{
-		Envelope:      env,
+		Envelope:      rec.Envelope,
 		PrevMessageId: c.metaData.QueueTailMessageId,
 	}
 
 	// Mark the new messaqe as the new tail.
-	c.metaData.QueueTailMessageId = env.MessageId
+	c.metaData.QueueTailMessageId = messageID
 
 	if c.metaData.QueueHeadMessageId == "" {
 		// The queue is empty, this message becomes both the head and the tail.
-		c.metaData.QueueHeadMessageId = env.MessageId
+		c.metaData.QueueHeadMessageId = messageID
 	} else {
 		// The queue is not empty, load the current tail message so we can link
 		// it to this message.
@@ -36,7 +34,7 @@ func (c *Committer) addMessageToQueue(ctx context.Context, env *envelopespec.Env
 			queueNodeKey(node.PrevMessageId),
 			prev,
 			func() {
-				prev.NextMessageId = env.MessageId
+				prev.NextMessageId = messageID
 			},
 		); err != nil {
 			return err
@@ -45,13 +43,12 @@ func (c *Committer) addMessageToQueue(ctx context.Context, env *envelopespec.Env
 
 	return c.set(
 		ctx,
-		queueNodeKey(env.MessageId),
+		queueNodeKey(messageID),
 		node,
 	)
 }
 
-// removeMessageFromQueue removes a message from the queue.
-func (c *Committer) removeMessageFromQueue(ctx context.Context, messageID string) error {
+func (c *Committer) commandAcknowledged(ctx context.Context, messageID string) error {
 	key := queueNodeKey(messageID)
 	node := &indexpb.QueueNode{}
 
@@ -108,5 +105,5 @@ func (c *Committer) removeMessageFromQueue(ctx context.Context, messageID string
 	// Only after all of the surrounding nodes have been updated successfully do
 	// we actually delete this node, otherwise we lose the references to the
 	// next/previous nodes required above.
-	return c.Index.Set(ctx, key, nil)
+	return c.remove(ctx, key)
 }

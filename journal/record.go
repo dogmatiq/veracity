@@ -12,46 +12,46 @@ func (c *RecordContainer) unpack() Record {
 }
 
 // pack returns a container that contains this record.
-func (r *ExecutorExecuteCommand) pack() *RecordContainer {
+func (r *CommandEnqueued) pack() *RecordContainer {
 	return &RecordContainer{
-		Elem: &RecordContainer_ExecutorExecuteCommand{
-			ExecutorExecuteCommand: r,
+		Elem: &RecordContainer_CommandEnqueued{
+			CommandEnqueued: r,
 		},
 	}
 }
 
 // pack returns a container that contains this record.
-func (r *AggregateHandleCommand) pack() *RecordContainer {
+func (r *CommandHandledByAggregate) pack() *RecordContainer {
 	return &RecordContainer{
-		Elem: &RecordContainer_AggregateHandleCommand{
-			AggregateHandleCommand: r,
+		Elem: &RecordContainer_CommandHandledByAggregate{
+			CommandHandledByAggregate: r,
 		},
 	}
 }
 
 // pack returns a container that contains this record.
-func (r *IntegrationHandleCommand) pack() *RecordContainer {
+func (r *CommandHandledByIntegration) pack() *RecordContainer {
 	return &RecordContainer{
-		Elem: &RecordContainer_IntegrationHandleCommand{
-			IntegrationHandleCommand: r,
+		Elem: &RecordContainer_CommandHandledByIntegration{
+			CommandHandledByIntegration: r,
 		},
 	}
 }
 
 // pack returns a container that contains this record.
-func (r *ProcessHandleEvent) pack() *RecordContainer {
+func (r *EventHandledByProcess) pack() *RecordContainer {
 	return &RecordContainer{
-		Elem: &RecordContainer_ProcessHandleEvent{
-			ProcessHandleEvent: r,
+		Elem: &RecordContainer_EventHandledByProcess{
+			EventHandledByProcess: r,
 		},
 	}
 }
 
 // pack returns a container that contains this record.
-func (r *ProcessHandleTimeout) pack() *RecordContainer {
+func (r *TimeoutHandledByProcess) pack() *RecordContainer {
 	return &RecordContainer{
-		Elem: &RecordContainer_ProcessHandleTimeout{
-			ProcessHandleTimeout: r,
+		Elem: &RecordContainer_TimeoutHandledByProcess{
+			TimeoutHandledByProcess: r,
 		},
 	}
 }
@@ -63,22 +63,22 @@ type element interface {
 	unpack() Record
 }
 
-func (e *RecordContainer_ExecutorExecuteCommand) unpack() Record {
-	return e.ExecutorExecuteCommand
+func (e *RecordContainer_CommandEnqueued) unpack() Record {
+	return e.CommandEnqueued
 }
 
-func (e *RecordContainer_AggregateHandleCommand) unpack() Record {
-	return e.AggregateHandleCommand
+func (e *RecordContainer_CommandHandledByAggregate) unpack() Record {
+	return e.CommandHandledByAggregate
 }
 
-func (e *RecordContainer_IntegrationHandleCommand) unpack() Record {
-	return e.IntegrationHandleCommand
+func (e *RecordContainer_CommandHandledByIntegration) unpack() Record {
+	return e.CommandHandledByIntegration
 }
 
-func (e *RecordContainer_ProcessHandleEvent) unpack() Record {
-	return e.ProcessHandleEvent
+func (e *RecordContainer_EventHandledByProcess) unpack() Record {
+	return e.EventHandledByProcess
 }
 
-func (e *RecordContainer_ProcessHandleTimeout) unpack() Record {
-	return e.ProcessHandleTimeout
+func (e *RecordContainer_TimeoutHandledByProcess) unpack() Record {
+	return e.TimeoutHandledByProcess
 }

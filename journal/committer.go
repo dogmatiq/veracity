@@ -72,8 +72,9 @@ func (c *Committer) Sync(ctx context.Context) ([]byte, error) {
 //
 // It returns the ID of the newly appended record.
 //
-// It may only be called after Sync() has succeeded. If an error is returned the
-// index must be re-sychronized.
+// The index must be synchronized with the journal by a prior successful call to
+// Sync(). If Append() returns a non-nil error the index must be re-synchronized
+// before calling Append() again.
 func (c *Committer) Append(
 	ctx context.Context,
 	prevID []byte,
@@ -93,12 +94,10 @@ func (c *Committer) Append(
 
 	id, err := c.Journal.Append(ctx, prevID, data)
 	if err != nil {
-		c.synced = false
 		return nil, err
 	}
 
 	if err := c.apply(ctx, id, rec); err != nil {
-		c.synced = false
 		return nil, err
 	}
 
@@ -113,16 +112,18 @@ func (c *Committer) apply(ctx context.Context, id []byte, rec Record) error {
 	var err error
 
 	switch rec := rec.(type) {
-	case *ExecutorExecuteCommand:
-		err = c.applyExecutorExecuteCommand(ctx, rec)
-	case *AggregateHandleCommand:
-		err = c.applyAggregateHandleCommand(ctx, rec)
-	case *IntegrationHandleCommand:
-		err = c.applyIntegrationHandleCommand(ctx, rec)
-	case *ProcessHandleEvent:
-		err = c.applyProcessHandleEvent(ctx, rec)
-	case *ProcessHandleTimeout:
-		err = c.applyProcessHandleTimeout(ctx, rec)
+	case *CommandEnqueued:
+		err = c.commandEnqueued(ctx, id, rec)
+	case *CommandHandledByAggregate:
+		err = c.commandHandledByAggregate(ctx, id, rec)
+	case *CommandHandledByIntegration:
+		err = c.commandHandledByIntegration(ctx, id, rec)
+	case *EventHandledByProcess:
+		err = c.eventHandledByProcess(ctx, id, rec)
+	case *TimeoutHandledByProcess:
+		err = c.timeoutHandledByProcess(ctx, id, rec)
+	default:
+		panic("unrecognized record type")
 	}
 
 	if err != nil {
@@ -132,32 +133,4 @@ func (c *Committer) apply(ctx context.Context, id []byte, rec Record) error {
 	c.metaData.CommittedRecordId = id
 
 	return c.set(ctx, metaDataKey, &c.metaData)
-}
-
-func (c *Committer) applyExecutorExecuteCommand(ctx context.Context, rec *ExecutorExecuteCommand) error {
-	return c.addMessageToQueue(ctx, rec.Envelope)
-}
-
-func (c *Committer) applyAggregateHandleCommand(ctx context.Context, rec *AggregateHandleCommand) error {
-	if err := c.removeMessageFromQueue(ctx, rec.MessageId); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (c *Committer) applyIntegrationHandleCommand(ctx context.Context, rec *IntegrationHandleCommand) error {
-	if err := c.removeMessageFromQueue(ctx, rec.MessageId); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (c *Committer) applyProcessHandleEvent(ctx context.Context, rec *ProcessHandleEvent) error {
-	return nil
-}
-
-func (c *Committer) applyProcessHandleTimeout(ctx context.Context, rec *ProcessHandleTimeout) error {
-	return nil
 }

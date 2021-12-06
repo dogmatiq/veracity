@@ -154,6 +154,53 @@ func (x *QueueNode) GetEnvelope() *envelopespec.Envelope {
 	return nil
 }
 
+type AggregateInstanceMetaData struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	HeadRecordId []byte `protobuf:"bytes,1,opt,name=head_record_id,json=headRecordId,proto3" json:"head_record_id,omitempty"`
+}
+
+func (x *AggregateInstanceMetaData) Reset() {
+	*x = AggregateInstanceMetaData{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_github_com_dogmatiq_veracity_journal_internal_indexpb_index_proto_msgTypes[2]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *AggregateInstanceMetaData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AggregateInstanceMetaData) ProtoMessage() {}
+
+func (x *AggregateInstanceMetaData) ProtoReflect() protoreflect.Message {
+	mi := &file_github_com_dogmatiq_veracity_journal_internal_indexpb_index_proto_msgTypes[2]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AggregateInstanceMetaData.ProtoReflect.Descriptor instead.
+func (*AggregateInstanceMetaData) Descriptor() ([]byte, []int) {
+	return file_github_com_dogmatiq_veracity_journal_internal_indexpb_index_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *AggregateInstanceMetaData) GetHeadRecordId() []byte {
+	if x != nil {
+		return x.HeadRecordId
+	}
+	return nil
+}
+
 var File_github_com_dogmatiq_veracity_journal_internal_indexpb_index_proto protoreflect.FileDescriptor
 
 var file_github_com_dogmatiq_veracity_journal_internal_indexpb_index_proto_rawDesc = []byte{
@@ -186,11 +233,15 @@ var file_github_com_dogmatiq_veracity_journal_internal_indexpb_index_proto_rawDe
 	0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x23, 0x2e, 0x64, 0x6f, 0x67, 0x6d, 0x61, 0x2e, 0x69,
 	0x6e, 0x74, 0x65, 0x72, 0x6f, 0x70, 0x2e, 0x76, 0x31, 0x2e, 0x65, 0x6e, 0x76, 0x65, 0x6c, 0x6f,
 	0x70, 0x65, 0x2e, 0x45, 0x6e, 0x76, 0x65, 0x6c, 0x6f, 0x70, 0x65, 0x52, 0x08, 0x45, 0x6e, 0x76,
-	0x65, 0x6c, 0x6f, 0x70, 0x65, 0x42, 0x37, 0x5a, 0x35, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e,
-	0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x6f, 0x67, 0x6d, 0x61, 0x74, 0x69, 0x71, 0x2f, 0x76, 0x65, 0x72,
-	0x61, 0x63, 0x69, 0x74, 0x79, 0x2f, 0x6a, 0x6f, 0x75, 0x72, 0x6e, 0x61, 0x6c, 0x2f, 0x69, 0x6e,
-	0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x2f, 0x69, 0x6e, 0x64, 0x65, 0x78, 0x70, 0x62, 0x62, 0x06,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x65, 0x6c, 0x6f, 0x70, 0x65, 0x22, 0x41, 0x0a, 0x19, 0x41, 0x67, 0x67, 0x72, 0x65, 0x67, 0x61,
+	0x74, 0x65, 0x49, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x4d, 0x65, 0x74, 0x61, 0x44, 0x61,
+	0x74, 0x61, 0x12, 0x24, 0x0a, 0x0e, 0x68, 0x65, 0x61, 0x64, 0x5f, 0x72, 0x65, 0x63, 0x6f, 0x72,
+	0x64, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0c, 0x68, 0x65, 0x61, 0x64,
+	0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x49, 0x64, 0x42, 0x37, 0x5a, 0x35, 0x67, 0x69, 0x74, 0x68,
+	0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x6f, 0x67, 0x6d, 0x61, 0x74, 0x69, 0x71, 0x2f,
+	0x76, 0x65, 0x72, 0x61, 0x63, 0x69, 0x74, 0x79, 0x2f, 0x6a, 0x6f, 0x75, 0x72, 0x6e, 0x61, 0x6c,
+	0x2f, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x2f, 0x69, 0x6e, 0x64, 0x65, 0x78, 0x70,
+	0x62, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -205,14 +256,15 @@ func file_github_com_dogmatiq_veracity_journal_internal_indexpb_index_proto_rawD
 	return file_github_com_dogmatiq_veracity_journal_internal_indexpb_index_proto_rawDescData
 }
 
-var file_github_com_dogmatiq_veracity_journal_internal_indexpb_index_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_github_com_dogmatiq_veracity_journal_internal_indexpb_index_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_github_com_dogmatiq_veracity_journal_internal_indexpb_index_proto_goTypes = []interface{}{
-	(*MetaData)(nil),              // 0: veracity.index.v1.MetaData
-	(*QueueNode)(nil),             // 1: veracity.index.v1.QueueNode
-	(*envelopespec.Envelope)(nil), // 2: dogma.interop.v1.envelope.Envelope
+	(*MetaData)(nil),                  // 0: veracity.index.v1.MetaData
+	(*QueueNode)(nil),                 // 1: veracity.index.v1.QueueNode
+	(*AggregateInstanceMetaData)(nil), // 2: veracity.index.v1.AggregateInstanceMetaData
+	(*envelopespec.Envelope)(nil),     // 3: dogma.interop.v1.envelope.Envelope
 }
 var file_github_com_dogmatiq_veracity_journal_internal_indexpb_index_proto_depIdxs = []int32{
-	2, // 0: veracity.index.v1.QueueNode.Envelope:type_name -> dogma.interop.v1.envelope.Envelope
+	3, // 0: veracity.index.v1.QueueNode.Envelope:type_name -> dogma.interop.v1.envelope.Envelope
 	1, // [1:1] is the sub-list for method output_type
 	1, // [1:1] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
@@ -250,6 +302,18 @@ func file_github_com_dogmatiq_veracity_journal_internal_indexpb_index_proto_init
 				return nil
 			}
 		}
+		file_github_com_dogmatiq_veracity_journal_internal_indexpb_index_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*AggregateInstanceMetaData); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -257,7 +321,7 @@ func file_github_com_dogmatiq_veracity_journal_internal_indexpb_index_proto_init
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_github_com_dogmatiq_veracity_journal_internal_indexpb_index_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

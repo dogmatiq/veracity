@@ -82,3 +82,8 @@ func (c *Committer) update(
 
 	return c.set(ctx, k, v)
 }
+
+// remove deletes a key.
+func (c *Committer) remove(ctx context.Context, k string) error {
+	return c.Index.Set(ctx, k, nil)
+}

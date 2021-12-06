@@ -25,3 +25,7 @@ message QueueNode {
     string prev_message_id = 2;
     dogma.interop.v1.envelope.Envelope Envelope = 3;
 }
+
+message AggregateInstanceMetaData {
+    bytes head_record_id = 1;
+}
