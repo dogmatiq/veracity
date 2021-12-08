@@ -4,13 +4,16 @@ import "context"
 
 // A Journal is an append-only sequence of opaque binary records.
 type Journal interface {
+
 	// Append adds a record to the end of the journal.
 	//
 	// prevID must be the ID of the most recent record, or an empty slice if the
-	// journal is currently empty; otherwise, the append operation fails.
+	// journal is currently empty. If prevID matches the actual most recent
+	// record, the record is appended and ok is true; otherwise, the append
+	// operation is aborted and ok is false.
 	//
-	// It returns the ID of the newly appended record.
-	Append(ctx context.Context, prevID, data []byte) (id []byte, err error)
+	// id is the ID of the newly appended record.
+	Append(ctx context.Context, prevID, rec []byte) (id []byte, ok bool, err error)
 
 	// Truncate removes records from the beginning of the journal.
 	//

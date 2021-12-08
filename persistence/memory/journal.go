@@ -2,7 +2,6 @@ package memory
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -23,30 +22,30 @@ type Journal struct {
 // Append adds a record to the end of the journal.
 //
 // prevID must be the ID of the most recent record, or an empty slice if the
-// journal is currently empty; otherwise, the append operation fails.
-func (j *Journal) Append(ctx context.Context, prevID, rec []byte) ([]byte, error) {
+// journal is currently empty. If prevID matches the actual most recent
+// record, the record is appended and ok is true; otherwise, the append
+// operation is aborted and ok is false.
+//
+// id is the ID of the newly appended record.
+func (j *Journal) Append(ctx context.Context, prevID, rec []byte) (id []byte, ok bool, err error) {
 	prevOffset, err := recordIDToOffset(prevID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	j.m.Lock()
 	defer j.m.Unlock()
 
 	if j.nextOffset-1 != prevOffset {
-		return nil, fmt.Errorf(
-			"optimistic lock failure, the last record ID is %#v but the caller provided %#v",
-			string(offsetToRecordID(j.nextOffset-1)),
-			string(prevID),
-		)
+		return nil, false, nil
 	}
 
 	j.records = append(j.records, rec)
 
-	id := offsetToRecordID(j.nextOffset)
+	id = offsetToRecordID(j.nextOffset)
 	j.nextOffset++
 
-	return id, nil
+	return id, true, nil
 }
 
 // Truncate removes records from the beginning of the journal.
@@ -65,11 +64,9 @@ func (j *Journal) Truncate(ctx context.Context, keepID []byte) error {
 	firstOffset := j.nextOffset - len(j.records)
 	keepIndex := keepOffset - firstOffset
 
-	if keepIndex < 0 {
-		return errors.New("no such record")
+	if keepIndex >= 0 {
+		j.records = j.records[keepIndex:]
 	}
-
-	j.records = j.records[keepIndex:]
 
 	return nil
 }

@@ -29,24 +29,27 @@ var _ = Describe("type Journal", func() {
 
 	Describe("func Append()", func() {
 		It("returns the ID of the record", func() {
-			id, err := journal.Append(ctx, nil, []byte("<record>"))
+			id, ok, err := journal.Append(ctx, nil, []byte("<record>"))
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(id).To(Equal([]byte("0")))
+			Expect(ok).To(BeTrue())
 
-			id, err = journal.Append(ctx, id, []byte("<record>"))
+			id, ok, err = journal.Append(ctx, id, []byte("<record>"))
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(id).To(Equal([]byte("1")))
+			Expect(ok).To(BeTrue())
 		})
 
 		It("does not append the record if the supplied 'previous ID' is incorrect", func() {
-			_, err := journal.Append(ctx, []byte("0"), []byte("<record>"))
-			Expect(err).To(MatchError(`optimistic lock failure, the last record ID is "" but the caller provided "0"`))
+			_, ok, err := journal.Append(ctx, []byte("0"), []byte("<record>"))
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeFalse())
 
 			r, err := journal.Open(ctx, nil)
 			Expect(err).ShouldNot(HaveOccurred())
 			defer r.Close()
 
-			_, _, ok, err := r.Next(ctx)
+			_, _, ok, err = r.Next(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeFalse())
 		})
@@ -56,9 +59,9 @@ var _ = Describe("type Journal", func() {
 
 			By("appending a record")
 
-			id, err := journal.Append(ctx, nil, []byte("<record>"))
+			id, ok, err := journal.Append(ctx, nil, []byte("<record>"))
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(id).To(Equal([]byte("0")))
+			Expect(ok).To(BeTrue())
 
 			By("stalling a reader on a separate goroutine")
 
@@ -84,8 +87,9 @@ var _ = Describe("type Journal", func() {
 
 			By("appending another record")
 
-			_, err = journal.Append(ctx, id, []byte("<record>"))
+			_, ok, err = journal.Append(ctx, id, []byte("<record>"))
 			Expect(err).ShouldNot(HaveOccurred()) // would timeout if reader blocked appending
+			Expect(ok).To(BeTrue())
 
 			<-barrier // allow the reader to finish
 			<-barrier // wait until the reader goroutine actually exits
@@ -96,12 +100,14 @@ var _ = Describe("type Journal", func() {
 		It("removes records before the given ID", func() {
 			var (
 				lastID []byte
+				ok     bool
 				err    error
 			)
 
 			for index := byte(0); index < 100; index++ {
-				lastID, err = journal.Append(ctx, lastID, []byte{index})
+				lastID, ok, err = journal.Append(ctx, lastID, []byte{index})
 				Expect(err).ShouldNot(HaveOccurred())
+				Expect(ok).To(BeTrue())
 			}
 
 			err = journal.Truncate(ctx, []byte("50"))
@@ -118,12 +124,14 @@ var _ = Describe("type Journal", func() {
 		It("does not remove records after the given ID", func() {
 			var (
 				lastID []byte
+				ok     bool
 				err    error
 			)
 
 			for index := byte(0); index < 100; index++ {
-				lastID, err = journal.Append(ctx, lastID, []byte{index})
+				lastID, ok, err = journal.Append(ctx, lastID, []byte{index})
 				Expect(err).ShouldNot(HaveOccurred())
+				Expect(ok).To(BeTrue())
 			}
 
 			err = journal.Truncate(ctx, []byte("50"))
@@ -141,7 +149,7 @@ var _ = Describe("type Journal", func() {
 				Expect(ok).To(BeTrue())
 			}
 
-			_, _, ok, err := r.Next(ctx)
+			_, _, ok, err = r.Next(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeFalse())
 		})
@@ -151,12 +159,14 @@ var _ = Describe("type Journal", func() {
 		BeforeEach(func() {
 			var (
 				lastID []byte
+				ok     bool
 				err    error
 			)
 
 			for index := byte(0); index < 100; index++ {
-				lastID, err = journal.Append(ctx, lastID, []byte{index})
+				lastID, ok, err = journal.Append(ctx, lastID, []byte{index})
 				Expect(err).ShouldNot(HaveOccurred())
+				Expect(ok).To(BeTrue())
 			}
 		})
 
