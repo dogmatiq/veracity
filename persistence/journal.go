@@ -2,7 +2,7 @@ package persistence
 
 import "context"
 
-// A Journal is an append-only sequence of immutable, opaque binary records.
+// A Journal is an append-only sequence of opaque binary records.
 type Journal interface {
 	// Append adds a record to the end of the journal.
 	//
@@ -11,6 +11,12 @@ type Journal interface {
 	//
 	// It returns the ID of the newly appended record.
 	Append(ctx context.Context, prevID, data []byte) (id []byte, err error)
+
+	// Truncate removes records from the beginning of the journal.
+	//
+	// keepID is the ID of the oldest record to keep. It becomes the record at
+	// the start of the journal.
+	Truncate(ctx context.Context, keepID []byte) error
 
 	// Open returns a Reader that reads the records in the journal in the order
 	// they were appended.

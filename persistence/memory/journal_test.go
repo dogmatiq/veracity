@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/dogmatiq/veracity/persistence"
 	. "github.com/dogmatiq/veracity/persistence/memory"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -14,7 +15,7 @@ var _ = Describe("type Journal", func() {
 	var (
 		ctx     context.Context
 		cancel  context.CancelFunc
-		journal *Journal
+		journal persistence.Journal
 	)
 
 	BeforeEach(func() {
@@ -91,15 +92,70 @@ var _ = Describe("type Journal", func() {
 		})
 	})
 
-	Describe("func OpenReader()", func() {
+	Describe("func Truncate()", func() {
+		It("removes records before the given ID", func() {
+			var (
+				lastID []byte
+				err    error
+			)
+
+			for index := byte(0); index < 100; index++ {
+				lastID, err = journal.Append(ctx, lastID, []byte{index})
+				Expect(err).ShouldNot(HaveOccurred())
+			}
+
+			err = journal.Truncate(ctx, []byte("50"))
+			Expect(err).ShouldNot(HaveOccurred())
+
+			r, err := journal.Open(ctx, []byte("48"))
+			Expect(err).ShouldNot(HaveOccurred())
+			defer r.Close()
+
+			_, _, _, err = r.Next(ctx)
+			Expect(err).To(MatchError(`record "49" has been truncated`))
+		})
+
+		It("does not remove records after the given ID", func() {
+			var (
+				lastID []byte
+				err    error
+			)
+
+			for index := byte(0); index < 100; index++ {
+				lastID, err = journal.Append(ctx, lastID, []byte{index})
+				Expect(err).ShouldNot(HaveOccurred())
+			}
+
+			err = journal.Truncate(ctx, []byte("50"))
+			Expect(err).ShouldNot(HaveOccurred())
+
+			r, err := journal.Open(ctx, []byte("49"))
+			Expect(err).ShouldNot(HaveOccurred())
+			defer r.Close()
+
+			for index := byte(50); index < 100; index++ {
+				id, data, ok, err := r.Next(ctx)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(id).To(Equal([]byte(fmt.Sprintf("%d", index))))
+				Expect(data).To(Equal([]byte{index}))
+				Expect(ok).To(BeTrue())
+			}
+
+			_, _, ok, err := r.Next(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeFalse())
+		})
+	})
+
+	Describe("func Open()", func() {
 		BeforeEach(func() {
 			var (
 				lastID []byte
 				err    error
 			)
 
-			for i := byte(0); i < 100; i++ {
-				lastID, err = journal.Append(ctx, lastID, []byte{i})
+			for index := byte(0); index < 100; index++ {
+				lastID, err = journal.Append(ctx, lastID, []byte{index})
 				Expect(err).ShouldNot(HaveOccurred())
 			}
 		})
