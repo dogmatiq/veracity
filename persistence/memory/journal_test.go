@@ -45,7 +45,7 @@ var _ = Describe("type Journal", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeFalse())
 
-			r, err := journal.Open(ctx, nil)
+			r, err := journal.NewReader(ctx, nil, persistence.JournalReaderOptions{})
 			Expect(err).ShouldNot(HaveOccurred())
 			defer r.Close()
 
@@ -69,7 +69,7 @@ var _ = Describe("type Journal", func() {
 				defer GinkgoRecover()
 				defer close(barrier)
 
-				r, err := journal.Open(ctx, nil)
+				r, err := journal.NewReader(ctx, nil, persistence.JournalReaderOptions{})
 				Expect(err).ShouldNot(HaveOccurred())
 				defer r.Close()
 
@@ -97,7 +97,7 @@ var _ = Describe("type Journal", func() {
 	})
 
 	Describe("func Truncate()", func() {
-		It("removes records before the given ID", func() {
+		BeforeEach(func() {
 			var (
 				lastID []byte
 				ok     bool
@@ -112,8 +112,10 @@ var _ = Describe("type Journal", func() {
 
 			err = journal.Truncate(ctx, []byte("50"))
 			Expect(err).ShouldNot(HaveOccurred())
+		})
 
-			r, err := journal.Open(ctx, []byte("48"))
+		It("removes records before the given ID", func() {
+			r, err := journal.NewReader(ctx, []byte("48"), persistence.JournalReaderOptions{})
 			Expect(err).ShouldNot(HaveOccurred())
 			defer r.Close()
 
@@ -122,22 +124,7 @@ var _ = Describe("type Journal", func() {
 		})
 
 		It("does not remove records after the given ID", func() {
-			var (
-				lastID []byte
-				ok     bool
-				err    error
-			)
-
-			for index := byte(0); index < 100; index++ {
-				lastID, ok, err = journal.Append(ctx, lastID, []byte{index})
-				Expect(err).ShouldNot(HaveOccurred())
-				Expect(ok).To(BeTrue())
-			}
-
-			err = journal.Truncate(ctx, []byte("50"))
-			Expect(err).ShouldNot(HaveOccurred())
-
-			r, err := journal.Open(ctx, []byte("49"))
+			r, err := journal.NewReader(ctx, []byte("49"), persistence.JournalReaderOptions{})
 			Expect(err).ShouldNot(HaveOccurred())
 			defer r.Close()
 
@@ -149,13 +136,33 @@ var _ = Describe("type Journal", func() {
 				Expect(ok).To(BeTrue())
 			}
 
-			_, _, ok, err = r.Next(ctx)
+			_, _, ok, err := r.Next(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeFalse())
+		})
+
+		It("allows the reader to skip truncated records with the appropriate option", func() {
+			r, err := journal.NewReader(ctx, nil, persistence.JournalReaderOptions{
+				SkipTruncated: true,
+			})
+			Expect(err).ShouldNot(HaveOccurred())
+			defer r.Close()
+
+			for index := byte(50); index < 100; index++ {
+				id, data, ok, err := r.Next(ctx)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(id).To(Equal([]byte(fmt.Sprintf("%d", index))))
+				Expect(data).To(Equal([]byte{index}))
+				Expect(ok).To(BeTrue())
+			}
+
+			_, _, ok, err := r.Next(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeFalse())
 		})
 	})
 
-	Describe("func Open()", func() {
+	Describe("func NewReader()", func() {
 		BeforeEach(func() {
 			var (
 				lastID []byte
@@ -171,7 +178,7 @@ var _ = Describe("type Journal", func() {
 		})
 
 		It("can read from the start of the journal", func() {
-			r, err := journal.Open(ctx, nil)
+			r, err := journal.NewReader(ctx, nil, persistence.JournalReaderOptions{})
 			Expect(err).ShouldNot(HaveOccurred())
 			defer r.Close()
 
@@ -189,7 +196,7 @@ var _ = Describe("type Journal", func() {
 		})
 
 		It("can start reading midway through the journal", func() {
-			r, err := journal.Open(ctx, []byte("49"))
+			r, err := journal.NewReader(ctx, []byte("49"), persistence.JournalReaderOptions{})
 			Expect(err).ShouldNot(HaveOccurred())
 			defer r.Close()
 

@@ -71,12 +71,16 @@ func (j *Journal) Truncate(ctx context.Context, keepID []byte) error {
 	return nil
 }
 
-// Open returns a Reader that reads the records in the journal in the order they
-// were appended.
+// NewReader returns a Reader that reads the records in the journal in the order
+// they were appended.
 //
-// If afterID is empty reading starts at the first record; otherwise,
-// reading starts at the record immediately after afterID.
-func (j *Journal) Open(ctx context.Context, afterID []byte) (persistence.JournalReader, error) {
+// If afterID is empty reading starts at the first record; otherwise, reading
+// starts at the record immediately after afterID.
+func (j *Journal) NewReader(
+	ctx context.Context,
+	afterID []byte,
+	options persistence.JournalReaderOptions,
+) (persistence.JournalReader, error) {
 	offset, err := recordIDToOffset(afterID)
 	if err != nil {
 		return nil, err
@@ -85,6 +89,7 @@ func (j *Journal) Open(ctx context.Context, afterID []byte) (persistence.Journal
 	return &reader{
 		journal: j,
 		offset:  offset + 1,
+		options: options,
 	}, nil
 }
 
@@ -92,8 +97,9 @@ func (j *Journal) Open(ctx context.Context, afterID []byte) (persistence.Journal
 // in-memory journal.
 type reader struct {
 	journal *Journal
-	records [][]byte
 	offset  int
+	options persistence.JournalReaderOptions
+	records [][]byte
 }
 
 // Next returns the next record in the journal.
@@ -118,10 +124,14 @@ func (r *reader) Next(ctx context.Context) (id, data []byte, ok bool, err error)
 		firstOffset := nextOffset - len(records)
 
 		if r.offset < firstOffset {
-			return nil, nil, false, fmt.Errorf(
-				"record %#v has been truncated",
-				string(offsetToRecordID(r.offset)),
-			)
+			if !r.options.SkipTruncated {
+				return nil, nil, false, fmt.Errorf(
+					"record %#v has been truncated",
+					string(offsetToRecordID(r.offset)),
+				)
+			}
+
+			r.offset = firstOffset
 		}
 
 		r.records = records[r.offset-firstOffset:]

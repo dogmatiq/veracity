@@ -21,12 +21,20 @@ type Journal interface {
 	// the start of the journal.
 	Truncate(ctx context.Context, keepID []byte) error
 
-	// Open returns a Reader that reads the records in the journal in the order
-	// they were appended.
+	// NewReader returns a Reader that reads the records in the journal in the
+	// order they were appended.
 	//
 	// If afterID is empty reading starts at the first record; otherwise,
 	// reading starts at the record immediately after afterID.
-	Open(ctx context.Context, afterID []byte) (JournalReader, error)
+	NewReader(ctx context.Context, afterID []byte, options JournalReaderOptions) (JournalReader, error)
+}
+
+// JournalReaderOptions controls the behavior of a JournalReader.
+type JournalReaderOptions struct {
+	// SkipTruncated indicates whether the reader should skip any truncated
+	// records. By default the reader will return an error when attempting to
+	// read a record that has been truncated.
+	SkipTruncated bool
 }
 
 // A JournalReader reads records from a Journal in the order they were appended.
