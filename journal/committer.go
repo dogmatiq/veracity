@@ -2,6 +2,7 @@ package journal
 
 import (
 	"context"
+	"errors"
 
 	"github.com/dogmatiq/veracity/journal/internal/indexpb"
 	"github.com/dogmatiq/veracity/persistence"
@@ -35,7 +36,7 @@ func (c *Committer) Sync(ctx context.Context) ([]byte, error) {
 		return nil, err
 	}
 
-	r, err := c.Journal.Open(ctx, c.metaData.CommittedRecordId)
+	r, err := c.Journal.NewReader(ctx, c.metaData.CommittedRecordId, persistence.JournalReaderOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -92,9 +93,12 @@ func (c *Committer) Append(
 		return nil, err
 	}
 
-	id, err := c.Journal.Append(ctx, prevID, data)
+	id, ok, err := c.Journal.Append(ctx, prevID, data)
 	if err != nil {
 		return nil, err
+	}
+	if !ok {
+		return nil, errors.New("incorrect previous record ID")
 	}
 
 	if err := c.apply(ctx, id, rec); err != nil {

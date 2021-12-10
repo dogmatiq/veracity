@@ -1,0 +1,10 @@
+syntax = "proto3";
+package veracity.discovery.v1;
+
+option go_package = "github.com/dogmatiq/veracity/discovery/internal/discoverypb";
+
+message NodeAdvertisement {
+    string node_id = 1;
+    bytes data = 2;
+    uint64 expires_at = 3; // unix timestamp
+}
