@@ -1,0 +1,10 @@
+# DO NOT EDIT! This file is managed by Terraform.
+name: Dependabot
+
+on:
+  pull_request_target:
+
+jobs:
+  ci:
+    name: Auto-merge Dependabot PRs
+    uses: dogmatiq/repos/.github/workflows/shared-dependabot.yml@main
