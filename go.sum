@@ -5,8 +5,8 @@ github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDk
 github.com/cncf/udpa/go v0.0.0-20201120205902-5459f2c99403/go.mod h1:WmhPx2Nbnhtbo57+VJT5O0JRkEi1Wbu0z5j0R8u5Hbk=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/dogmatiq/dodeca v1.3.0 h1:iej0oGuogRzctXfXaWQGujorqf9Jq/Zuc83ftMu2dIk=
-github.com/dogmatiq/dodeca v1.3.0/go.mod h1:3yoxWYqSso+ijE4DxzW6QJRkQa69dnIAXVM37JUqeRk=
+github.com/dogmatiq/dodeca v1.3.1 h1:Kd7hr4Pr1Ej442jLI6vvt8A0AP2JynkkHY4yhT4cNCY=
+github.com/dogmatiq/dodeca v1.3.1/go.mod h1:3yoxWYqSso+ijE4DxzW6QJRkQa69dnIAXVM37JUqeRk=
 github.com/dogmatiq/interopspec v0.5.0 h1:R2oXavMLcATUre5h7NX8+rMhr4tkqXPtsEgOp6nsSeM=
 github.com/dogmatiq/interopspec v0.5.0/go.mod h1:30FOKEhMeiM6ZIpq8mQfE7LINrh1Jv7ukErZB79/mTg=
 github.com/dogmatiq/linger v0.2.1 h1:ecVwiFlTcQuQ7ygQXH5bUPkWNve8n5BmVnCYMGMQ3zc=

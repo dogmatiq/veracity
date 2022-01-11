@@ -11,7 +11,7 @@ require (
 )
 
 require (
-	github.com/dogmatiq/dodeca v1.3.0
+	github.com/dogmatiq/dodeca v1.3.1
 	github.com/dogmatiq/linger v0.2.1
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
