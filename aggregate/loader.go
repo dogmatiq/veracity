@@ -69,12 +69,15 @@ type Loader struct {
 //
 // It returns nextOffset, which is the offset that will be occupied by the next
 // event to be recorded by this instance.
+//
+// snapshotAge is the number of events that have been recorded since the last
+// snapshot was taken.
 func (l *Loader) Load(
 	ctx context.Context,
 	h configkit.Identity,
 	id string,
 	r dogma.AggregateRoot,
-) (nextOffset uint64, _ error) {
+) (nextOffset, snapshotAge uint64, _ error) {
 	// First read the event bounds that we are interested in. This helps us
 	// optimize the reads we perform by ignoring any snapshots and events that
 	// are no longer relevant.
@@ -84,7 +87,7 @@ func (l *Loader) Load(
 		id,
 	)
 	if err != nil {
-		return 0, fmt.Errorf(
+		return 0, 0, fmt.Errorf(
 			"aggregate root %s[%s] cannot be loaded: unable to read event offset bounds: %w",
 			h.Name,
 			id,
@@ -101,7 +104,7 @@ func (l *Loader) Load(
 			id,
 		)
 
-		return 0, nil
+		return 0, 0, nil
 	}
 
 	// If the firstOffset and the nextOffset are the same then the instance was
@@ -116,7 +119,7 @@ func (l *Loader) Load(
 			firstOffset-1,
 		)
 
-		return nextOffset, nil
+		return nextOffset, 0, nil
 	}
 
 	// Attempt to read a snapshot that is newer than firstOffset so that we
@@ -129,7 +132,7 @@ func (l *Loader) Load(
 		firstOffset+1, // ignore any snapshots unless they were taken after the first event
 	)
 	if err != nil {
-		return 0, fmt.Errorf(
+		return 0, 0, fmt.Errorf(
 			"aggregate root %s[%s] cannot be loaded: unable to read snapshot: %w",
 			h.Name,
 			id,
@@ -154,7 +157,7 @@ func (l *Loader) Load(
 				snapshotOffset,
 			)
 
-			return nextOffset, nil
+			return nextOffset, 0, nil
 		}
 	}
 
@@ -169,13 +172,15 @@ func (l *Loader) Load(
 		firstOffset,
 	)
 	if err != nil {
-		return 0, fmt.Errorf(
+		return 0, 0, fmt.Errorf(
 			"aggregate root %s[%s] cannot be loaded: unable to read events: %w",
 			h.Name,
 			id,
 			err,
 		)
 	}
+
+	snapshotAge = nextOffset - firstOffset
 
 	// Log about how the aggregate root was loaded.
 	if hasSnapshot {
@@ -185,7 +190,7 @@ func (l *Loader) Load(
 			h.Name,
 			id,
 			snapshotOffset,
-			nextOffset-snapshotOffset-1,
+			snapshotAge,
 		)
 	} else {
 		logging.Log(
@@ -193,11 +198,11 @@ func (l *Loader) Load(
 			"aggregate root %s[%s] loaded from %d event(s)",
 			h.Name,
 			id,
-			nextOffset-firstOffset,
+			snapshotAge,
 		)
 	}
 
-	return nextOffset, nil
+	return nextOffset, snapshotAge, nil
 }
 
 // readSnapshot updates the contents of r to match the most recent snapshot that
