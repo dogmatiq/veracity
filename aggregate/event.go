@@ -58,10 +58,8 @@ type EventWriter interface {
 	// aggregate instance ID.
 	//
 	// nextOffset must be the offset immediately after the offset of the last
-	// event written; otherwise, no events are recorded and ok is false.
-	//
-	// If ok is false, nextOffset is not the next "unoccupied" offset and no
-	// events have been written.
+	// event written; otherwise, no events are recorded and an error is
+	// returned.
 	//
 	// If archive is true, all prior events and the events being written by this
 	// call are archived. Archived events are typically still made available to
@@ -73,5 +71,5 @@ type EventWriter interface {
 		nextOffset uint64,
 		events []*envelopespec.Envelope,
 		archive bool,
-	) (ok bool, _ error)
+	) error
 }
