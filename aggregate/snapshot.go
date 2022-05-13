@@ -7,9 +7,16 @@ import (
 	"github.com/dogmatiq/dogma"
 )
 
-// DefaultSnapshotWriteTimeout is the default amount of time to allow for
-// writing a snapshot.
-const DefaultSnapshotWriteTimeout = 100 * time.Millisecond
+const (
+	// DefaultSnapshotInterval is the default number of events that can be
+	// recorded by an aggregate instance before it is considered neccessary to
+	// take a new snapshot.
+	DefaultSnapshotInterval = 1000
+
+	// DefaultSnapshotWriteTimeout is the default amount of time to allow for
+	// writing a snapshot.
+	DefaultSnapshotWriteTimeout = 250 * time.Millisecond
+)
 
 // SnapshotReader is an interface for reading snapshots of aggregate roots from
 // persistent storage.
