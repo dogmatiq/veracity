@@ -225,8 +225,8 @@ func (l *Loader) readSnapshot(
 		ctx,
 		h.Key,
 		id,
-		minOffset,
 		r,
+		minOffset,
 	)
 	if err != nil {
 		// If the error was due to a context cancelation/timeout we bail with
@@ -282,8 +282,8 @@ func (l *Loader) writeSnapshot(
 		ctx,
 		h.Key,
 		id,
-		snapshotOffset,
 		r,
+		snapshotOffset,
 	); err != nil {
 		logging.Log(
 			l.Logger,
@@ -326,7 +326,7 @@ func (l *Loader) readEvents(
 	nextOffset = startOffset
 
 	for {
-		events, err := l.EventReader.ReadEvents(
+		events, more, err := l.EventReader.ReadEvents(
 			ctx,
 			h.Key,
 			id,
@@ -345,16 +345,16 @@ func (l *Loader) readEvents(
 				)
 			}
 
-			return nextOffset, err
-		}
-
-		if len(events) == 0 {
-			return nextOffset, nil
+			return 0, err
 		}
 
 		for _, ev := range events {
 			r.ApplyEvent(ev)
-			startOffset++
+			nextOffset++
+		}
+
+		if !more {
+			return nextOffset, nil
 		}
 	}
 }
