@@ -14,21 +14,14 @@ import (
 // running without receiving a command.
 const DefaultIdleTimeout = 5 * time.Minute
 
-type command struct {
-	Message dogma.Message
-}
-
-// Worker manages the lifecycle of a single aggregate instance.
-type Worker struct {
+// WorkerConfig encapsulates the configuration and dependencies of a worker.
+type WorkerConfig struct {
 	// Handler is the message handler that handles command messages routed to
 	// this instance.
 	Handler dogma.AggregateMessageHandler
 
 	// Identity is the identity of the handler.
 	HandlerIdentity configkit.Identity
-
-	// InstanceID is the instance of the aggregate managed by this worker.
-	InstanceID string
 
 	// Loader is used to load aggregate state from persistent storage.
 	Loader *Loader
@@ -57,8 +50,17 @@ type Worker struct {
 
 	// Logger is the target for log messages about the aggregate instance.
 	Logger logging.Logger
+}
 
-	commands <-chan command
+// Worker manages the lifecycle of a single aggregate instance.
+type Worker struct {
+	WorkerConfig
+
+	// InstanceID is the instance of the aggregate managed by this worker.
+	InstanceID string
+
+	// Commands is a channel that receives commands to be executed.
+	Commands chan Command
 
 	// root is the aggregate root for this instance.
 	root dogma.AggregateRoot
@@ -116,7 +118,7 @@ func (w *Worker) handleNextCommand(ctx context.Context) (done bool, _ error) {
 	case <-ctx.Done():
 		return true, ctx.Err()
 
-	case cmd := <-w.commands:
+	case cmd := <-w.Commands:
 		return w.handleCommand(ctx, cmd)
 
 	case <-idle.C:
@@ -130,14 +132,14 @@ func (w *Worker) handleNextCommand(ctx context.Context) (done bool, _ error) {
 // handleCommand handles a single command.
 func (w *Worker) handleCommand(
 	ctx context.Context,
-	cmd command,
+	cmd Command,
 ) (done bool, _ error) {
 	sc := &scope{}
 
 	w.Handler.HandleCommand(
 		w.root,
 		sc,
-		cmd.Message,
+		cmd.Parcel.Message,
 	)
 
 	w.snapshotAge += uint64(len(sc.EventEnvelopes))
@@ -152,6 +154,10 @@ func (w *Worker) handleCommand(
 	); err != nil {
 		return true, err
 	}
+
+	// We are only responsible for writing "success" responses, all error
+	// responses are handled by the supervisor.
+	cmd.Result <- nil
 
 	if sc.IsDestroyed {
 		return true, w.archiveSnapshots(ctx)
