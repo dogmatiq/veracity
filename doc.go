@@ -1,3 +1,3 @@
-// Package veracity is an event-sourced Dogma engine that uses an append-only
-// journal for persistence.
+// Package veracity is an event-sourced Dogma engine with a focus on horizontal
+// scalability and "shardability" of data.
 package veracity

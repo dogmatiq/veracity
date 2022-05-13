@@ -7,5 +7,5 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/dogmatiq/veracity)](https://goreportcard.com/report/github.com/dogmatiq/veracity)
 
 Veracity is an event-sourced [Dogma](https://github.com/dogmatiq/dogma)
-[engine](https://github.com/dogmatiq/dogma#engine) that uses an append-only
-journal for persistence.
+[engine](https://github.com/dogmatiq/dogma#engine) with a focus on horizontal
+scalability and "shardability" of data.
