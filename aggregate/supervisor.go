@@ -61,7 +61,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 
 		case res := <-s.workerResults:
 			delete(s.workers, res.InstanceID)
-			if res.Err != res.Err {
+			if res.Err != nil {
 				return res.Err
 			}
 		}
@@ -97,7 +97,7 @@ func (s *Supervisor) dispatchCommand(ctx context.Context, cmd Command) error {
 
 		case res := <-s.workerResults:
 			delete(s.workers, res.InstanceID)
-			if res.Err != res.Err {
+			if res.Err != nil {
 				cmd.Result <- errors.New("shutting down")
 				return res.Err
 			}
