@@ -227,6 +227,8 @@ func (w *Worker) takeSnapshot(ctx context.Context) error {
 		return nil
 	}
 
+	w.snapshotAge = 0
+
 	logging.Log(
 		w.Logger,
 		"up-to-date snapshot of aggregate root %s[%s] written at offset %d: %w",
