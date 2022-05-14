@@ -134,11 +134,7 @@ func (s *Supervisor) startWorker(
 
 	go func() {
 		err := w.Run(ctx)
-
-		select {
-		case <-ctx.Done():
-		case s.workerResults <- workerResult{id, err}:
-		}
+		s.workerResults <- workerResult{id, err}
 	}()
 
 	return w
