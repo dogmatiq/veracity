@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"reflect"
 
 	"github.com/dogmatiq/dogma"
 )
@@ -10,29 +11,35 @@ import (
 //
 // It implements aggregate.SnapshotReader and aggregate.SnapshotWriter.
 type AggregateSnapshotStore struct {
-	root   dogma.AggregateRoot
+	root   reflect.Value
 	offset uint64
 }
 
-// ReadSnapshot updates the contents of r to match the most recent snapshot
-// that was taken at or after minOffset.
+// ReadSnapshot updates the contents of r to match the most recent snapshot that
+// was taken at or after minOffset.
 //
-// hk is the identity key of the aggregate message handler. id is the
-// aggregate instance ID.
+// hk is the identity key of the aggregate message handler. id is the aggregate
+// instance ID.
 //
-// If ok is false, no snapshot was found at or after minOffset; root is
-// guaranteed not to have been modified. Otherwise, snapshotOffset is the
+// If ok is false, no compatible snapshot was found at or after minOffset; root
+// is guaranteed not to have been modified. Otherwise, snapshotOffset is the
 // offset of the most recent event applied to the root when the snapshot was
 // taken.
+//
+// A snapshot is considered compatible if it can assigned to the underlying type
+// of r.
 func (s *AggregateSnapshotStore) ReadSnapshot(
 	ctx context.Context,
 	hk, id string,
 	r dogma.AggregateRoot,
 	minOffset uint64,
 ) (snapshotOffset uint64, ok bool, _ error) {
-	if s.root == nil {
+	if !s.root.IsValid() {
 		return 0, false, nil
 	}
+
+	v := reflect.ValueOf(r).Elem()
+	v.Set(s.root.Elem())
 
 	return s.offset, true, nil
 }
@@ -50,7 +57,7 @@ func (s *AggregateSnapshotStore) WriteSnapshot(
 	r dogma.AggregateRoot,
 	snapshotOffset uint64,
 ) error {
-	s.root = r
+	s.root = reflect.ValueOf(r)
 	s.offset = snapshotOffset
 
 	return nil

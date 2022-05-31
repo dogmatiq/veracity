@@ -27,10 +27,13 @@ type SnapshotReader interface {
 	// hk is the identity key of the aggregate message handler. id is the
 	// aggregate instance ID.
 	//
-	// If ok is false, no snapshot was found at or after minOffset; root is
-	// guaranteed not to have been modified. Otherwise, snapshotOffset is the
-	// offset of the most recent event applied to the root when the snapshot was
-	// taken.
+	// If ok is false, no compatible snapshot was found at or after minOffset;
+	// root is guaranteed not to have been modified. Otherwise, snapshotOffset
+	// is the offset of the most recent event applied to the root when the
+	// snapshot was taken.
+	//
+	// A snapshot is considered compatible if it can assigned to the underlying
+	// type of r.
 	ReadSnapshot(
 		ctx context.Context,
 		hk, id string,
