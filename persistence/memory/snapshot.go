@@ -16,7 +16,12 @@ type AggregateSnapshotStore struct {
 	Marshaler marshalkit.ValueMarshaler
 
 	m         sync.RWMutex
-	snapshots map[string]snapshot
+	snapshots map[snapshotKey]snapshot
+}
+
+type snapshotKey struct {
+	HandlerKey string
+	InstanceID string
 }
 
 type snapshot struct {
@@ -46,7 +51,8 @@ func (s *AggregateSnapshotStore) ReadSnapshot(
 	s.m.RLock()
 	defer s.m.RUnlock()
 
-	sn, ok := s.snapshots[hk]
+	k := snapshotKey{hk, id}
+	sn, ok := s.snapshots[k]
 	if !ok {
 		return 0, false, nil
 	}
@@ -94,10 +100,11 @@ func (s *AggregateSnapshotStore) WriteSnapshot(
 	defer s.m.Unlock()
 
 	if s.snapshots == nil {
-		s.snapshots = map[string]snapshot{}
+		s.snapshots = map[snapshotKey]snapshot{}
 	}
 
-	s.snapshots[hk] = snapshot{p, snapshotOffset}
+	k := snapshotKey{hk, id}
+	s.snapshots[k] = snapshot{p, snapshotOffset}
 
 	return nil
 }
