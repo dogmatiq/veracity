@@ -76,5 +76,31 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 			Expect(ok).To(BeFalse())
 			Expect(root.AppliedEvents).To(BeEmpty())
 		})
+
+		It("does not modify the root when the snapshot is older than minOffset", func() {
+			snapshot := &AggregateRoot{}
+			snapshot.ApplyEvent(MessageE1)
+
+			err := store.WriteSnapshot(
+				ctx,
+				"<handler>",
+				"<instance>",
+				snapshot,
+				10,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			_, ok, err := store.ReadSnapshot(
+				ctx,
+				"<handler>",
+				"<instance>",
+				root,
+				11,
+			)
+
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeFalse())
+			Expect(root.AppliedEvents).To(BeEmpty())
+		})
 	})
 })

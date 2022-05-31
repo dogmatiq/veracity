@@ -38,6 +38,10 @@ func (s *AggregateSnapshotStore) ReadSnapshot(
 		return 0, false, nil
 	}
 
+	if s.offset < minOffset {
+		return 0, false, nil
+	}
+
 	v := reflect.ValueOf(r).Elem()
 	v.Set(s.root.Elem())
 
