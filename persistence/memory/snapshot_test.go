@@ -130,5 +130,34 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 			Expect(snapshotOffset).To(Equal(expectedSnapshotOffset))
 			Expect(root).To(Equal(snapshot))
 		})
+
+		It("does not modify the root when there are no compatible snapshots", func() {
+			type incompatible struct {
+				dogma.AggregateRoot
+			}
+
+			snapshot := &incompatible{}
+
+			err := store.WriteSnapshot(
+				ctx,
+				"<handler>",
+				"<instance>",
+				snapshot,
+				0,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			_, ok, err := store.ReadSnapshot(
+				ctx,
+				"<handler>",
+				"<instance>",
+				root,
+				0,
+			)
+
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeFalse())
+			Expect(root.AppliedEvents).To(BeEmpty())
+		})
 	})
 })

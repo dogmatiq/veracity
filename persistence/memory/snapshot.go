@@ -42,8 +42,14 @@ func (s *AggregateSnapshotStore) ReadSnapshot(
 		return 0, false, nil
 	}
 
-	v := reflect.ValueOf(r).Elem()
-	v.Set(s.root.Elem())
+	src := s.root.Elem()
+	dst := reflect.ValueOf(r).Elem()
+
+	if !src.Type().AssignableTo(dst.Type()) {
+		return 0, false, nil
+	}
+
+	dst.Set(src)
 
 	return s.offset, true, nil
 }
