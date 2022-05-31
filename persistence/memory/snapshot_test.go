@@ -86,6 +86,56 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 			Entry("at offset 2", uint64(2)),
 		)
 
+		It("stores separate snapshots for each handler", func() {
+			err := store.WriteSnapshot(
+				ctx,
+				"<handler-1>",
+				"<instance>",
+				&aggregateRoot{
+					Value: "<handler-1-snapshot>",
+				},
+				10,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = store.WriteSnapshot(
+				ctx,
+				"<handler-2>",
+				"<instance>",
+				&aggregateRoot{
+					Value: "<handler-2-snapshot>",
+				},
+				20,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			snapshotOffset, ok, err := store.ReadSnapshot(
+				ctx,
+				"<handler-1>",
+				"<instance>",
+				root,
+				0,
+			)
+
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(snapshotOffset).To(BeNumerically("==", 10))
+			Expect(root.Value).To(Equal("<handler-1-snapshot>"))
+
+			snapshotOffset, ok, err = store.ReadSnapshot(
+				ctx,
+				"<handler-2>",
+				"<instance>",
+				root,
+				0,
+			)
+
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(snapshotOffset).To(BeNumerically("==", 20))
+			Expect(root.Value).To(Equal("<handler-2-snapshot>"))
+		})
+
 		It("does not modify the root when there are no snapshots", func() {
 			_, ok, err := store.ReadSnapshot(
 				ctx,

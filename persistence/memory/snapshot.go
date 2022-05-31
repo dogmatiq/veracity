@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"reflect"
+	"sync"
 
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/marshalkit"
@@ -14,8 +15,13 @@ import (
 type AggregateSnapshotStore struct {
 	Marshaler marshalkit.ValueMarshaler
 
-	root   marshalkit.Packet
-	offset uint64
+	m         sync.RWMutex
+	snapshots map[string]snapshot
+}
+
+type snapshot struct {
+	Packet marshalkit.Packet
+	Offset uint64
 }
 
 // ReadSnapshot updates the contents of r to match the most recent snapshot that
@@ -37,20 +43,24 @@ func (s *AggregateSnapshotStore) ReadSnapshot(
 	r dogma.AggregateRoot,
 	minOffset uint64,
 ) (snapshotOffset uint64, ok bool, _ error) {
-	if s.root.MediaType == "" {
+	s.m.RLock()
+	defer s.m.RUnlock()
+
+	sn, ok := s.snapshots[hk]
+	if !ok {
 		return 0, false, nil
 	}
 
-	if s.offset < minOffset {
+	if sn.Offset < minOffset {
 		return 0, false, nil
 	}
 
-	sn, err := s.Marshaler.Unmarshal(s.root)
+	v, err := s.Marshaler.Unmarshal(sn.Packet)
 	if err != nil {
 		return 0, false, err
 	}
 
-	src := reflect.ValueOf(sn).Elem()
+	src := reflect.ValueOf(v).Elem()
 	dst := reflect.ValueOf(r).Elem()
 
 	if !src.Type().AssignableTo(dst.Type()) {
@@ -59,7 +69,7 @@ func (s *AggregateSnapshotStore) ReadSnapshot(
 
 	dst.Set(src)
 
-	return s.offset, true, nil
+	return sn.Offset, true, nil
 }
 
 // WriteSnapshot saves a snapshot of a specific aggregate instance.
@@ -80,8 +90,14 @@ func (s *AggregateSnapshotStore) WriteSnapshot(
 		return err
 	}
 
-	s.root = p
-	s.offset = snapshotOffset
+	s.m.Lock()
+	defer s.m.Unlock()
+
+	if s.snapshots == nil {
+		s.snapshots = map[string]snapshot{}
+	}
+
+	s.snapshots[hk] = snapshot{p, snapshotOffset}
 
 	return nil
 }
