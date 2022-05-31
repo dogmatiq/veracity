@@ -2,46 +2,69 @@ package memory_test
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 
 	"github.com/dogmatiq/dogma"
-	. "github.com/dogmatiq/dogma/fixtures"
+	"github.com/dogmatiq/marshalkit/codec"
+	"github.com/dogmatiq/marshalkit/codec/json"
 	. "github.com/dogmatiq/veracity/persistence/memory"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("type AggregateSnapshotStore", func() {
+type aggregateRoot struct {
+	dogma.AggregateRoot
 
+	Value string
+}
+
+type incompatibleAggregateRoot struct {
+	dogma.AggregateRoot
+}
+
+var _ = Describe("type AggregateSnapshotStore", func() {
 	var (
 		ctx   context.Context
-		root  *AggregateRoot
+		root  *aggregateRoot
 		store *AggregateSnapshotStore
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		root = &AggregateRoot{}
-		store = &AggregateSnapshotStore{}
+		root = &aggregateRoot{}
+
+		m, err := codec.NewMarshaler(
+			[]reflect.Type{
+				reflect.TypeOf(&aggregateRoot{}),
+				reflect.TypeOf(&incompatibleAggregateRoot{}),
+			},
+			[]codec.Codec{
+				&json.Codec{},
+			},
+		)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		store = &AggregateSnapshotStore{
+			Marshaler: m,
+		}
 	})
 
 	Describe("func ReadSnapshot()", func() {
 		DescribeTable(
 			"it populates the root from the latest snapshot",
-			func(events []dogma.Message) {
-				snapshot := &AggregateRoot{}
-
-				for _, ev := range events {
-					snapshot.ApplyEvent(ev)
+			func(offset uint64) {
+				snapshot := &aggregateRoot{
+					Value: fmt.Sprintf("<offset-%d>", offset),
 				}
 
-				expectedSnapshotOffset := uint64(len(events) - 1)
 				err := store.WriteSnapshot(
 					ctx,
 					"<handler>",
 					"<instance>",
 					snapshot,
-					expectedSnapshotOffset,
+					offset,
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -55,12 +78,12 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(ok).To(BeTrue())
-				Expect(snapshotOffset).To(Equal(expectedSnapshotOffset))
+				Expect(snapshotOffset).To(Equal(offset))
 				Expect(root).To(Equal(snapshot))
 			},
-			Entry("at offset 0", []dogma.Message{MessageE1}),
-			Entry("at offset 1", []dogma.Message{MessageE1, MessageE2}),
-			Entry("at offset 2", []dogma.Message{MessageE1, MessageE2, MessageE3}),
+			Entry("at offset 0", uint64(0)),
+			Entry("at offset 1", uint64(1)),
+			Entry("at offset 2", uint64(2)),
 		)
 
 		It("does not modify the root when there are no snapshots", func() {
@@ -74,12 +97,11 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeFalse())
-			Expect(root.AppliedEvents).To(BeEmpty())
+			Expect(root.Value).To(BeEmpty())
 		})
 
 		It("does not modify the root when the latest snapshot is older than minOffset", func() {
-			snapshot := &AggregateRoot{}
-			snapshot.ApplyEvent(MessageE1)
+			snapshot := &aggregateRoot{}
 
 			err := store.WriteSnapshot(
 				ctx,
@@ -100,12 +122,13 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeFalse())
-			Expect(root.AppliedEvents).To(BeEmpty())
+			Expect(root.Value).To(BeEmpty())
 		})
 
 		It("populates the root when the latest snapshot is taken at exactly minOffset", func() {
-			snapshot := &AggregateRoot{}
-			snapshot.ApplyEvent(MessageE1)
+			snapshot := &aggregateRoot{
+				Value: "<snapshot>",
+			}
 			expectedSnapshotOffset := uint64(10)
 
 			err := store.WriteSnapshot(
@@ -132,11 +155,7 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 		})
 
 		It("does not modify the root when there are no compatible snapshots", func() {
-			type incompatible struct {
-				dogma.AggregateRoot
-			}
-
-			snapshot := &incompatible{}
+			snapshot := &incompatibleAggregateRoot{}
 
 			err := store.WriteSnapshot(
 				ctx,
@@ -157,7 +176,38 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeFalse())
-			Expect(root.AppliedEvents).To(BeEmpty())
+			Expect(root.Value).To(BeEmpty())
+		})
+
+		It("does not retain a reference to the in-memory snapshot value", func() {
+			snapshot := &aggregateRoot{
+				Value: "<original>",
+			}
+
+			By("persisting a snapshot")
+			err := store.WriteSnapshot(
+				ctx,
+				"<handler>",
+				"<instance>",
+				snapshot,
+				0,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			By("modifying the snapshot value after it was persisted")
+			snapshot.Value = "<changed>"
+
+			_, ok, err := store.ReadSnapshot(
+				ctx,
+				"<handler>",
+				"<instance>",
+				root,
+				0,
+			)
+
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(root.Value).To(Equal("<original>"))
 		})
 	})
 })

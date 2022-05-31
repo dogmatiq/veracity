@@ -5,13 +5,16 @@ import (
 	"reflect"
 
 	"github.com/dogmatiq/dogma"
+	"github.com/dogmatiq/marshalkit"
 )
 
 // AggregateSnapshotStore stores snapshots of aggregate roots in memory.
 //
 // It implements aggregate.SnapshotReader and aggregate.SnapshotWriter.
 type AggregateSnapshotStore struct {
-	root   reflect.Value
+	Marshaler marshalkit.ValueMarshaler
+
+	root   marshalkit.Packet
 	offset uint64
 }
 
@@ -34,7 +37,7 @@ func (s *AggregateSnapshotStore) ReadSnapshot(
 	r dogma.AggregateRoot,
 	minOffset uint64,
 ) (snapshotOffset uint64, ok bool, _ error) {
-	if !s.root.IsValid() {
+	if s.root.MediaType == "" {
 		return 0, false, nil
 	}
 
@@ -42,7 +45,12 @@ func (s *AggregateSnapshotStore) ReadSnapshot(
 		return 0, false, nil
 	}
 
-	src := s.root.Elem()
+	sn, err := s.Marshaler.Unmarshal(s.root)
+	if err != nil {
+		return 0, false, err
+	}
+
+	src := reflect.ValueOf(sn).Elem()
 	dst := reflect.ValueOf(r).Elem()
 
 	if !src.Type().AssignableTo(dst.Type()) {
@@ -67,7 +75,12 @@ func (s *AggregateSnapshotStore) WriteSnapshot(
 	r dogma.AggregateRoot,
 	snapshotOffset uint64,
 ) error {
-	s.root = reflect.ValueOf(r)
+	p, err := s.Marshaler.Marshal(r)
+	if err != nil {
+		return err
+	}
+
+	s.root = p
 	s.offset = snapshotOffset
 
 	return nil
