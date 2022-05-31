@@ -179,7 +179,7 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 			Expect(root.Value).To(BeEmpty())
 		})
 
-		It("does not retain a reference to the in-memory snapshot value", func() {
+		It("does not retain a reference to the original snapshot value", func() {
 			snapshot := &aggregateRoot{
 				Value: "<original>",
 			}
@@ -194,7 +194,7 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			By("modifying the snapshot value after it was persisted")
+			By("modifying the original snapshot value after it was persisted")
 			snapshot.Value = "<changed>"
 
 			_, ok, err := store.ReadSnapshot(
@@ -205,6 +205,50 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 				0,
 			)
 
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(root.Value).To(Equal("<original>"))
+		})
+
+		It("does not retain a reference to the loaded snapshot value", func() {
+			originalSnapshot := &aggregateRoot{
+				Value: "<original>",
+			}
+
+			By("persisting a snapshot")
+			err := store.WriteSnapshot(
+				ctx,
+				"<handler>",
+				"<instance>",
+				originalSnapshot,
+				0,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			By("reading the snapshot")
+			loadedSnapshot := &aggregateRoot{}
+
+			_, ok, err := store.ReadSnapshot(
+				ctx,
+				"<handler>",
+				"<instance>",
+				loadedSnapshot,
+				0,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeTrue())
+
+			By("modifying the loaded snapshot")
+			loadedSnapshot.Value = "<changed>"
+
+			By("reading the snapshot again")
+			_, ok, err = store.ReadSnapshot(
+				ctx,
+				"<handler>",
+				"<instance>",
+				root,
+				0,
+			)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeTrue())
 			Expect(root.Value).To(Equal("<original>"))
