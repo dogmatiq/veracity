@@ -327,4 +327,59 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 			Expect(root.Value).To(BeEmpty())
 		})
 	})
+
+	Describe("func ArchiveSnapshots()", func() {
+		It("does not archive snapshots of other instances", func() {
+			type snapshotKey struct {
+				HandlerKey string
+				InstanceID string
+			}
+
+			instances := []snapshotKey{
+				{"<handler-1>", "<instance-1>"},
+				{"<handler-1>", "<instance-2>"},
+				{"<handler-2>", "<instance-1>"},
+				{"<handler-2>", "<instance-2>"},
+			}
+			archiveKey := instances[0]
+
+			for i, inst := range instances {
+				err := store.WriteSnapshot(
+					ctx,
+					inst.HandlerKey,
+					inst.InstanceID,
+					&aggregateRoot{
+						Value: inst.HandlerKey + inst.InstanceID,
+					},
+					uint64(i),
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+			}
+
+			err := store.ArchiveSnapshots(
+				ctx,
+				archiveKey.HandlerKey,
+				archiveKey.InstanceID,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			for i, inst := range instances {
+				if inst == archiveKey {
+					continue
+				}
+
+				snapshotOffset, ok, err := store.ReadSnapshot(
+					ctx,
+					inst.HandlerKey,
+					inst.InstanceID,
+					root,
+					0,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(ok).To(BeTrue())
+				Expect(snapshotOffset).To(BeNumerically("==", i))
+				Expect(root.Value).To(Equal(inst.HandlerKey + inst.InstanceID))
+			}
+		})
+	})
 })
