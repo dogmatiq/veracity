@@ -59,8 +59,7 @@ type SnapshotWriter interface {
 		snapshotOffset uint64,
 	) error
 
-	// ArchiveSnapshots archives any existing snapshots of a specific instance
-	// are no longer required.
+	// ArchiveSnapshots archives any existing snapshots of a specific instance.
 	//
 	// The precise meaning of "archive" is implementation-defined. It is typical
 	// to hard-delete the snapshots as they no longer serve a purpose and will

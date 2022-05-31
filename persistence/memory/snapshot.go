@@ -109,18 +109,24 @@ func (s *AggregateSnapshotStore) WriteSnapshot(
 	return nil
 }
 
-// ArchiveSnapshots archives any existing snapshots of a specific instance
-// are no longer required.
+// ArchiveSnapshots archives any existing snapshots of a specific aggregate
+// instance.
 //
-// The precise meaning of "archive" is implementation-defined. It is typical
-// to hard-delete the snapshots as they no longer serve a purpose and will
-// not be required in the future.
+// The precise meaning of "archive" is implementation-defined. It is typical to
+// hard-delete the snapshots as they no longer serve a purpose and will not be
+// required in the future.
 //
-// hk is the identity key of the aggregate message handler. id is the
-// aggregate instance ID.
+// hk is the identity key of the aggregate message handler. id is the aggregate
+// instance ID.
 func (s *AggregateSnapshotStore) ArchiveSnapshots(
 	ctx context.Context,
 	hk, id string,
 ) error {
-	panic("not implemented")
+	s.m.Lock()
+	defer s.m.Unlock()
+
+	k := snapshotKey{hk, id}
+	delete(s.snapshots, k)
+
+	return nil
 }

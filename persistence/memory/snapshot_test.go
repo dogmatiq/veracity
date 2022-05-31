@@ -294,5 +294,37 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 			Expect(ok).To(BeTrue())
 			Expect(root.Value).To(Equal("<original>"))
 		})
+
+		It("does not find archived snapshots", func() {
+			err := store.WriteSnapshot(
+				ctx,
+				"<handler>",
+				"<instance>",
+				&aggregateRoot{
+					Value: "<snapshot>",
+				},
+				0,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = store.ArchiveSnapshots(
+				ctx,
+				"<handler>",
+				"<instance>",
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			_, ok, err := store.ReadSnapshot(
+				ctx,
+				"<handler>",
+				"<instance>",
+				root,
+				0,
+			)
+
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeFalse())
+			Expect(root.Value).To(BeEmpty())
+		})
 	})
 })
