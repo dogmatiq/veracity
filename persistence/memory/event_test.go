@@ -147,5 +147,46 @@ var _ = Describe("type AggregateEventStore", func() {
 			Expect(firstOffset).To(BeNumerically("==", 3))
 			Expect(nextOffset).To(BeNumerically("==", 3))
 		})
+
+		It("returns a firstOffset equal to the offset of the first unarchived event", func() {
+			err := store.WriteEvents(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+				0,
+				[]*envelopespec.Envelope{
+					{},
+					{},
+					{},
+				},
+				true,
+			)
+
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = store.WriteEvents(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+				0,
+				[]*envelopespec.Envelope{
+					{},
+					{},
+				},
+				false,
+			)
+
+			Expect(err).ShouldNot(HaveOccurred())
+
+			firstOffset, nextOffset, err := store.ReadBounds(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+			)
+
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(firstOffset).To(BeNumerically("==", 3))
+			Expect(nextOffset).To(BeNumerically("==", 5))
+		})
 	})
 })
