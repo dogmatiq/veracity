@@ -200,5 +200,58 @@ var _ = Describe("type AggregateEventStore", func() {
 			Expect(firstOffset).To(BeNumerically("==", 3))
 			Expect(nextOffset).To(BeNumerically("==", 5))
 		})
+
+		It("stores separate bounds for each combination of handler key and instance ID", func() {
+			type instanceKey struct {
+				HandlerKey string
+				InstanceID string
+			}
+
+			instances := []instanceKey{
+				{"<handler-1>", "<instance-1>"},
+				{"<handler-1>", "<instance-2>"},
+				{"<handler-2>", "<instance-1>"},
+				{"<handler-2>", "<instance-2>"},
+			}
+
+			for i, inst := range instances {
+				events := make([]*envelopespec.Envelope, i+1)
+
+				err := store.WriteEvents(
+					context.Background(),
+					inst.HandlerKey,
+					inst.InstanceID,
+					0,
+					events,
+					true,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+
+				err = store.WriteEvents(
+					context.Background(),
+					inst.HandlerKey,
+					inst.InstanceID,
+					0,
+					events,
+					false,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+			}
+
+			for i, inst := range instances {
+				firstOffset, nextOffset, err := store.ReadBounds(
+					context.Background(),
+					inst.HandlerKey,
+					inst.InstanceID,
+				)
+
+				expectedFirstOffset := i + 1
+				expectedNextOffset := expectedFirstOffset + i + 1
+
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(firstOffset).To(BeNumerically("==", expectedFirstOffset))
+				Expect(nextOffset).To(BeNumerically("==", expectedNextOffset))
+			}
+		})
 	})
 })
