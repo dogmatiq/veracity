@@ -18,7 +18,8 @@ type instanceEvents struct {
 	NextOffset  uint64
 }
 
-// ReadBounds returns "bounds" of the events for a specific aggregate instance.
+// ReadBounds returns the offsets that are the bounds of the relevant historical
+// events for a specific aggregate instance.
 //
 // hk is the identity key of the aggregate message handler. id is the aggregate
 // instance ID.
