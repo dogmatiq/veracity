@@ -130,6 +130,18 @@ var _ = Describe("type AggregateEventStore", func() {
 				[]*envelopespec.Envelope{
 					{},
 					{},
+				},
+				false,
+			)
+
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = store.WriteEvents(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+				0,
+				[]*envelopespec.Envelope{
 					{},
 				},
 				true,
