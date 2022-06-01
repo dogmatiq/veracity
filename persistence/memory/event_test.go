@@ -94,5 +94,31 @@ var _ = Describe("type AggregateEventStore", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(nextOffset).To(BeNumerically("==", 5))
 		})
+
+		It("returns a zero firstOffset after when there are historical events", func() {
+			err := store.WriteEvents(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+				0,
+				[]*envelopespec.Envelope{
+					{},
+					{},
+					{},
+				},
+				false,
+			)
+
+			Expect(err).ShouldNot(HaveOccurred())
+
+			firstOffset, _, err := store.ReadBounds(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+			)
+
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(firstOffset).To(BeNumerically("==", 0))
+		})
 	})
 })
