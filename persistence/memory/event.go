@@ -9,8 +9,9 @@ import (
 
 // AggregateEventStore stores event messages produced by aggregates
 type AggregateEventStore struct {
-	m          sync.RWMutex
-	nextOffset uint64
+	m           sync.RWMutex
+	firstOffset uint64
+	nextOffset  uint64
 }
 
 // ReadBounds returns "bounds" of the events for a specific aggregate instance.
@@ -31,7 +32,7 @@ func (s *AggregateEventStore) ReadBounds(
 	s.m.RLock()
 	defer s.m.RUnlock()
 
-	return 0, s.nextOffset, nil
+	return s.firstOffset, s.nextOffset, nil
 }
 
 // ReadEvents loads some historical events for a specific aggregate instance.
@@ -78,6 +79,10 @@ func (s *AggregateEventStore) WriteEvents(
 	defer s.m.Unlock()
 
 	s.nextOffset += uint64(len(events))
+
+	if archive {
+		s.firstOffset = s.nextOffset
+	}
 
 	return nil
 }
