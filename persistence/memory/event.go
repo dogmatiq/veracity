@@ -61,7 +61,7 @@ func (s *AggregateEventStore) ReadEvents(
 	hk, id string,
 	firstOffset uint64,
 ) (events []*envelopespec.Envelope, more bool, _ error) {
-	panic("not implemented")
+	return nil, false, nil
 }
 
 // WriteEvents writes events that were recorded by an aggregate instance.

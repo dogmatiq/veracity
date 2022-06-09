@@ -254,4 +254,19 @@ var _ = Describe("type AggregateEventStore", func() {
 			}
 		})
 	})
+
+	Describe("func ReadEvents()", func() {
+		It("returns an empty slice when there are no historical events", func() {
+			events, more, err := store.ReadEvents(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+				0,
+			)
+
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(events).To(BeEmpty())
+			Expect(more).To(BeFalse())
+		})
+	})
 })
