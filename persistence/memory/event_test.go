@@ -7,6 +7,7 @@ import (
 	"github.com/dogmatiq/interopspec/envelopespec"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
 	. "github.com/dogmatiq/veracity/persistence/memory"
+	. "github.com/jmalloc/gomegax"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -239,7 +240,7 @@ var _ = Describe("type AggregateEventStore", func() {
 	})
 
 	Describe("func ReadEvents()", func() {
-		It("produces the events in the order they were written", func() {
+		XIt("produces the events in the order they were written", func() {
 			err := store.WriteEvents(
 				context.Background(),
 				"<handler>",
@@ -261,6 +262,7 @@ var _ = Describe("type AggregateEventStore", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			var producedEvents []*envelopespec.Envelope
+
 			for {
 				events, more, err := store.ReadEvents(
 					context.Background(),
@@ -278,7 +280,7 @@ var _ = Describe("type AggregateEventStore", func() {
 				}
 			}
 
-			Expect(producedEvents).To(Equal(allEvents))
+			Expect(producedEvents).To(EqualX(allEvents))
 		})
 
 		It("produces no events when there are no historical events", func() {
@@ -341,6 +343,17 @@ var _ = Describe("type AggregateEventStore", func() {
 		})
 
 		XIt("does not return an error when the offset refers to an event after the last archived event", func() {
+		})
+
+		It("returns an error if the offset is greater than the next offset", func() {
+			_, _, err := store.ReadEvents(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+				2,
+			)
+
+			Expect(err).To(MatchError("event at offset 2 does not exist yet"))
 		})
 	})
 })

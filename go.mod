@@ -8,8 +8,14 @@ require (
 	github.com/dogmatiq/interopspec v0.5.0
 	github.com/dogmatiq/linger v0.2.1
 	github.com/dogmatiq/marshalkit v0.7.2
+	github.com/jmalloc/gomegax v0.0.0-20200507221434-64fca4c0e03a
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.19.0
+)
+
+require (
+	github.com/google/go-cmp v0.5.5 // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 )
 
 require (

@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/dogmatiq/interopspec/envelopespec"
+	"github.com/golang/protobuf/proto"
 )
 
 // AggregateEventStore stores event messages produced by aggregates
@@ -17,6 +18,7 @@ type AggregateEventStore struct {
 type instanceEvents struct {
 	FirstOffset uint64
 	NextOffset  uint64
+	Envelopes   [][]byte
 }
 
 // ReadBounds returns the offsets that are the bounds of the relevant historical
@@ -72,7 +74,22 @@ func (s *AggregateEventStore) ReadEvents(
 		return nil, false, fmt.Errorf("event at offset %d is archived", firstOffset)
 	}
 
-	return nil, false, nil
+	if firstOffset == e.NextOffset {
+		return nil, false, nil
+	}
+
+	if firstOffset > e.NextOffset {
+		return nil, false, fmt.Errorf("event at offset %d does not exist yet", firstOffset)
+	}
+
+	data := e.Envelopes[firstOffset-e.FirstOffset]
+	env := &envelopespec.Envelope{}
+
+	if err := proto.Unmarshal(data, env); err != nil {
+		return nil, false, err
+	}
+
+	return []*envelopespec.Envelope{env}, false, nil
 }
 
 // WriteEvents writes events that were recorded by an aggregate instance.
@@ -94,6 +111,19 @@ func (s *AggregateEventStore) WriteEvents(
 	events []*envelopespec.Envelope,
 	archive bool,
 ) error {
+	var envelopes [][]byte
+
+	if !archive {
+		for _, env := range events {
+			data, err := proto.Marshal(env)
+			if err != nil {
+				return err
+			}
+
+			envelopes = append(envelopes, data)
+		}
+	}
+
 	s.m.Lock()
 	defer s.m.Unlock()
 
@@ -104,6 +134,9 @@ func (s *AggregateEventStore) WriteEvents(
 
 	if archive {
 		e.FirstOffset = e.NextOffset
+		e.Envelopes = nil
+	} else {
+		e.Envelopes = append(e.Envelopes, envelopes...)
 	}
 
 	if s.events == nil {
