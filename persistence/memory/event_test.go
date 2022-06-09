@@ -345,7 +345,8 @@ var _ = Describe("type AggregateEventStore", func() {
 			Expect(err).To(MatchError("event at offset 0 is archived"))
 		})
 
-		XIt("does not return an error when the offset refers to an event after the last archived event", func() {
+		It("does not return an error when the offset refers to an event after the last archived event", func() {
+			Fail("not implemented")
 		})
 
 		It("returns an error if the offset is greater than the next offset", func() {
