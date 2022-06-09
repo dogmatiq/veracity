@@ -296,6 +296,31 @@ var _ = Describe("type AggregateEventStore", func() {
 			Expect(more).To(BeFalse())
 		})
 
+		It("returns an error when the offset refers to an archived event", func() {
+			// Note this is specific to the memory implementation
+
+			err := store.WriteEvents(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+				0,
+				[]*envelopespec.Envelope{
+					{},
+				},
+				true,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			_, _, err = store.ReadEvents(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+				0,
+			)
+
+			Expect(err).To(MatchError("event at offset 0 is archived"))
+		})
+
 		XIt("produces the events in the order they were written", func() {
 			events, more, err := store.ReadEvents(
 				context.Background(),

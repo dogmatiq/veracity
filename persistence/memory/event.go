@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/dogmatiq/interopspec/envelopespec"
@@ -55,12 +56,22 @@ func (s *AggregateEventStore) ReadBounds(
 //
 // The maximum number of events returned by each call is implementation defined.
 //
-// It may return an error if firstOffset refers to an archived event.
+// It returns an error if firstOffset refers to an archived event.
 func (s *AggregateEventStore) ReadEvents(
 	ctx context.Context,
 	hk, id string,
 	firstOffset uint64,
 ) (events []*envelopespec.Envelope, more bool, _ error) {
+	s.m.RLock()
+	defer s.m.RUnlock()
+
+	k := instanceKey{hk, id}
+	e := s.events[k]
+
+	if firstOffset < e.FirstOffset {
+		return nil, false, fmt.Errorf("event at offset %d is archived", firstOffset)
+	}
+
 	return nil, false, nil
 }
 
