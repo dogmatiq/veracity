@@ -184,59 +184,6 @@ var _ = Describe("type AggregateEventStore", func() {
 			Expect(firstOffset).To(BeNumerically("==", 3))
 			Expect(nextOffset).To(BeNumerically("==", 5))
 		})
-
-		It("stores separate bounds for each combination of handler key and instance ID", func() {
-			type instanceKey struct {
-				HandlerKey string
-				InstanceID string
-			}
-
-			instances := []instanceKey{
-				{"<handler-1>", "<instance-1>"},
-				{"<handler-1>", "<instance-2>"},
-				{"<handler-2>", "<instance-1>"},
-				{"<handler-2>", "<instance-2>"},
-			}
-
-			for i, inst := range instances {
-				events := allEvents[:i+1]
-
-				err := store.WriteEvents(
-					context.Background(),
-					inst.HandlerKey,
-					inst.InstanceID,
-					0,
-					events,
-					true,
-				)
-				Expect(err).ShouldNot(HaveOccurred())
-
-				err = store.WriteEvents(
-					context.Background(),
-					inst.HandlerKey,
-					inst.InstanceID,
-					0,
-					events,
-					false,
-				)
-				Expect(err).ShouldNot(HaveOccurred())
-			}
-
-			for i, inst := range instances {
-				firstOffset, nextOffset, err := store.ReadBounds(
-					context.Background(),
-					inst.HandlerKey,
-					inst.InstanceID,
-				)
-
-				expectedFirstOffset := i + 1
-				expectedNextOffset := expectedFirstOffset + i + 1
-
-				Expect(err).ShouldNot(HaveOccurred())
-				Expect(firstOffset).To(BeNumerically("==", expectedFirstOffset))
-				Expect(nextOffset).To(BeNumerically("==", expectedNextOffset))
-			}
-		})
 	})
 
 	Describe("func ReadEvents()", func() {
@@ -358,6 +305,74 @@ var _ = Describe("type AggregateEventStore", func() {
 			)
 
 			Expect(err).To(MatchError("event at offset 2 does not exist yet"))
+		})
+	})
+
+	Describe("func WriteEvents()", func() {
+		XIt("returns an error if nextOffset is not the actual next offset", func() {
+			Fail("not implemented")
+		})
+
+		XIt("allows archiving without adding more events", func() {
+			// TODO: update method docs to explain this
+			Fail("not implemented")
+		})
+
+		It("stores separate bounds for each combination of handler key and instance ID", func() {
+			type instanceKey struct {
+				HandlerKey string
+				InstanceID string
+			}
+
+			instances := []instanceKey{
+				{"<handler-1>", "<instance-1>"},
+				{"<handler-1>", "<instance-2>"},
+				{"<handler-2>", "<instance-1>"},
+				{"<handler-2>", "<instance-2>"},
+			}
+
+			for i, inst := range instances {
+				events := allEvents[:i+1]
+
+				err := store.WriteEvents(
+					context.Background(),
+					inst.HandlerKey,
+					inst.InstanceID,
+					0,
+					events,
+					true,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+
+				err = store.WriteEvents(
+					context.Background(),
+					inst.HandlerKey,
+					inst.InstanceID,
+					0,
+					events,
+					false,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+			}
+
+			for i, inst := range instances {
+				firstOffset, nextOffset, err := store.ReadBounds(
+					context.Background(),
+					inst.HandlerKey,
+					inst.InstanceID,
+				)
+
+				expectedFirstOffset := i + 1
+				expectedNextOffset := expectedFirstOffset + i + 1
+
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(firstOffset).To(BeNumerically("==", expectedFirstOffset))
+				Expect(nextOffset).To(BeNumerically("==", expectedNextOffset))
+			}
+		})
+
+		XIt("stores separate events for each combination of handler key and instance ID", func() {
+			Fail("not implemented")
 		})
 	})
 })
