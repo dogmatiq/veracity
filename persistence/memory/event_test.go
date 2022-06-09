@@ -3,7 +3,9 @@ package memory_test
 import (
 	"context"
 
+	. "github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/interopspec/envelopespec"
+	. "github.com/dogmatiq/veracity/internal/fixtures"
 	. "github.com/dogmatiq/veracity/persistence/memory"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -11,9 +13,17 @@ import (
 
 var _ = Describe("type AggregateEventStore", func() {
 	var store *AggregateEventStore
+	var allEvents []*envelopespec.Envelope
 
 	BeforeEach(func() {
 		store = &AggregateEventStore{}
+		allEvents = []*envelopespec.Envelope{
+			NewEnvelope("<event-0>", MessageA1),
+			NewEnvelope("<event-1>", MessageB1),
+			NewEnvelope("<event-2>", MessageC1),
+			NewEnvelope("<event-4>", MessageD1),
+			NewEnvelope("<event-5>", MessageE1),
+		}
 	})
 
 	Describe("func ReadBounds()", func() {
@@ -35,11 +45,7 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
-				[]*envelopespec.Envelope{
-					{},
-					{},
-					{},
-				},
+				allEvents,
 				false,
 			)
 
@@ -52,7 +58,7 @@ var _ = Describe("type AggregateEventStore", func() {
 			)
 
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(nextOffset).To(BeNumerically("==", 3))
+			Expect(nextOffset).To(BeNumerically("==", 5))
 		})
 
 		It("returns the next unused offset after several writes", func() {
@@ -61,11 +67,7 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
-				[]*envelopespec.Envelope{
-					{},
-					{},
-					{},
-				},
+				allEvents[:3],
 				false,
 			)
 
@@ -76,10 +78,7 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
-				[]*envelopespec.Envelope{
-					{},
-					{},
-				},
+				allEvents[3:],
 				false,
 			)
 
@@ -101,11 +100,7 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
-				[]*envelopespec.Envelope{
-					{},
-					{},
-					{},
-				},
+				allEvents,
 				false,
 			)
 
@@ -127,10 +122,7 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
-				[]*envelopespec.Envelope{
-					{},
-					{},
-				},
+				allEvents[:3],
 				false,
 			)
 
@@ -141,9 +133,7 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
-				[]*envelopespec.Envelope{
-					{},
-				},
+				allEvents[3:],
 				true,
 			)
 
@@ -156,8 +146,8 @@ var _ = Describe("type AggregateEventStore", func() {
 			)
 
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(firstOffset).To(BeNumerically("==", 3))
-			Expect(nextOffset).To(BeNumerically("==", 3))
+			Expect(firstOffset).To(BeNumerically("==", 5))
+			Expect(nextOffset).To(BeNumerically("==", 5))
 		})
 
 		It("returns a firstOffset equal to the offset of the first unarchived event", func() {
@@ -166,11 +156,7 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
-				[]*envelopespec.Envelope{
-					{},
-					{},
-					{},
-				},
+				allEvents[:3],
 				true,
 			)
 
@@ -181,10 +167,7 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
-				[]*envelopespec.Envelope{
-					{},
-					{},
-				},
+				allEvents[3:],
 				false,
 			)
 
@@ -215,7 +198,7 @@ var _ = Describe("type AggregateEventStore", func() {
 			}
 
 			for i, inst := range instances {
-				events := make([]*envelopespec.Envelope, i+1)
+				events := allEvents[:i+1]
 
 				err := store.WriteEvents(
 					context.Background(),
@@ -256,6 +239,48 @@ var _ = Describe("type AggregateEventStore", func() {
 	})
 
 	Describe("func ReadEvents()", func() {
+		It("produces the events in the order they were written", func() {
+			err := store.WriteEvents(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+				0,
+				allEvents[:3],
+				false,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = store.WriteEvents(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+				0,
+				allEvents[3:],
+				false,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			var producedEvents []*envelopespec.Envelope
+			for {
+				events, more, err := store.ReadEvents(
+					context.Background(),
+					"<handler>",
+					"<instance>",
+					0,
+				)
+
+				Expect(err).ShouldNot(HaveOccurred())
+
+				producedEvents = append(producedEvents, events...)
+
+				if !more {
+					break
+				}
+			}
+
+			Expect(producedEvents).To(Equal(allEvents))
+		})
+
 		It("produces no events when there are no historical events", func() {
 			events, more, err := store.ReadEvents(
 				context.Background(),
@@ -275,11 +300,7 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
-				[]*envelopespec.Envelope{
-					{},
-					{},
-					{},
-				},
+				allEvents,
 				false,
 			)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -288,7 +309,7 @@ var _ = Describe("type AggregateEventStore", func() {
 				context.Background(),
 				"<handler>",
 				"<instance>",
-				3,
+				5,
 			)
 
 			Expect(err).ShouldNot(HaveOccurred())
@@ -304,9 +325,7 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
-				[]*envelopespec.Envelope{
-					{},
-				},
+				allEvents,
 				true,
 			)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -321,17 +340,7 @@ var _ = Describe("type AggregateEventStore", func() {
 			Expect(err).To(MatchError("event at offset 0 is archived"))
 		})
 
-		XIt("produces the events in the order they were written", func() {
-			events, more, err := store.ReadEvents(
-				context.Background(),
-				"<handler>",
-				"<instance>",
-				0,
-			)
-
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(events).To(BeEmpty())
-			Expect(more).To(BeFalse())
+		XIt("does not return an error when the offset refers to an event after the last archived event", func() {
 		})
 	})
 })
