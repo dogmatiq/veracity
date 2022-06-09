@@ -256,7 +256,47 @@ var _ = Describe("type AggregateEventStore", func() {
 	})
 
 	Describe("func ReadEvents()", func() {
-		It("returns an empty slice when there are no historical events", func() {
+		It("produces no events when there are no historical events", func() {
+			events, more, err := store.ReadEvents(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+				0,
+			)
+
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(events).To(BeEmpty())
+			Expect(more).To(BeFalse())
+		})
+
+		It("produces no events when the offset is larger than the offset of the most recent event", func() {
+			err := store.WriteEvents(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+				0,
+				[]*envelopespec.Envelope{
+					{},
+					{},
+					{},
+				},
+				false,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			events, more, err := store.ReadEvents(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+				3,
+			)
+
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(events).To(BeEmpty())
+			Expect(more).To(BeFalse())
+		})
+
+		XIt("produces the events in the order they were written", func() {
 			events, more, err := store.ReadEvents(
 				context.Background(),
 				"<handler>",
