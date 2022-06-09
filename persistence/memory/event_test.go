@@ -240,7 +240,7 @@ var _ = Describe("type AggregateEventStore", func() {
 	})
 
 	Describe("func ReadEvents()", func() {
-		XIt("produces the events in the order they were written", func() {
+		It("produces the events in the order they were written", func() {
 			err := store.WriteEvents(
 				context.Background(),
 				"<handler>",
@@ -262,13 +262,14 @@ var _ = Describe("type AggregateEventStore", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			var producedEvents []*envelopespec.Envelope
+			var offset uint64
 
 			for {
 				events, more, err := store.ReadEvents(
 					context.Background(),
 					"<handler>",
 					"<instance>",
-					0,
+					offset,
 				)
 
 				Expect(err).ShouldNot(HaveOccurred())
@@ -278,6 +279,8 @@ var _ = Describe("type AggregateEventStore", func() {
 				if !more {
 					break
 				}
+
+				offset += uint64(len(events))
 			}
 
 			Expect(producedEvents).To(EqualX(allEvents))

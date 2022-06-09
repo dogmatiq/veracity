@@ -89,7 +89,7 @@ func (s *AggregateEventStore) ReadEvents(
 		return nil, false, err
 	}
 
-	return []*envelopespec.Envelope{env}, false, nil
+	return []*envelopespec.Envelope{env}, firstOffset < e.NextOffset-1, nil
 }
 
 // WriteEvents writes events that were recorded by an aggregate instance.
