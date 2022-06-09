@@ -18,6 +18,7 @@ require (
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/fxamacker/cbor/v2 v2.3.0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/google/uuid v1.3.0
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/net v0.0.0-20220225172249-27dd8689420f // indirect
