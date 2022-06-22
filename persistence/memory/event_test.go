@@ -208,29 +208,7 @@ var _ = Describe("type AggregateEventStore", func() {
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			var producedEvents []*envelopespec.Envelope
-			var offset uint64
-
-			for {
-				events, more, err := store.ReadEvents(
-					context.Background(),
-					"<handler>",
-					"<instance>",
-					offset,
-				)
-
-				Expect(err).ShouldNot(HaveOccurred())
-
-				producedEvents = append(producedEvents, events...)
-
-				if !more {
-					break
-				}
-
-				offset += uint64(len(events))
-			}
-
-			Expect(producedEvents).To(EqualX(allEvents))
+			expectEvents(store, 0, allEvents)
 		})
 
 		It("produces no events when there are no historical events", func() {
@@ -293,7 +271,27 @@ var _ = Describe("type AggregateEventStore", func() {
 		})
 
 		It("does not return an error when the offset refers to an event after the last archived event", func() {
-			Fail("not implemented")
+			err := store.WriteEvents(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+				0,
+				allEvents[:3],
+				true,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = store.WriteEvents(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+				0,
+				allEvents[3:],
+				false,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			expectEvents(store, 3, allEvents[3:])
 		})
 
 		It("returns an error if the offset is greater than the next offset", func() {
@@ -376,3 +374,34 @@ var _ = Describe("type AggregateEventStore", func() {
 		})
 	})
 })
+
+// expectEvents reads all events from store starting from offset and asserts
+// that they are equal to expectedEvents.
+func expectEvents(
+	store *AggregateEventStore,
+	offset uint64,
+	expectedEvents []*envelopespec.Envelope,
+) {
+	var producedEvents []*envelopespec.Envelope
+
+	for {
+		events, more, err := store.ReadEvents(
+			context.Background(),
+			"<handler>",
+			"<instance>",
+			offset,
+		)
+
+		Expect(err).ShouldNot(HaveOccurred())
+
+		producedEvents = append(producedEvents, events...)
+
+		if !more {
+			break
+		}
+
+		offset += uint64(len(events))
+	}
+
+	Expect(producedEvents).To(EqualX(expectedEvents))
+}
