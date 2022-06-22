@@ -299,9 +299,35 @@ var _ = Describe("type AggregateEventStore", func() {
 			Expect(err).To(MatchError("optimistic concurrency conflict, 3 is not the next offset"))
 		})
 
-		XIt("allows archiving without adding more events", func() {
-			// TODO: update method docs to explain this
-			Fail("not implemented")
+		It("allows archiving without adding more events", func() {
+			err := store.WriteEvents(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+				0,
+				allEvents,
+				false,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = store.WriteEvents(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+				5,
+				nil, // don't add more events
+				true,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			firstOffset, nextOffset, err := store.ReadBounds(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(firstOffset).To(BeNumerically("==", 5))
+			Expect(nextOffset).To(BeNumerically("==", 5))
 		})
 
 		It("stores separate bounds for each combination of handler key and instance ID", func() {

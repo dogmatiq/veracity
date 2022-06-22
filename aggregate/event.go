@@ -65,6 +65,9 @@ type EventWriter interface {
 	// call are archived. Archived events are typically still made available to
 	// external event consumers, but will no longer be needed for loading
 	// aggregate roots.
+	//
+	// The events slice may be empty, which allows archiving all existing events
+	// without adding any new events.
 	WriteEvents(
 		ctx context.Context,
 		hk, id string,
