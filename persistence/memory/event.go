@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/dogmatiq/interopspec/envelopespec"
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 // AggregateEventStore stores event messages produced by aggregates
