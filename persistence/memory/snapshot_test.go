@@ -75,7 +75,6 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 					root,
 					0,
 				)
-
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(ok).To(BeTrue())
 				Expect(snapshotOffset).To(Equal(offset))
@@ -135,7 +134,6 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 				root,
 				0,
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeFalse())
 			Expect(root.Value).To(BeEmpty())
@@ -160,7 +158,6 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 				root,
 				11,
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeFalse())
 			Expect(root.Value).To(BeEmpty())
@@ -188,7 +185,6 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 				root,
 				expectedSnapshotOffset,
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeTrue())
 			Expect(snapshotOffset).To(Equal(expectedSnapshotOffset))
@@ -214,7 +210,6 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 				root,
 				0,
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeFalse())
 			Expect(root.Value).To(BeEmpty())
@@ -245,7 +240,6 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 				root,
 				0,
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeTrue())
 			Expect(root.Value).To(Equal("<original>"))
@@ -321,7 +315,6 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 				root,
 				0,
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeFalse())
 			Expect(root.Value).To(BeEmpty())

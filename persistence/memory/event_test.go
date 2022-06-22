@@ -34,7 +34,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(firstOffset).To(BeNumerically("==", 0))
 			Expect(nextOffset).To(BeNumerically("==", 0))
@@ -49,7 +48,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				allEvents,
 				false,
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 
 			_, nextOffset, err := store.ReadBounds(
@@ -57,7 +55,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(nextOffset).To(BeNumerically("==", 5))
 		})
@@ -71,7 +68,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				allEvents[:3],
 				false,
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 
 			err = store.WriteEvents(
@@ -82,7 +78,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				allEvents[3:],
 				false,
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 
 			_, nextOffset, err := store.ReadBounds(
@@ -90,7 +85,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(nextOffset).To(BeNumerically("==", 5))
 		})
@@ -104,7 +98,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				allEvents,
 				false,
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 
 			firstOffset, _, err := store.ReadBounds(
@@ -112,7 +105,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(firstOffset).To(BeNumerically("==", 0))
 		})
@@ -126,7 +118,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				allEvents[:3],
 				false,
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 
 			err = store.WriteEvents(
@@ -137,7 +128,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				allEvents[3:],
 				true,
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 
 			firstOffset, nextOffset, err := store.ReadBounds(
@@ -145,7 +135,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(firstOffset).To(BeNumerically("==", 5))
 			Expect(nextOffset).To(BeNumerically("==", 5))
@@ -160,7 +149,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				allEvents[:3],
 				true,
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 
 			err = store.WriteEvents(
@@ -171,7 +159,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				allEvents[3:],
 				false,
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 
 			firstOffset, nextOffset, err := store.ReadBounds(
@@ -179,7 +166,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(firstOffset).To(BeNumerically("==", 3))
 			Expect(nextOffset).To(BeNumerically("==", 5))
@@ -207,7 +193,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				false,
 			)
 			Expect(err).ShouldNot(HaveOccurred())
-
 			expectEvents(store, 0, allEvents)
 		})
 
@@ -218,7 +203,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<instance>",
 				0,
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(events).To(BeEmpty())
 			Expect(more).To(BeFalse())
@@ -241,7 +225,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<instance>",
 				5,
 			)
-
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(events).To(BeEmpty())
 			Expect(more).To(BeFalse())
@@ -266,7 +249,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<instance>",
 				0,
 			)
-
 			Expect(err).To(MatchError("event at offset 0 is archived"))
 		})
 
@@ -290,7 +272,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				false,
 			)
 			Expect(err).ShouldNot(HaveOccurred())
-
 			expectEvents(store, 3, allEvents[3:])
 		})
 
@@ -301,7 +282,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<instance>",
 				2,
 			)
-
 			Expect(err).To(MatchError("event at offset 2 does not exist yet"))
 		})
 	})
@@ -316,7 +296,6 @@ var _ = Describe("type AggregateEventStore", func() {
 				allEvents,
 				false,
 			)
-
 			Expect(err).To(MatchError("optimistic concurrency conflict, 3 is not the next offset"))
 		})
 
@@ -400,7 +379,6 @@ func expectEvents(
 			"<instance>",
 			offset,
 		)
-
 		Expect(err).ShouldNot(HaveOccurred())
 
 		producedEvents = append(producedEvents, events...)
