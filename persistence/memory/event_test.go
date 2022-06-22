@@ -193,7 +193,13 @@ var _ = Describe("type AggregateEventStore", func() {
 				false,
 			)
 			Expect(err).ShouldNot(HaveOccurred())
-			expectEvents(store, 0, allEvents)
+			expectEvents(
+				store,
+				"<handler>",
+				"<instance>",
+				0,
+				allEvents,
+			)
 		})
 
 		It("produces no events when there are no historical events", func() {
@@ -272,7 +278,13 @@ var _ = Describe("type AggregateEventStore", func() {
 				false,
 			)
 			Expect(err).ShouldNot(HaveOccurred())
-			expectEvents(store, 3, allEvents[3:])
+			expectEvents(
+				store,
+				"<handler>",
+				"<instance>",
+				3,
+				allEvents[3:],
+			)
 		})
 
 		It("returns an error if the offset is greater than the next offset", func() {
@@ -383,8 +395,52 @@ var _ = Describe("type AggregateEventStore", func() {
 			}
 		})
 
-		XIt("stores separate events for each combination of handler key and instance ID", func() {
-			Fail("not implemented")
+		It("stores separate events for each combination of handler key and instance ID", func() {
+			type instanceKey struct {
+				HandlerKey string
+				InstanceID string
+			}
+
+			instances := []instanceKey{
+				{"<handler-1>", "<instance-1>"},
+				{"<handler-1>", "<instance-2>"},
+				{"<handler-2>", "<instance-1>"},
+				{"<handler-2>", "<instance-2>"},
+			}
+
+			for i, inst := range instances {
+				events := allEvents[:i+1]
+
+				err := store.WriteEvents(
+					context.Background(),
+					inst.HandlerKey,
+					inst.InstanceID,
+					0,
+					events,
+					true,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+
+				err = store.WriteEvents(
+					context.Background(),
+					inst.HandlerKey,
+					inst.InstanceID,
+					uint64(len(events)),
+					events,
+					false,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+			}
+
+			for i, inst := range instances {
+				expectEvents(
+					store,
+					inst.HandlerKey,
+					inst.InstanceID,
+					uint64(i+1),
+					allEvents[:i+1],
+				)
+			}
 		})
 	})
 })
@@ -393,6 +449,7 @@ var _ = Describe("type AggregateEventStore", func() {
 // that they are equal to expectedEvents.
 func expectEvents(
 	store *AggregateEventStore,
+	hk, id string,
 	offset uint64,
 	expectedEvents []*envelopespec.Envelope,
 ) {
@@ -401,8 +458,8 @@ func expectEvents(
 	for {
 		events, more, err := store.ReadEvents(
 			context.Background(),
-			"<handler>",
-			"<instance>",
+			hk,
+			id,
 			offset,
 		)
 		Expect(err).ShouldNot(HaveOccurred())
