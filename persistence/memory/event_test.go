@@ -78,7 +78,7 @@ var _ = Describe("type AggregateEventStore", func() {
 				context.Background(),
 				"<handler>",
 				"<instance>",
-				0,
+				3,
 				allEvents[3:],
 				false,
 			)
@@ -133,7 +133,7 @@ var _ = Describe("type AggregateEventStore", func() {
 				context.Background(),
 				"<handler>",
 				"<instance>",
-				0,
+				3,
 				allEvents[3:],
 				true,
 			)
@@ -167,7 +167,7 @@ var _ = Describe("type AggregateEventStore", func() {
 				context.Background(),
 				"<handler>",
 				"<instance>",
-				0,
+				3,
 				allEvents[3:],
 				false,
 			)
@@ -202,7 +202,7 @@ var _ = Describe("type AggregateEventStore", func() {
 				context.Background(),
 				"<handler>",
 				"<instance>",
-				0,
+				3,
 				allEvents[3:],
 				false,
 			)
@@ -285,7 +285,7 @@ var _ = Describe("type AggregateEventStore", func() {
 				context.Background(),
 				"<handler>",
 				"<instance>",
-				0,
+				3,
 				allEvents[3:],
 				false,
 			)
@@ -307,8 +307,17 @@ var _ = Describe("type AggregateEventStore", func() {
 	})
 
 	Describe("func WriteEvents()", func() {
-		XIt("returns an error if nextOffset is not the actual next offset", func() {
-			Fail("not implemented")
+		It("returns an error if nextOffset is not the actual next offset", func() {
+			err := store.WriteEvents(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+				3, // incorrect nextOffset
+				allEvents,
+				false,
+			)
+
+			Expect(err).To(MatchError("optimistic concurrency conflict, 3 is not the next offset"))
 		})
 
 		XIt("allows archiving without adding more events", func() {
@@ -346,7 +355,7 @@ var _ = Describe("type AggregateEventStore", func() {
 					context.Background(),
 					inst.HandlerKey,
 					inst.InstanceID,
-					0,
+					uint64(len(events)),
 					events,
 					false,
 				)

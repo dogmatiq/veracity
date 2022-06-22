@@ -130,6 +130,10 @@ func (s *AggregateEventStore) WriteEvents(
 	k := instanceKey{hk, id}
 	e := s.events[k]
 
+	if nextOffset != e.NextOffset {
+		return fmt.Errorf("optimistic concurrency conflict, %d is not the next offset", nextOffset)
+	}
+
 	e.NextOffset += uint64(len(events))
 
 	if archive {
