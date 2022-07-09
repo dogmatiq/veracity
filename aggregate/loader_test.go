@@ -18,12 +18,13 @@ import (
 
 var _ = Describe("type Loader", func() {
 	var (
-		handlerID   configkit.Identity
-		eventStore  *memory.AggregateEventStore
-		eventReader *eventReaderStub
-		snapshots   *memory.AggregateSnapshotStore
-		root        *AggregateRoot
-		loader      *Loader
+		handlerID      configkit.Identity
+		eventStore     *memory.AggregateEventStore
+		eventReader    *eventReaderStub
+		snapshotStore  *memory.AggregateSnapshotStore
+		snapshotReader *snapshotReaderStub
+		root           *AggregateRoot
+		loader         *Loader
 	)
 
 	BeforeEach(func() {
@@ -35,8 +36,12 @@ var _ = Describe("type Loader", func() {
 			EventReader: eventStore,
 		}
 
-		snapshots = &memory.AggregateSnapshotStore{
+		snapshotStore = &memory.AggregateSnapshotStore{
 			Marshaler: Marshaler,
+		}
+
+		snapshotReader = &snapshotReaderStub{
+			SnapshotReader: snapshotStore,
 		}
 
 		root = &AggregateRoot{}
@@ -123,11 +128,34 @@ var _ = Describe("type Loader", func() {
 
 			When("there is a snapshot reader", func() {
 				BeforeEach(func() {
-					loader.SnapshotReader = snapshots
+					loader.SnapshotReader = snapshotReader
 				})
 
-				XIt("returns an error if the context is cancelled while reading the snapshot", func() {
+				It("returns an error if the context is cancelled while reading the snapshot", func() {
+					ctx, cancel := context.WithCancel(context.Background())
+					defer cancel()
 
+					snapshotReader.ReadSnapshotFunc = func(
+						ctx context.Context,
+						hk, id string,
+						r dogma.AggregateRoot,
+						minOffset uint64,
+					) (snapshotOffset uint64, ok bool, _ error) {
+						cancel()
+						return 0, false, ctx.Err()
+					}
+
+					_, _, err := loader.Load(
+						ctx,
+						handlerID,
+						"<instance>",
+						root,
+					)
+					Expect(err).To(
+						MatchError(
+							`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read snapshot: context canceled`,
+						),
+					)
 				})
 
 				XIt("applies all historical events if the snapshot reader fails", func() {
@@ -151,7 +179,7 @@ var _ = Describe("type Loader", func() {
 
 			When("there is a snapshot writer", func() {
 				BeforeEach(func() {
-					loader.SnapshotWriter = snapshots
+					loader.SnapshotWriter = snapshotStore
 				})
 
 				XIt("writes a snapshot if the event reader fails after some events are already applied to the root", func() {
