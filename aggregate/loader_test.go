@@ -158,8 +158,32 @@ var _ = Describe("type Loader", func() {
 					)
 				})
 
-				XIt("applies all historical events if the snapshot reader fails", func() {
+				It("applies all historical events if the snapshot reader fails", func() {
+					snapshotReader.ReadSnapshotFunc = func(
+						ctx context.Context,
+						hk, id string,
+						r dogma.AggregateRoot,
+						minOffset uint64,
+					) (snapshotOffset uint64, ok bool, _ error) {
+						return 0, false, errors.New("<error>")
+					}
 
+					nextOffset, snapshotAge, err := loader.Load(
+						context.Background(),
+						handlerID,
+						"<instance>",
+						root,
+					)
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(nextOffset).To(BeNumerically("==", 3))
+					Expect(snapshotAge).To(BeNumerically("==", 3))
+					Expect(root.AppliedEvents).To(Equal(
+						[]dogma.Message{
+							MessageA1,
+							MessageB1,
+							MessageC1,
+						},
+					))
 				})
 
 				When("there is a snapshot available", func() {
