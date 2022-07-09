@@ -5,11 +5,12 @@ import (
 	"errors"
 
 	"github.com/dogmatiq/configkit"
+	"github.com/dogmatiq/dogma"
 	. "github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/interopspec/envelopespec"
-
 	. "github.com/dogmatiq/marshalkit/fixtures"
 	. "github.com/dogmatiq/veracity/aggregate"
+	. "github.com/dogmatiq/veracity/internal/fixtures"
 	"github.com/dogmatiq/veracity/persistence/memory"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -17,18 +18,21 @@ import (
 
 var _ = Describe("type Loader", func() {
 	var (
-		handlerID configkit.Identity
-		events    *eventReaderStub
-		snapshots *memory.AggregateSnapshotStore
-		root      *AggregateRoot
-		loader    *Loader
+		handlerID   configkit.Identity
+		eventStore  *memory.AggregateEventStore
+		eventReader *eventReaderStub
+		snapshots   *memory.AggregateSnapshotStore
+		root        *AggregateRoot
+		loader      *Loader
 	)
 
 	BeforeEach(func() {
 		handlerID = configkit.MustNewIdentity("<handler-name>", "<handler>")
 
-		events = &eventReaderStub{
-			EventReader: &memory.AggregateEventStore{},
+		eventStore = &memory.AggregateEventStore{}
+
+		eventReader = &eventReaderStub{
+			EventReader: eventStore,
 		}
 
 		snapshots = &memory.AggregateSnapshotStore{
@@ -38,13 +42,14 @@ var _ = Describe("type Loader", func() {
 		root = &AggregateRoot{}
 
 		loader = &Loader{
-			EventReader: events,
+			EventReader: eventReader,
+			Marshaler:   Marshaler,
 		}
 	})
 
 	Describe("func Load()", func() {
 		It("returns an error if event bounds cannot be read", func() {
-			events.ReadBoundsFunc = func(
+			eventReader.ReadBoundsFunc = func(
 				ctx context.Context,
 				hk, id string,
 			) (firstOffset uint64, nextOffset uint64, _ error) {
@@ -80,9 +85,39 @@ var _ = Describe("type Loader", func() {
 		})
 
 		When("the instance has historical events", func() {
-			When("there is no snapshot reader", func() {
-				XIt("applies all historical events to the root", func() {
+			BeforeEach(func() {
+				eventStore.WriteEvents(
+					context.Background(),
+					handlerID.Key,
+					"<instance>",
+					0,
+					[]*envelopespec.Envelope{
+						NewEnvelope("<event-0>", MessageA1),
+						NewEnvelope("<event-1>", MessageB1),
+						NewEnvelope("<event-2>", MessageC1),
+					},
+					false,
+				)
+			})
 
+			When("there is no snapshot reader", func() {
+				It("applies all historical events to the root", func() {
+					nextOffset, snapshotAge, err := loader.Load(
+						context.Background(),
+						handlerID,
+						"<instance>",
+						root,
+					)
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(nextOffset).To(BeNumerically("==", 3))
+					Expect(snapshotAge).To(BeNumerically("==", 3))
+					Expect(root.AppliedEvents).To(Equal(
+						[]dogma.Message{
+							MessageA1,
+							MessageB1,
+							MessageC1,
+						},
+					))
 				})
 			})
 
@@ -120,6 +155,10 @@ var _ = Describe("type Loader", func() {
 				})
 
 				XIt("writes a snapshot if the event reader fails after some events are already applied to the root", func() {
+
+				})
+
+				XIt("writes a snapshot if the unmarshaling fails after some events are already applied to the root", func() {
 
 				})
 

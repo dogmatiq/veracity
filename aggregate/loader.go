@@ -9,12 +9,16 @@ import (
 	"github.com/dogmatiq/dodeca/logging"
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/linger"
+	"github.com/dogmatiq/marshalkit"
 )
 
 // Loader loads aggregate roots from persistent storage.
 type Loader struct {
 	// EventReader is used to read historical events from persistent storage.
 	EventReader EventReader
+
+	// Marshaler is used to unmarshal historical events.
+	Marshaler marshalkit.ValueMarshaler
 
 	// SnapshotReader is used to read snapshots of aggregate roots from
 	// persistent storage.
@@ -327,33 +331,40 @@ func (l *Loader) readEvents(
 	id string,
 	r dogma.AggregateRoot,
 	startOffset uint64,
-) (nextOffset uint64, _ error) {
+) (nextOffset uint64, err error) {
 	nextOffset = startOffset
 
+	defer func() {
+		if err != nil && nextOffset > startOffset {
+			// We managed to read _some_ events before this error occurred,
+			// so we write a new snapshot so that we can "pick up where we
+			// left off" next time we attempt to load this instance.
+			l.writeSnapshot(
+				h,
+				id,
+				r,
+				nextOffset-1, // snapshot offset
+			)
+		}
+	}()
+
 	for {
-		events, more, err := l.EventReader.ReadEvents(
+		envelopes, more, err := l.EventReader.ReadEvents(
 			ctx,
 			h.Key,
 			id,
 			nextOffset,
 		)
 		if err != nil {
-			if nextOffset > startOffset {
-				// We managed to read _some_ events before this error occurred,
-				// so we write a new snapshot so that we can "pick up where we
-				// left off" next time we attempt to load this instance.
-				l.writeSnapshot(
-					h,
-					id,
-					r,
-					nextOffset-1, // snapshot offset
-				)
-			}
-
 			return 0, err
 		}
 
-		for _, ev := range events {
+		for _, env := range envelopes {
+			ev, err := marshalkit.UnmarshalMessageFromEnvelope(l.Marshaler, env)
+			if err != nil {
+				return 0, err
+			}
+
 			r.ApplyEvent(ev)
 			nextOffset++
 		}
