@@ -155,7 +155,7 @@ func (l *Loader) Load(
 		if firstOffset == nextOffset {
 			logging.Log(
 				l.Logger,
-				"aggregate root %s[%s] loaded from up-to-date snapshot taken at offset %s",
+				"aggregate root %s[%s] loaded from up-to-date snapshot taken at offset %d",
 				h.Name,
 				id,
 				snapshotOffset,

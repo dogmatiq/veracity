@@ -188,8 +188,35 @@ var _ = Describe("type Loader", func() {
 
 				When("there is a snapshot available", func() {
 					When("the snapshot is up-to-date", func() {
-						XIt("does not apply any events", func() {
+						BeforeEach(func() {
+							snapshotStore.WriteSnapshot(
+								context.Background(),
+								handlerID.Key,
+								"<instance>",
+								&AggregateRoot{
+									AppliedEvents: []dogma.Message{
+										"<snapshot>",
+									},
+								},
+								2,
+							)
+						})
 
+						It("does not apply any events", func() {
+							nextOffset, snapshotAge, err := loader.Load(
+								context.Background(),
+								handlerID,
+								"<instance>",
+								root,
+							)
+							Expect(err).ShouldNot(HaveOccurred())
+							Expect(nextOffset).To(BeNumerically("==", 3))
+							Expect(snapshotAge).To(BeNumerically("==", 0))
+							Expect(root.AppliedEvents).To(Equal(
+								[]dogma.Message{
+									"<snapshot>",
+								},
+							))
 						})
 					})
 
