@@ -221,8 +221,36 @@ var _ = Describe("type Loader", func() {
 					})
 
 					When("the snapshot is out-of-date", func() {
-						XIt("applies only those events that occurred after the snapshot", func() {
+						BeforeEach(func() {
+							snapshotStore.WriteSnapshot(
+								context.Background(),
+								handlerID.Key,
+								"<instance>",
+								&AggregateRoot{
+									AppliedEvents: []dogma.Message{
+										"<snapshot>",
+									},
+								},
+								1,
+							)
+						})
 
+						It("applies only those events that occurred after the snapshot", func() {
+							nextOffset, snapshotAge, err := loader.Load(
+								context.Background(),
+								handlerID,
+								"<instance>",
+								root,
+							)
+							Expect(err).ShouldNot(HaveOccurred())
+							Expect(nextOffset).To(BeNumerically("==", 3))
+							Expect(snapshotAge).To(BeNumerically("==", 1))
+							Expect(root.AppliedEvents).To(Equal(
+								[]dogma.Message{
+									"<snapshot>",
+									MessageC1,
+								},
+							))
 						})
 					})
 				})
