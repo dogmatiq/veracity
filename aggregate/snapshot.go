@@ -51,7 +51,7 @@ type SnapshotWriter interface {
 	// aggregate instance ID.
 	//
 	// snapshotOffset is the offset of the most recent event that has been
-	// applied to the r.
+	// applied to r.
 	WriteSnapshot(
 		ctx context.Context,
 		hk, id string,
