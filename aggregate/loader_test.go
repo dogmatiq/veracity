@@ -467,6 +467,19 @@ var _ = Describe("type Loader", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 				})
 
+				It("does not apply any events", func() {
+					nextOffset, snapshotAge, err := loader.Load(
+						context.Background(),
+						handlerID,
+						"<instance>",
+						root,
+					)
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(nextOffset).To(BeNumerically("==", 3))
+					Expect(snapshotAge).To(BeNumerically("==", 0))
+					Expect(root.AppliedEvents).To(BeEmpty())
+				})
+
 				When("the instance has been recreated", func() {
 					BeforeEach(func() {
 						err := eventStore.WriteEvents(
@@ -567,12 +580,6 @@ var _ = Describe("type Loader", func() {
 								},
 							))
 						})
-					})
-				})
-
-				When("the instance has not been recreated", func() {
-					XIt("does not apply any events", func() {
-
 					})
 				})
 			})
