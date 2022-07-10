@@ -359,8 +359,36 @@ var _ = Describe("type Loader", func() {
 					))
 				})
 
-				XIt("does not write a snapshot if the event reader fails immediately", func() {
+				It("does not write a snapshot if the event reader fails immediately", func() {
+					eventReader.ReadEventsFunc = func(
+						ctx context.Context,
+						hk, id string,
+						firstOffset uint64,
+					) (events []*envelopespec.Envelope, more bool, _ error) {
+						return nil, false, errors.New("<error>")
+					}
 
+					_, _, err := loader.Load(
+						context.Background(),
+						handlerID,
+						"<instance>",
+						root,
+					)
+					Expect(err).To(
+						MatchError(
+							`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: <error>`,
+						),
+					)
+
+					_, ok, err := snapshotStore.ReadSnapshot(
+						context.Background(),
+						handlerID.Key,
+						"<instance>",
+						root,
+						0,
+					)
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(ok).To(BeFalse())
 				})
 
 				XIt("does not write a snapshot if all events are applied to the root", func() {
