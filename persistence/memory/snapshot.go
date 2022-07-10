@@ -75,11 +75,11 @@ func (s *AggregateSnapshotStore) ReadSnapshot(
 
 // WriteSnapshot saves a snapshot of a specific aggregate instance.
 //
-// hk is the identity key of the aggregate message handler. id is the
-// aggregate instance ID.
+// hk is the identity key of the aggregate message handler. id is the aggregate
+// instance ID.
 //
-// snapshotOffset is the offset of the most recent event that has been
-// applied to r.
+// snapshotOffset is the offset of the most recent event that has been applied
+// to r.
 func (s *AggregateSnapshotStore) WriteSnapshot(
 	ctx context.Context,
 	hk, id string,

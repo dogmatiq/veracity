@@ -15,8 +15,9 @@ var _ = Describe("type AggregateSnapshotStore", func() {
 			}
 
 			return persistencetest.SnapshotContext{
-				Reader: store,
-				Writer: store,
+				Reader:              store,
+				Writer:              store,
+				ArchiveIsHardDelete: true,
 			}
 		},
 	)

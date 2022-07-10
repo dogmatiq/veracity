@@ -16,9 +16,10 @@ import (
 
 // SnapshotContext encapsulates values used during snapshot tests.
 type SnapshotContext struct {
-	Reader    aggregate.SnapshotReader
-	Writer    aggregate.SnapshotWriter
-	AfterEach func()
+	Reader              aggregate.SnapshotReader
+	Writer              aggregate.SnapshotWriter
+	ArchiveIsHardDelete bool
+	AfterEach           func()
 }
 
 // DeclareSnapshotTests declares a function test-suite for persistence of
@@ -313,6 +314,10 @@ func DeclareSnapshotTests(
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
+			if !tc.ArchiveIsHardDelete {
+				ginkgo.Skip("archived snapshots are not hard deleted")
+			}
+
 			_, ok, err := tc.Reader.ReadSnapshot(
 				ctx,
 				"<handler>",
@@ -378,6 +383,15 @@ func DeclareSnapshotTests(
 				gomega.Expect(snapshotOffset).To(gomega.BeNumerically("==", i))
 				gomega.Expect(root.Value).To(gomega.Equal(inst.HandlerKey + inst.InstanceID))
 			}
+		})
+
+		ginkgo.It("does not return an error if the snapshot does not exist", func() {
+			err := tc.Writer.ArchiveSnapshots(
+				ctx,
+				"<handler>",
+				"<instance>",
+			)
+			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 		})
 	})
 }
