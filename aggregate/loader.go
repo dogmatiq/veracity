@@ -9,12 +9,16 @@ import (
 	"github.com/dogmatiq/dodeca/logging"
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/linger"
+	"github.com/dogmatiq/marshalkit"
 )
 
 // Loader loads aggregate roots from persistent storage.
 type Loader struct {
 	// EventReader is used to read historical events from persistent storage.
 	EventReader EventReader
+
+	// Marshaler is used to unmarshal historical events.
+	Marshaler marshalkit.ValueMarshaler
 
 	// SnapshotReader is used to read snapshots of aggregate roots from
 	// persistent storage.
@@ -113,7 +117,7 @@ func (l *Loader) Load(
 	if firstOffset == nextOffset {
 		logging.Log(
 			l.Logger,
-			"aggregate root %s[%s] has no historical events since being destroyed at offset %s",
+			"aggregate root %s[%s] has no historical events since being destroyed at offset %d",
 			h.Name,
 			id,
 			firstOffset-1,
@@ -129,7 +133,7 @@ func (l *Loader) Load(
 		h,
 		id,
 		r,
-		firstOffset+1, // ignore any snapshots unless they were taken after the first event
+		firstOffset, // ignore any snapshots that were taken before the first relevant event
 	)
 	if err != nil {
 		return 0, 0, fmt.Errorf(
@@ -151,7 +155,7 @@ func (l *Loader) Load(
 		if firstOffset == nextOffset {
 			logging.Log(
 				l.Logger,
-				"aggregate root %s[%s] loaded from up-to-date snapshot taken at offset %s",
+				"aggregate root %s[%s] loaded from up-to-date snapshot taken at offset %d",
 				h.Name,
 				id,
 				snapshotOffset,
@@ -172,6 +176,18 @@ func (l *Loader) Load(
 		firstOffset,
 	)
 	if err != nil {
+		if nextOffset > firstOffset {
+			// We managed to read _some_ events before this error occurred,
+			// so we write a new snapshot so that we can "pick up where we
+			// left off" next time we attempt to load this instance.
+			l.writeSnapshot(
+				h,
+				id,
+				r,
+				nextOffset-1, // snapshot offset
+			)
+		}
+
 		return 0, 0, fmt.Errorf(
 			"aggregate root %s[%s] cannot be loaded: unable to read events: %w",
 			h.Name,
@@ -292,7 +308,7 @@ func (l *Loader) writeSnapshot(
 	); err != nil {
 		logging.Log(
 			l.Logger,
-			"outdated snapshot of aggregate root %s[%s] cannot be be written at offset %d: %w",
+			"(possibly outdated) snapshot of aggregate root %s[%s] cannot be be written at offset %d: %w",
 			h.Name,
 			id,
 			snapshotOffset,
@@ -304,7 +320,7 @@ func (l *Loader) writeSnapshot(
 
 	logging.Log(
 		l.Logger,
-		"outdated snapshot of aggregate root %s[%s] written at offset %d",
+		"(possibly outdated) snapshot of aggregate root %s[%s] written at offset %d",
 		h.Name,
 		id,
 		snapshotOffset,
@@ -315,45 +331,35 @@ func (l *Loader) writeSnapshot(
 //
 // startOffset is the offset of the first event to read.
 //
-// If an error occurs after applying some of the historical events a new
-// snapshot is taken. This reduces the number of events that need to be read on
-// subsequent attempts to load this instance.
-//
 // It returns the offset of the next event to be recorded by this instance. Note
 // this may be greater than the nextOffset loaded by the initial bounds check.
+// The next offset is returned even if err is non-nil.
 func (l *Loader) readEvents(
 	ctx context.Context,
 	h configkit.Identity,
 	id string,
 	r dogma.AggregateRoot,
 	startOffset uint64,
-) (nextOffset uint64, _ error) {
+) (nextOffset uint64, err error) {
 	nextOffset = startOffset
 
 	for {
-		events, more, err := l.EventReader.ReadEvents(
+		envelopes, more, err := l.EventReader.ReadEvents(
 			ctx,
 			h.Key,
 			id,
 			nextOffset,
 		)
 		if err != nil {
-			if nextOffset > startOffset {
-				// We managed to read _some_ events before this error occurred,
-				// so we write a new snapshot so that we can "pick up where we
-				// left off" next time we attempt to load this instance.
-				l.writeSnapshot(
-					h,
-					id,
-					r,
-					nextOffset-1, // snapshot offset
-				)
-			}
-
-			return 0, err
+			return nextOffset, err
 		}
 
-		for _, ev := range events {
+		for _, env := range envelopes {
+			ev, err := marshalkit.UnmarshalMessageFromEnvelope(l.Marshaler, env)
+			if err != nil {
+				return nextOffset, err
+			}
+
 			r.ApplyEvent(ev)
 			nextOffset++
 		}
