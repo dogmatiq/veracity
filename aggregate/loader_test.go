@@ -537,8 +537,35 @@ var _ = Describe("type Loader", func() {
 							))
 						})
 
-						XIt("ignores snapshots taken before destruction", func() {
+						It("ignores snapshots taken before destruction", func() {
+							err := snapshotStore.WriteSnapshot(
+								context.Background(),
+								handlerID.Key,
+								"<instance>",
+								&AggregateRoot{
+									AppliedEvents: []dogma.Message{
+										"<snapshot>",
+									},
+								},
+								2,
+							)
+							Expect(err).ShouldNot(HaveOccurred())
 
+							nextOffset, snapshotAge, err := loader.Load(
+								context.Background(),
+								handlerID,
+								"<instance>",
+								root,
+							)
+							Expect(err).ShouldNot(HaveOccurred())
+							Expect(nextOffset).To(BeNumerically("==", 5))
+							Expect(snapshotAge).To(BeNumerically("==", 2))
+							Expect(root.AppliedEvents).To(Equal(
+								[]dogma.Message{
+									MessageD1,
+									MessageE1,
+								},
+							))
 						})
 					})
 				})
