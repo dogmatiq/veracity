@@ -176,6 +176,18 @@ func (l *Loader) Load(
 		firstOffset,
 	)
 	if err != nil {
+		if nextOffset > firstOffset {
+			// We managed to read _some_ events before this error occurred,
+			// so we write a new snapshot so that we can "pick up where we
+			// left off" next time we attempt to load this instance.
+			l.writeSnapshot(
+				h,
+				id,
+				r,
+				nextOffset-1, // snapshot offset
+			)
+		}
+
 		return 0, 0, fmt.Errorf(
 			"aggregate root %s[%s] cannot be loaded: unable to read events: %w",
 			h.Name,
@@ -296,7 +308,7 @@ func (l *Loader) writeSnapshot(
 	); err != nil {
 		logging.Log(
 			l.Logger,
-			"outdated snapshot of aggregate root %s[%s] cannot be be written at offset %d: %w",
+			"(possibly outdated) snapshot of aggregate root %s[%s] cannot be be written at offset %d: %w",
 			h.Name,
 			id,
 			snapshotOffset,
@@ -308,7 +320,7 @@ func (l *Loader) writeSnapshot(
 
 	logging.Log(
 		l.Logger,
-		"outdated snapshot of aggregate root %s[%s] written at offset %d",
+		"(possibly outdated) snapshot of aggregate root %s[%s] written at offset %d",
 		h.Name,
 		id,
 		snapshotOffset,
@@ -319,12 +331,9 @@ func (l *Loader) writeSnapshot(
 //
 // startOffset is the offset of the first event to read.
 //
-// If an error occurs after applying some of the historical events a new
-// snapshot is taken. This reduces the number of events that need to be read on
-// subsequent attempts to load this instance.
-//
 // It returns the offset of the next event to be recorded by this instance. Note
 // this may be greater than the nextOffset loaded by the initial bounds check.
+// The next offset is returned even if err is non-nil.
 func (l *Loader) readEvents(
 	ctx context.Context,
 	h configkit.Identity,
@@ -334,20 +343,6 @@ func (l *Loader) readEvents(
 ) (nextOffset uint64, err error) {
 	nextOffset = startOffset
 
-	defer func() {
-		if err != nil && nextOffset > startOffset {
-			// We managed to read _some_ events before this error occurred,
-			// so we write a new snapshot so that we can "pick up where we
-			// left off" next time we attempt to load this instance.
-			l.writeSnapshot(
-				h,
-				id,
-				r,
-				nextOffset-1, // snapshot offset
-			)
-		}
-	}()
-
 	for {
 		envelopes, more, err := l.EventReader.ReadEvents(
 			ctx,
@@ -356,13 +351,13 @@ func (l *Loader) readEvents(
 			nextOffset,
 		)
 		if err != nil {
-			return 0, err
+			return nextOffset, err
 		}
 
 		for _, env := range envelopes {
 			ev, err := marshalkit.UnmarshalMessageFromEnvelope(l.Marshaler, env)
 			if err != nil {
-				return 0, err
+				return nextOffset, err
 			}
 
 			r.ApplyEvent(ev)

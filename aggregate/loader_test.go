@@ -261,8 +261,53 @@ var _ = Describe("type Loader", func() {
 					loader.SnapshotWriter = snapshotStore
 				})
 
-				XIt("writes a snapshot if the event reader fails after some events are already applied to the root", func() {
+				It("writes a snapshot if the event reader fails after some events are already applied to the root", func() {
+					eventReader.ReadEventsFunc = func(
+						ctx context.Context,
+						hk, id string,
+						firstOffset uint64,
+					) (events []*envelopespec.Envelope, more bool, _ error) {
+						events, more, err := eventStore.ReadEvents(ctx, hk, id, firstOffset)
+						if err != nil {
+							return nil, false, err
+						}
 
+						if len(events) > 0 {
+							return events, true, nil
+						}
+
+						return nil, false, errors.New("<error>")
+					}
+
+					_, _, err := loader.Load(
+						context.Background(),
+						handlerID,
+						"<instance>",
+						root,
+					)
+					Expect(err).To(
+						MatchError(
+							`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: <error>`,
+						),
+					)
+
+					snapshotOffset, ok, err := snapshotStore.ReadSnapshot(
+						context.Background(),
+						handlerID.Key,
+						"<instance>",
+						root,
+						0,
+					)
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(ok).To(BeTrue())
+					Expect(snapshotOffset).To(BeNumerically("==", 2))
+					Expect(root.AppliedEvents).To(Equal(
+						[]dogma.Message{
+							map[string]any{"Value": "A1"},
+							map[string]any{"Value": "B1"},
+							map[string]any{"Value": "C1"},
+						},
+					))
 				})
 
 				XIt("writes a snapshot if the unmarshaling fails after some events are already applied to the root", func() {
