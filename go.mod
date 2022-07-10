@@ -3,6 +3,7 @@ module github.com/dogmatiq/veracity
 go 1.18
 
 require (
+	github.com/aws/aws-sdk-go v1.44.51
 	github.com/dogmatiq/configkit v0.11.1
 	github.com/dogmatiq/dodeca v1.3.1
 	github.com/dogmatiq/dogma v0.11.1
@@ -21,6 +22,7 @@ require (
 	github.com/fxamacker/cbor/v2 v2.3.0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/go-cmp v0.5.5 // indirect
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/net v0.0.0-20220225172249-27dd8689420f // indirect
 	golang.org/x/sys v0.0.0-20220319134239-a9b59b0215f8 // indirect
