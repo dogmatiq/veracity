@@ -23,6 +23,7 @@ var _ = Describe("type Loader", func() {
 		eventReader    *eventReaderStub
 		snapshotStore  *memory.AggregateSnapshotStore
 		snapshotReader *snapshotReaderStub
+		snapshotWriter *snapshotWriterStub
 		root           *AggregateRoot
 		loader         *Loader
 	)
@@ -44,6 +45,10 @@ var _ = Describe("type Loader", func() {
 			SnapshotReader: snapshotStore,
 		}
 
+		snapshotWriter = &snapshotWriterStub{
+			SnapshotWriter: snapshotStore,
+		}
+
 		root = &AggregateRoot{}
 
 		loader = &Loader{
@@ -57,7 +62,7 @@ var _ = Describe("type Loader", func() {
 			eventReader.ReadBoundsFunc = func(
 				ctx context.Context,
 				hk, id string,
-			) (firstOffset uint64, nextOffset uint64, _ error) {
+			) (uint64, uint64, error) {
 				return 0, 0, errors.New("<error>")
 			}
 
@@ -140,7 +145,7 @@ var _ = Describe("type Loader", func() {
 						hk, id string,
 						r dogma.AggregateRoot,
 						minOffset uint64,
-					) (snapshotOffset uint64, ok bool, _ error) {
+					) (uint64, bool, error) {
 						cancel()
 						return 0, false, ctx.Err()
 					}
@@ -164,7 +169,7 @@ var _ = Describe("type Loader", func() {
 						hk, id string,
 						r dogma.AggregateRoot,
 						minOffset uint64,
-					) (snapshotOffset uint64, ok bool, _ error) {
+					) (uint64, bool, error) {
 						return 0, false, errors.New("<error>")
 					}
 
@@ -258,157 +263,191 @@ var _ = Describe("type Loader", func() {
 
 			When("there is a snapshot writer", func() {
 				BeforeEach(func() {
-					loader.SnapshotWriter = snapshotStore
+					loader.SnapshotWriter = snapshotWriter
 				})
 
-				It("writes a snapshot if the event reader fails after some events are already applied to the root", func() {
-					eventReader.ReadEventsFunc = func(
-						ctx context.Context,
-						hk, id string,
-						firstOffset uint64,
-					) (events []*envelopespec.Envelope, more bool, _ error) {
-						events, more, err := eventStore.ReadEvents(ctx, hk, id, firstOffset)
-						if err != nil {
-							return nil, false, err
-						}
+				When("all historical events are applied", func() {
+					It("does not write a snapshot", func() {
+						_, _, err := loader.Load(
+							context.Background(),
+							handlerID,
+							"<instance>",
+							root,
+						)
+						Expect(err).ShouldNot(HaveOccurred())
 
-						if len(events) > 0 {
-							return events, true, nil
-						}
-
-						return nil, false, errors.New("<error>")
-					}
-
-					_, _, err := loader.Load(
-						context.Background(),
-						handlerID,
-						"<instance>",
-						root,
-					)
-					Expect(err).To(
-						MatchError(
-							`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: <error>`,
-						),
-					)
-
-					snapshotOffset, ok, err := snapshotStore.ReadSnapshot(
-						context.Background(),
-						handlerID.Key,
-						"<instance>",
-						root,
-						0,
-					)
-					Expect(err).ShouldNot(HaveOccurred())
-					Expect(ok).To(BeTrue())
-					Expect(snapshotOffset).To(BeNumerically("==", 2))
-					Expect(root.AppliedEvents).To(Equal(
-						[]dogma.Message{
-							map[string]any{"Value": "A1"},
-							map[string]any{"Value": "B1"},
-							map[string]any{"Value": "C1"},
-						},
-					))
+						_, ok, err := snapshotStore.ReadSnapshot(
+							context.Background(),
+							handlerID.Key,
+							"<instance>",
+							root,
+							0,
+						)
+						Expect(err).ShouldNot(HaveOccurred())
+						Expect(ok).To(BeFalse())
+					})
 				})
 
-				It("writes a snapshot if the unmarshaling fails after some events are already applied to the root", func() {
-					eventReader.ReadEventsFunc = func(
-						ctx context.Context,
-						hk, id string,
-						firstOffset uint64,
-					) (events []*envelopespec.Envelope, more bool, _ error) {
-						events, more, err := eventStore.ReadEvents(ctx, hk, id, firstOffset)
-						if err != nil {
-							return nil, false, err
+				When("no historical events are applied", func() {
+					It("does not write a snapshot", func() {
+						eventReader.ReadEventsFunc = func(
+							ctx context.Context,
+							hk, id string,
+							firstOffset uint64,
+						) ([]*envelopespec.Envelope, bool, error) {
+							return nil, false, errors.New("<error>")
 						}
 
-						if len(events) > 0 {
-							return events, true, nil
+						_, _, err := loader.Load(
+							context.Background(),
+							handlerID,
+							"<instance>",
+							root,
+						)
+						Expect(err).To(
+							MatchError(
+								`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: <error>`,
+							),
+						)
+
+						_, ok, err := snapshotStore.ReadSnapshot(
+							context.Background(),
+							handlerID.Key,
+							"<instance>",
+							root,
+							0,
+						)
+						Expect(err).ShouldNot(HaveOccurred())
+						Expect(ok).To(BeFalse())
+					})
+				})
+
+				When("a subset of historical events are applied", func() {
+					It("writes a snapshot if the event reader fails", func() {
+						eventReader.ReadEventsFunc = func(
+							ctx context.Context,
+							hk, id string,
+							firstOffset uint64,
+						) ([]*envelopespec.Envelope, bool, error) {
+							events, _, _ := eventStore.ReadEvents(ctx, hk, id, firstOffset)
+							if len(events) > 0 {
+								return events, true, nil
+							}
+
+							return nil, false, errors.New("<error>")
 						}
 
-						return []*envelopespec.Envelope{{ /*empty envelope*/ }}, false, nil
-					}
+						_, _, err := loader.Load(
+							context.Background(),
+							handlerID,
+							"<instance>",
+							root,
+						)
+						Expect(err).To(
+							MatchError(
+								`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: <error>`,
+							),
+						)
 
-					_, _, err := loader.Load(
-						context.Background(),
-						handlerID,
-						"<instance>",
-						root,
-					)
-					Expect(err).To(
-						MatchError(
-							`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: mime: no media type`,
-						),
-					)
+						snapshotOffset, ok, err := snapshotStore.ReadSnapshot(
+							context.Background(),
+							handlerID.Key,
+							"<instance>",
+							root,
+							0,
+						)
+						Expect(err).ShouldNot(HaveOccurred())
+						Expect(ok).To(BeTrue())
+						Expect(snapshotOffset).To(BeNumerically("==", 2))
+						Expect(root.AppliedEvents).To(Equal(
+							[]dogma.Message{
+								map[string]any{"Value": "A1"},
+								map[string]any{"Value": "B1"},
+								map[string]any{"Value": "C1"},
+							},
+						))
+					})
 
-					snapshotOffset, ok, err := snapshotStore.ReadSnapshot(
-						context.Background(),
-						handlerID.Key,
-						"<instance>",
-						root,
-						0,
-					)
-					Expect(err).ShouldNot(HaveOccurred())
-					Expect(ok).To(BeTrue())
-					Expect(snapshotOffset).To(BeNumerically("==", 2))
-					Expect(root.AppliedEvents).To(Equal(
-						[]dogma.Message{
-							map[string]any{"Value": "A1"},
-							map[string]any{"Value": "B1"},
-							map[string]any{"Value": "C1"},
-						},
-					))
-				})
+					It("writes a snapshot if unmarshaling an envelope fails", func() {
+						eventReader.ReadEventsFunc = func(
+							ctx context.Context,
+							hk, id string,
+							firstOffset uint64,
+						) ([]*envelopespec.Envelope, bool, error) {
+							events, _, _ := eventStore.ReadEvents(ctx, hk, id, firstOffset)
+							if len(events) > 0 {
+								return events, true, nil
+							}
 
-				It("does not write a snapshot if the event reader fails immediately", func() {
-					eventReader.ReadEventsFunc = func(
-						ctx context.Context,
-						hk, id string,
-						firstOffset uint64,
-					) (events []*envelopespec.Envelope, more bool, _ error) {
-						return nil, false, errors.New("<error>")
-					}
+							return []*envelopespec.Envelope{{ /*empty envelope*/ }}, false, nil
+						}
 
-					_, _, err := loader.Load(
-						context.Background(),
-						handlerID,
-						"<instance>",
-						root,
-					)
-					Expect(err).To(
-						MatchError(
-							`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: <error>`,
-						),
-					)
+						_, _, err := loader.Load(
+							context.Background(),
+							handlerID,
+							"<instance>",
+							root,
+						)
+						Expect(err).To(
+							MatchError(
+								`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: mime: no media type`,
+							),
+						)
 
-					_, ok, err := snapshotStore.ReadSnapshot(
-						context.Background(),
-						handlerID.Key,
-						"<instance>",
-						root,
-						0,
-					)
-					Expect(err).ShouldNot(HaveOccurred())
-					Expect(ok).To(BeFalse())
-				})
+						snapshotOffset, ok, err := snapshotStore.ReadSnapshot(
+							context.Background(),
+							handlerID.Key,
+							"<instance>",
+							root,
+							0,
+						)
+						Expect(err).ShouldNot(HaveOccurred())
+						Expect(ok).To(BeTrue())
+						Expect(snapshotOffset).To(BeNumerically("==", 2))
+						Expect(root.AppliedEvents).To(Equal(
+							[]dogma.Message{
+								map[string]any{"Value": "A1"},
+								map[string]any{"Value": "B1"},
+								map[string]any{"Value": "C1"},
+							},
+						))
+					})
 
-				It("does not write a snapshot if all events are applied to the root", func() {
-					_, _, err := loader.Load(
-						context.Background(),
-						handlerID,
-						"<instance>",
-						root,
-					)
-					Expect(err).ShouldNot(HaveOccurred())
+					It("does not return a snapshot-related error if the snapshot cannot be written", func() {
+						eventReader.ReadEventsFunc = func(
+							ctx context.Context,
+							hk, id string,
+							firstOffset uint64,
+						) ([]*envelopespec.Envelope, bool, error) {
+							events, _, _ := eventStore.ReadEvents(ctx, hk, id, firstOffset)
+							if len(events) > 0 {
+								return events, true, nil
+							}
 
-					_, ok, err := snapshotStore.ReadSnapshot(
-						context.Background(),
-						handlerID.Key,
-						"<instance>",
-						root,
-						0,
-					)
-					Expect(err).ShouldNot(HaveOccurred())
-					Expect(ok).To(BeFalse())
+							return nil, false, errors.New("<causal error>")
+						}
+
+						snapshotWriter.WriteSnapshotFunc = func(
+							ctx context.Context,
+							hk, id string,
+							r dogma.AggregateRoot,
+							snapshotOffset uint64,
+						) error {
+							return errors.New("<snapshot error>")
+						}
+
+						_, _, err := loader.Load(
+							context.Background(),
+							handlerID,
+							"<instance>",
+							root,
+						)
+						Expect(err).To(
+							MatchError(
+								`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: <causal error>`,
+							),
+						)
+					})
 				})
 			})
 
