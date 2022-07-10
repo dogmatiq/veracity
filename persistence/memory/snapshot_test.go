@@ -8,10 +8,16 @@ import (
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/marshalkit/codec"
 	"github.com/dogmatiq/marshalkit/codec/json"
+	"github.com/dogmatiq/veracity/aggregate"
 	. "github.com/dogmatiq/veracity/persistence/memory"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+)
+
+var (
+	_ aggregate.SnapshotReader = (*AggregateSnapshotStore)(nil)
+	_ aggregate.SnapshotWriter = (*AggregateSnapshotStore)(nil)
 )
 
 type aggregateRoot struct {

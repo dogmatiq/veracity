@@ -57,9 +57,12 @@ type EventWriter interface {
 	// hk is the identity key of the aggregate message handler. id is the
 	// aggregate instance ID.
 	//
-	// nextOffset must be the offset immediately after the offset of the last
-	// event written; otherwise, no events are recorded and an error is
+	// startOffset must be the offset of the first non-archived event, as
+	// returned by ReadBounds(); otherwise, no action is taken and an error is
 	// returned.
+	//
+	// nextOffset must be the offset immediately after the offset of the last
+	// event written; otherwise, no action is taken and an error is returned.
 	//
 	// If archive is true, all prior events and the events being written by this
 	// call are archived. Archived events are typically still made available to
@@ -71,7 +74,7 @@ type EventWriter interface {
 	WriteEvents(
 		ctx context.Context,
 		hk, id string,
-		nextOffset uint64, // TODO: think about command idempotence
+		startOffset, nextOffset uint64, // TODO: think about command idempotence
 		events []*envelopespec.Envelope,
 		archive bool,
 	) error

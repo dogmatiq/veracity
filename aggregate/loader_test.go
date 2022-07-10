@@ -102,6 +102,7 @@ var _ = Describe("type Loader", func() {
 					handlerID.Key,
 					"<instance>",
 					0,
+					0,
 					[]*envelopespec.Envelope{
 						NewEnvelope("<event-0>", MessageA1),
 						NewEnvelope("<event-1>", MessageB1),
@@ -465,6 +466,7 @@ var _ = Describe("type Loader", func() {
 						context.Background(),
 						handlerID.Key,
 						"<instance>",
+						0,
 						3,
 						nil,
 						true, // archive
@@ -492,6 +494,7 @@ var _ = Describe("type Loader", func() {
 							context.Background(),
 							handlerID.Key,
 							"<instance>",
+							3,
 							3,
 							[]*envelopespec.Envelope{
 								NewEnvelope("<event-3>", MessageD1),

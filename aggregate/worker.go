@@ -65,6 +65,9 @@ type Worker struct {
 	// root is the aggregate root for this instance.
 	root dogma.AggregateRoot
 
+	// startOffset is the offset of the first non-archived event.
+	startOffset uint64
+
 	// nextOffset is the offset of the next event that will be recorded by this
 	// instance.
 	nextOffset uint64
@@ -88,13 +91,13 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 }
 
-// loadRoot loads the aggregate root, populating w.root, w.nextOffset and
-// w.snapshotAge.
+// loadRoot loads the aggregate root, populating w.root, w.firstOffset,
+// w.nextOffset and w.snapshotAge.
 func (w *Worker) loadRoot(ctx context.Context) error {
 	var err error
 	w.root = w.Handler.New()
 
-	_, w.nextOffset, w.snapshotAge, err = w.Loader.Load(
+	w.startOffset, w.nextOffset, w.snapshotAge, err = w.Loader.Load(
 		ctx,
 		w.HandlerIdentity,
 		w.InstanceID,
@@ -148,6 +151,7 @@ func (w *Worker) handleCommand(
 		ctx,
 		w.HandlerIdentity.Key,
 		w.InstanceID,
+		w.startOffset,
 		w.nextOffset,
 		sc.EventEnvelopes,
 		sc.IsDestroyed, // archive events if instance is destroyed
@@ -159,7 +163,10 @@ func (w *Worker) handleCommand(
 	// responses are handled by the supervisor.
 	cmd.Result <- nil
 
+	w.nextOffset += uint64(len(sc.EventEnvelopes))
+
 	if sc.IsDestroyed {
+		w.startOffset = w.nextOffset
 		return true, w.archiveSnapshots(ctx)
 	}
 
