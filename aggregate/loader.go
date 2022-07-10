@@ -117,7 +117,7 @@ func (l *Loader) Load(
 	if firstOffset == nextOffset {
 		logging.Log(
 			l.Logger,
-			"aggregate root %s[%s] has no historical events since being destroyed at offset %s",
+			"aggregate root %s[%s] has no historical events since being destroyed at offset %d",
 			h.Name,
 			id,
 			firstOffset-1,

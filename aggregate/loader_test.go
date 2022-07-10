@@ -96,7 +96,7 @@ var _ = Describe("type Loader", func() {
 
 		When("the instance has historical events", func() {
 			BeforeEach(func() {
-				eventStore.WriteEvents(
+				err := eventStore.WriteEvents(
 					context.Background(),
 					handlerID.Key,
 					"<instance>",
@@ -106,8 +106,9 @@ var _ = Describe("type Loader", func() {
 						NewEnvelope("<event-1>", MessageB1),
 						NewEnvelope("<event-2>", MessageC1),
 					},
-					false,
+					false, // archive
 				)
+				Expect(err).ShouldNot(HaveOccurred())
 			})
 
 			When("there is no snapshot reader", func() {
@@ -452,9 +453,50 @@ var _ = Describe("type Loader", func() {
 			})
 
 			When("the instance has been destroyed", func() {
-				When("the instance has been recreated", func() {
-					XIt("applies only those events that occurred after destruction", func() {
+				BeforeEach(func() {
+					err := eventStore.WriteEvents(
+						context.Background(),
+						handlerID.Key,
+						"<instance>",
+						3,
+						nil,
+						true, // archive
+					)
+					Expect(err).ShouldNot(HaveOccurred())
+				})
 
+				When("the instance has been recreated", func() {
+					BeforeEach(func() {
+						err := eventStore.WriteEvents(
+							context.Background(),
+							handlerID.Key,
+							"<instance>",
+							3,
+							[]*envelopespec.Envelope{
+								NewEnvelope("<event-3>", MessageD1),
+								NewEnvelope("<event-4>", MessageE1),
+							},
+							false, // archive
+						)
+						Expect(err).ShouldNot(HaveOccurred())
+					})
+
+					It("applies only those events that occurred after destruction", func() {
+						nextOffset, snapshotAge, err := loader.Load(
+							context.Background(),
+							handlerID,
+							"<instance>",
+							root,
+						)
+						Expect(err).ShouldNot(HaveOccurred())
+						Expect(nextOffset).To(BeNumerically("==", 5))
+						Expect(snapshotAge).To(BeNumerically("==", 2))
+						Expect(root.AppliedEvents).To(Equal(
+							[]dogma.Message{
+								MessageD1,
+								MessageE1,
+							},
+						))
 					})
 
 					When("there is a snapshot available", func() {
