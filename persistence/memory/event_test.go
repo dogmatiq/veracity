@@ -5,11 +5,17 @@ import (
 
 	. "github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/interopspec/envelopespec"
+	"github.com/dogmatiq/veracity/aggregate"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
 	. "github.com/dogmatiq/veracity/persistence/memory"
 	. "github.com/jmalloc/gomegax"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+)
+
+var (
+	_ aggregate.EventReader = (*AggregateEventStore)(nil)
+	_ aggregate.EventWriter = (*AggregateEventStore)(nil)
 )
 
 var _ = Describe("type AggregateEventStore", func() {
@@ -45,8 +51,9 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
+				0,
 				allEvents,
-				false,
+				false, // archive
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -65,8 +72,9 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
+				0,
 				allEvents[:3],
-				false,
+				false, // archive
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -74,9 +82,10 @@ var _ = Describe("type AggregateEventStore", func() {
 				context.Background(),
 				"<handler>",
 				"<instance>",
+				0,
 				3,
 				allEvents[3:],
-				false,
+				false, // archive
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -95,8 +104,9 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
+				0,
 				allEvents,
-				false,
+				false, // archive
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -115,8 +125,9 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
+				0,
 				allEvents[:3],
-				false,
+				false, // archive
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -124,9 +135,10 @@ var _ = Describe("type AggregateEventStore", func() {
 				context.Background(),
 				"<handler>",
 				"<instance>",
+				0,
 				3,
 				allEvents[3:],
-				true,
+				true, // archive
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -146,8 +158,9 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
+				0,
 				allEvents[:3],
-				true,
+				true, // archive
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -156,8 +169,9 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				3,
+				3,
 				allEvents[3:],
-				false,
+				false, // archive
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -179,8 +193,9 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
+				0,
 				allEvents[:3],
-				false,
+				false, // archive
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -188,9 +203,10 @@ var _ = Describe("type AggregateEventStore", func() {
 				context.Background(),
 				"<handler>",
 				"<instance>",
+				0,
 				3,
 				allEvents[3:],
-				false,
+				false, // archive
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 			expectEvents(
@@ -220,8 +236,9 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
+				0,
 				allEvents,
-				false,
+				false, // archive
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -244,8 +261,9 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
+				0,
 				allEvents,
-				true,
+				true, // archive
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -264,8 +282,9 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
+				0,
 				allEvents[:3],
-				true,
+				true, // archive
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -274,8 +293,9 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				3,
+				3,
 				allEvents[3:],
-				false,
+				false, // archive
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 			expectEvents(
@@ -299,14 +319,28 @@ var _ = Describe("type AggregateEventStore", func() {
 	})
 
 	Describe("func WriteEvents()", func() {
+		It("returns an error if firstOffset is not the actual first offset", func() {
+			err := store.WriteEvents(
+				context.Background(),
+				"<handler>",
+				"<instance>",
+				3, // incorrect firstOffset
+				0,
+				allEvents,
+				false, // archive
+			)
+			Expect(err).To(MatchError("optimistic concurrency conflict, 3 is not the first offset"))
+		})
+
 		It("returns an error if nextOffset is not the actual next offset", func() {
 			err := store.WriteEvents(
 				context.Background(),
 				"<handler>",
 				"<instance>",
+				0,
 				3, // incorrect nextOffset
 				allEvents,
-				false,
+				false, // archive
 			)
 			Expect(err).To(MatchError("optimistic concurrency conflict, 3 is not the next offset"))
 		})
@@ -317,8 +351,9 @@ var _ = Describe("type AggregateEventStore", func() {
 				"<handler>",
 				"<instance>",
 				0,
+				0,
 				allEvents,
-				false,
+				false, // archive
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -326,6 +361,7 @@ var _ = Describe("type AggregateEventStore", func() {
 				context.Background(),
 				"<handler>",
 				"<instance>",
+				0,
 				5,
 				nil, // don't add more events
 				true,
@@ -363,8 +399,9 @@ var _ = Describe("type AggregateEventStore", func() {
 					inst.HandlerKey,
 					inst.InstanceID,
 					0,
+					0,
 					events,
-					true,
+					true, // archive
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -373,8 +410,9 @@ var _ = Describe("type AggregateEventStore", func() {
 					inst.HandlerKey,
 					inst.InstanceID,
 					uint64(len(events)),
+					uint64(len(events)),
 					events,
-					false,
+					false, // archive
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 			}
@@ -416,8 +454,9 @@ var _ = Describe("type AggregateEventStore", func() {
 					inst.HandlerKey,
 					inst.InstanceID,
 					0,
+					0,
 					events,
-					true,
+					true, // archive
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -426,8 +465,9 @@ var _ = Describe("type AggregateEventStore", func() {
 					inst.HandlerKey,
 					inst.InstanceID,
 					uint64(len(events)),
+					uint64(len(events)),
 					events,
-					false,
+					false, // archive
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 			}

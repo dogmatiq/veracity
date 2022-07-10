@@ -97,8 +97,12 @@ func (s *AggregateEventStore) ReadEvents(
 // hk is the identity key of the aggregate message handler. id is the aggregate
 // instance ID.
 //
-// nextOffset must be the offset immediately after the offset of the last event
-// written; otherwise, no events are recorded and an error is returned.
+// startOffset must be the offset of the first non-archived event, as
+// returned by ReadBounds(); otherwise, no action is taken and an error is
+// returned.
+//
+// nextOffset must be the offset immediately after the offset of the last
+// event written; otherwise, no action is taken and an error is returned.
 //
 // If archive is true, all prior events and the events being written by this
 // call are archived. Archived events are typically still made available to
@@ -110,7 +114,7 @@ func (s *AggregateEventStore) ReadEvents(
 func (s *AggregateEventStore) WriteEvents(
 	ctx context.Context,
 	hk, id string,
-	nextOffset uint64,
+	firstOffset, nextOffset uint64,
 	events []*envelopespec.Envelope,
 	archive bool,
 ) error {
@@ -132,6 +136,10 @@ func (s *AggregateEventStore) WriteEvents(
 
 	k := instanceKey{hk, id}
 	e := s.events[k]
+
+	if firstOffset != e.FirstOffset {
+		return fmt.Errorf("optimistic concurrency conflict, %d is not the first offset", firstOffset)
+	}
 
 	if nextOffset != e.NextOffset {
 		return fmt.Errorf("optimistic concurrency conflict, %d is not the next offset", nextOffset)
