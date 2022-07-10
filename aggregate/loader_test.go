@@ -391,8 +391,24 @@ var _ = Describe("type Loader", func() {
 					Expect(ok).To(BeFalse())
 				})
 
-				XIt("does not write a snapshot if all events are applied to the root", func() {
+				It("does not write a snapshot if all events are applied to the root", func() {
+					_, _, err := loader.Load(
+						context.Background(),
+						handlerID,
+						"<instance>",
+						root,
+					)
+					Expect(err).ShouldNot(HaveOccurred())
 
+					_, ok, err := snapshotStore.ReadSnapshot(
+						context.Background(),
+						handlerID.Key,
+						"<instance>",
+						root,
+						0,
+					)
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(ok).To(BeFalse())
 				})
 			})
 
