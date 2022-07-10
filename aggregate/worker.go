@@ -94,7 +94,7 @@ func (w *Worker) loadRoot(ctx context.Context) error {
 	var err error
 	w.root = w.Handler.New()
 
-	w.nextOffset, w.snapshotAge, err = w.Loader.Load(
+	_, w.nextOffset, w.snapshotAge, err = w.Loader.Load(
 		ctx,
 		w.HandlerIdentity,
 		w.InstanceID,
