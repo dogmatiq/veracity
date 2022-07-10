@@ -133,7 +133,7 @@ func (l *Loader) Load(
 		h,
 		id,
 		r,
-		firstOffset+1, // ignore any snapshots unless they were taken after the first event
+		firstOffset, // ignore any snapshots that were taken before the first relevant event
 	)
 	if err != nil {
 		return 0, 0, fmt.Errorf(

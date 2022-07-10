@@ -195,7 +195,7 @@ var _ = Describe("type Loader", func() {
 				When("there is a snapshot available", func() {
 					When("the snapshot is up-to-date", func() {
 						BeforeEach(func() {
-							snapshotStore.WriteSnapshot(
+							err := snapshotStore.WriteSnapshot(
 								context.Background(),
 								handlerID.Key,
 								"<instance>",
@@ -206,6 +206,7 @@ var _ = Describe("type Loader", func() {
 								},
 								2,
 							)
+							Expect(err).ShouldNot(HaveOccurred())
 						})
 
 						It("does not apply any events", func() {
@@ -228,7 +229,7 @@ var _ = Describe("type Loader", func() {
 
 					When("the snapshot is out-of-date", func() {
 						BeforeEach(func() {
-							snapshotStore.WriteSnapshot(
+							err := snapshotStore.WriteSnapshot(
 								context.Background(),
 								handlerID.Key,
 								"<instance>",
@@ -239,6 +240,7 @@ var _ = Describe("type Loader", func() {
 								},
 								1,
 							)
+							Expect(err).ShouldNot(HaveOccurred())
 						})
 
 						It("applies only those events that occurred after the snapshot", func() {
@@ -500,8 +502,39 @@ var _ = Describe("type Loader", func() {
 					})
 
 					When("there is a snapshot available", func() {
-						XIt("applies only those events that occurred after the snapshot", func() {
+						BeforeEach(func() {
+							loader.SnapshotReader = snapshotReader
+						})
 
+						It("applies only those events that occurred after the snapshot", func() {
+							err := snapshotStore.WriteSnapshot(
+								context.Background(),
+								handlerID.Key,
+								"<instance>",
+								&AggregateRoot{
+									AppliedEvents: []dogma.Message{
+										"<snapshot>",
+									},
+								},
+								3,
+							)
+							Expect(err).ShouldNot(HaveOccurred())
+
+							nextOffset, snapshotAge, err := loader.Load(
+								context.Background(),
+								handlerID,
+								"<instance>",
+								root,
+							)
+							Expect(err).ShouldNot(HaveOccurred())
+							Expect(nextOffset).To(BeNumerically("==", 5))
+							Expect(snapshotAge).To(BeNumerically("==", 1))
+							Expect(root.AppliedEvents).To(Equal(
+								[]dogma.Message{
+									"<snapshot>",
+									MessageE1,
+								},
+							))
 						})
 
 						XIt("ignores snapshots taken before destruction", func() {
