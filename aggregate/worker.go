@@ -60,7 +60,7 @@ type Worker struct {
 	InstanceID string
 
 	// Commands is a channel that receives commands to be executed.
-	Commands chan Command
+	Commands <-chan Command
 
 	// root is the aggregate root for this instance.
 	root dogma.AggregateRoot
@@ -125,9 +125,10 @@ func (w *Worker) handleNextCommand(ctx context.Context) (done bool, _ error) {
 		return w.handleCommand(ctx, cmd)
 
 	case <-idle.C:
-		// We've been idle for a while without receiving a command, we always
-		// take a snapshot before shutting down to mininize the time it takes to
-		// reload this aggregate in the future.
+		// We've been idle for a while without receiving a command.
+		//
+		// We always take a snapshot before shutting down to mininize the time
+		// it takes to reload this aggregate in the future.
 		return true, w.takeSnapshot(ctx)
 	}
 }
@@ -205,17 +206,24 @@ func (w *Worker) takeSnapshot(ctx context.Context) error {
 		return nil
 	}
 
+	timeoutCtx, cancel := linger.ContextWithTimeout(
+		ctx,
+		w.SnapshotWriteTimeout,
+		DefaultSnapshotWriteTimeout,
+	)
+	defer cancel()
+
 	snapshotOffset := w.nextOffset - 1
 
 	if err := w.SnapshotWriter.WriteSnapshot(
-		ctx,
+		timeoutCtx,
 		w.HandlerIdentity.Key,
 		w.InstanceID,
 		w.root,
 		snapshotOffset,
 	); err != nil {
-		// If the error was due to a context cancelation/timeout we bail with
-		// the context error.
+		// If the error was due to a context cancelation/timeout of the PARENT
+		// content we bail with the context error.
 		if err == ctx.Err() {
 			return err
 		}

@@ -18,14 +18,16 @@ import (
 
 var _ = Describe("type Loader", func() {
 	var (
-		handlerID      configkit.Identity
-		eventStore     *memory.AggregateEventStore
-		eventReader    *eventReaderStub
+		eventStore  *memory.AggregateEventStore
+		eventReader *eventReaderStub
+
 		snapshotStore  *memory.AggregateSnapshotStore
 		snapshotReader *snapshotReaderStub
 		snapshotWriter *snapshotWriterStub
-		root           *AggregateRoot
-		loader         *Loader
+
+		handlerID configkit.Identity
+		root      *AggregateRoot
+		loader    *Loader
 	)
 
 	BeforeEach(func() {
