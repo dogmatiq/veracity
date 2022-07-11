@@ -119,39 +119,20 @@ var _ = Describe("type Worker", func() {
 	Describe("func Run()", func() {
 		When("a command is received", func() {
 			It("writes events recorded by the handler", func() {
-				workerResult := make(chan error)
-				defer func() {
-					<-workerResult
-				}()
-
-				ctx, cancel := context.WithCancel(ctx)
-				defer cancel()
-
 				go func() {
-					defer close(workerResult)
-					workerResult <- worker.Run(ctx)
+					defer GinkgoRecover()
+
+					executeCommand(
+						ctx,
+						commands,
+						NewParcel("<command>", MessageC1),
+					)
+
+					cancel()
 				}()
 
-				commandResult := make(chan error)
-
-				cmd := Command{
-					Context: context.Background(),
-					Parcel:  NewParcel("<command>", MessageC1),
-					Result:  commandResult,
-				}
-
-				select {
-				case <-ctx.Done():
-					Expect(ctx.Err()).ShouldNot(HaveOccurred())
-				case commands <- cmd:
-				}
-
-				select {
-				case <-ctx.Done():
-					Expect(ctx.Err()).ShouldNot(HaveOccurred())
-				case err := <-commandResult:
-					Expect(err).ShouldNot(HaveOccurred())
-				}
+				err := worker.Run(ctx)
+				Expect(err).To(Equal(context.Canceled))
 
 				expectEvents(
 					eventStore,
@@ -174,14 +155,6 @@ var _ = Describe("type Worker", func() {
 						},
 					},
 				)
-
-				cancel()
-				err := <-workerResult
-				Expect(err).To(Equal(context.Canceled))
-			})
-
-			XIt("writes a nil error to the command's result channel", func() {
-
 			})
 
 			When("a second command is received", func() {
@@ -270,4 +243,33 @@ func expectEvents(
 	}
 
 	Expect(producedEvents).To(EqualX(expectedEvents))
+}
+
+// executeCommand executes a command by sending it to a command channel and
+// waiting for it to complete.
+func executeCommand(
+	ctx context.Context,
+	commands chan<- Command,
+	command parcel.Parcel,
+) {
+	result := make(chan error)
+
+	cmd := Command{
+		Context: ctx,
+		Parcel:  command,
+		Result:  result,
+	}
+
+	select {
+	case <-ctx.Done():
+		Expect(ctx.Err()).ShouldNot(HaveOccurred())
+	case commands <- cmd:
+	}
+
+	select {
+	case <-ctx.Done():
+		Expect(ctx.Err()).ShouldNot(HaveOccurred())
+	case err := <-result:
+		Expect(err).ShouldNot(HaveOccurred())
+	}
 }
