@@ -43,6 +43,7 @@ var _ = Describe("type Worker", func() {
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		DeferCleanup(cancel)
 
 		eventStore = &memory.AggregateEventStore{}
 
@@ -110,10 +111,6 @@ var _ = Describe("type Worker", func() {
 			InstanceID: "<instance>",
 			Commands:   commands,
 		}
-	})
-
-	AfterEach(func() {
-		cancel()
 	})
 
 	Describe("func Run()", func() {
