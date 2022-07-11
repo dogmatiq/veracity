@@ -3,10 +3,23 @@ package aggregate
 import (
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/interopspec/envelopespec"
+	"github.com/dogmatiq/veracity/parcel"
 )
 
 // scope is an implementation of dogma.AggregateCommandScope.
 type scope struct {
+	// Command is the parcel containing the command being handled.
+	Command parcel.Parcel
+
+	// HandlerIdentity is the identity of the handler.
+	HandlerIdentity *envelopespec.Identity
+
+	// ID is the instance ID.
+	ID string
+
+	// Packer is used to create parcels containing the recorded events.
+	Packer *parcel.Packer
+
 	// IsDestroyed is true if Destroy() has been called and there have been no
 	// calls to RecordEvent() since.
 	IsDestroyed bool
@@ -28,7 +41,15 @@ func (s *scope) Destroy() {
 // RecordEvent records the occurrence of an event as a result of the command
 // message that is being handled.
 func (s *scope) RecordEvent(m dogma.Message) {
-	panic("not implemented")
+	s.EventEnvelopes = append(
+		s.EventEnvelopes,
+		s.Packer.PackChildEvent(
+			s.Command,
+			m,
+			s.HandlerIdentity,
+			s.ID,
+		).Envelope,
+	)
 }
 
 // Log records an informational message within the context of the message

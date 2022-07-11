@@ -7,7 +7,10 @@ import (
 	"github.com/dogmatiq/configkit"
 	"github.com/dogmatiq/dodeca/logging"
 	"github.com/dogmatiq/dogma"
+	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/linger"
+	"github.com/dogmatiq/marshalkit"
+	"github.com/dogmatiq/veracity/parcel"
 )
 
 // DefaultIdleTimeout is the default amount of time a worker will continue
@@ -20,8 +23,11 @@ type WorkerConfig struct {
 	// this instance.
 	Handler dogma.AggregateMessageHandler
 
-	// Identity is the identity of the handler.
+	// HandlerIdentity is the identity of the handler.
 	HandlerIdentity configkit.Identity
+
+	// Packer is used to create parcels containing the recorded events.
+	Packer *parcel.Packer
 
 	// Loader is used to load aggregate state from persistent storage.
 	Loader *Loader
@@ -62,6 +68,10 @@ type Worker struct {
 	// Commands is a channel that receives commands to be executed.
 	Commands <-chan Command
 
+	// envHandlerIdentity is the identity of the handler in the representation
+	// used within envelopes.
+	envHandlerIdentity *envelopespec.Identity
+
 	// root is the aggregate root for this instance.
 	root dogma.AggregateRoot
 
@@ -80,6 +90,8 @@ type Worker struct {
 // Run starts the worker until ctx is canceled or the worker exits due to an
 // idle timeout.
 func (w *Worker) Run(ctx context.Context) error {
+	w.envHandlerIdentity = marshalkit.MustMarshalEnvelopeIdentity(w.HandlerIdentity)
+
 	if err := w.loadRoot(ctx); err != nil {
 		return err
 	}
@@ -138,7 +150,12 @@ func (w *Worker) handleCommand(
 	ctx context.Context,
 	cmd Command,
 ) (done bool, _ error) {
-	sc := &scope{}
+	sc := &scope{
+		Command:         cmd.Parcel,
+		HandlerIdentity: w.envHandlerIdentity,
+		ID:              w.InstanceID,
+		Packer:          w.Packer,
+	}
 
 	w.Handler.HandleCommand(
 		w.root,

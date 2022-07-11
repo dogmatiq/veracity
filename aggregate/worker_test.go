@@ -5,12 +5,18 @@ import (
 	"time"
 
 	"github.com/dogmatiq/configkit"
+	. "github.com/dogmatiq/configkit/fixtures"
+	"github.com/dogmatiq/configkit/message"
 	"github.com/dogmatiq/dogma"
 	. "github.com/dogmatiq/dogma/fixtures"
+	"github.com/dogmatiq/interopspec/envelopespec"
+	"github.com/dogmatiq/marshalkit"
 	. "github.com/dogmatiq/marshalkit/fixtures"
 	. "github.com/dogmatiq/veracity/aggregate"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
+	"github.com/dogmatiq/veracity/parcel"
 	"github.com/dogmatiq/veracity/persistence/memory"
+	. "github.com/jmalloc/gomegax"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -18,7 +24,7 @@ import (
 var _ = Describe("type Worker", func() {
 	var (
 		ctx    context.Context
-		cancel context.Cancel
+		cancel context.CancelFunc
 
 		eventStore  *memory.AggregateEventStore
 		eventReader *eventReaderStub
@@ -28,6 +34,7 @@ var _ = Describe("type Worker", func() {
 		snapshotReader *snapshotReaderStub
 		snapshotWriter *snapshotWriterStub
 
+		packer   *parcel.Packer
 		loader   *Loader
 		commands chan Command
 		handler  *AggregateMessageHandler
@@ -76,14 +83,22 @@ var _ = Describe("type Worker", func() {
 				s dogma.AggregateCommandScope,
 				m dogma.Message,
 			) {
-				s.RecordEvent(MessageE{})
+				s.RecordEvent(MessageE1)
 			},
 		}
+
+		packer = NewPacker(
+			message.TypeRoles{
+				MessageCType: message.CommandRole,
+				MessageEType: message.EventRole,
+			},
+		)
 
 		worker = &Worker{
 			WorkerConfig: WorkerConfig{
 				Handler:              handler,
 				HandlerIdentity:      configkit.MustNewIdentity("<handler-name>", "<handler-key>"),
+				Packer:               packer,
 				Loader:               loader,
 				EventWriter:          eventWriter,
 				SnapshotWriter:       snapshotWriter,
@@ -104,17 +119,65 @@ var _ = Describe("type Worker", func() {
 	Describe("func Run()", func() {
 		When("a command is received", func() {
 			It("writes events recorded by the handler", func() {
-				// cmd := Command{
-				// 	Context: context.Background(),
-				// 	Parcel:  NewParcel("<command-1>", MessageC1),
-				// 	Result:  make(chan<- error),
-				// }
+				workerResult := make(chan error)
+				defer func() {
+					<-workerResult
+				}()
 
-				// select {
-				// case <-ctx.Done():
-				// 	Expect(ctx.Err()).ShouldNot(HaveOccurred())
-				// case commands <- cmd:
-				// }
+				ctx, cancel := context.WithCancel(ctx)
+				defer cancel()
+
+				go func() {
+					defer close(workerResult)
+					workerResult <- worker.Run(ctx)
+				}()
+
+				commandResult := make(chan error)
+
+				cmd := Command{
+					Context: context.Background(),
+					Parcel:  NewParcel("<command>", MessageC1),
+					Result:  commandResult,
+				}
+
+				select {
+				case <-ctx.Done():
+					Expect(ctx.Err()).ShouldNot(HaveOccurred())
+				case commands <- cmd:
+				}
+
+				select {
+				case <-ctx.Done():
+					Expect(ctx.Err()).ShouldNot(HaveOccurred())
+				case err := <-commandResult:
+					Expect(err).ShouldNot(HaveOccurred())
+				}
+
+				expectEvents(
+					eventStore,
+					"<handler-key>",
+					"<instance>",
+					0,
+					[]*envelopespec.Envelope{
+						{
+							MessageId:         "0",
+							CausationId:       "<command>",
+							CorrelationId:     "<correlation>",
+							SourceApplication: packer.Application,
+							SourceHandler:     marshalkit.MustMarshalEnvelopeIdentity(worker.HandlerIdentity),
+							SourceInstanceId:  "<instance>",
+							CreatedAt:         "2000-01-01T00:00:00Z",
+							Description:       "{E1}",
+							PortableName:      MessageEPortableName,
+							MediaType:         MessageE1Packet.MediaType,
+							Data:              MessageE1Packet.Data,
+						},
+					},
+				)
+
+				cancel()
+				err := <-workerResult
+				Expect(err).To(Equal(context.Canceled))
 			})
 
 			XIt("writes a nil error to the command's result channel", func() {
@@ -151,7 +214,7 @@ var _ = Describe("type Worker", func() {
 			})
 
 			It("returns nil", func() {
-				err := worker.Run(context.Background())
+				err := worker.Run(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 		})
@@ -177,3 +240,34 @@ var _ = Describe("type Worker", func() {
 		})
 	})
 })
+
+// expectEvents reads all events from store starting from offset and asserts
+// that they are equal to expectedEvents.
+func expectEvents(
+	reader EventReader,
+	hk, id string,
+	offset uint64,
+	expectedEvents []*envelopespec.Envelope,
+) {
+	var producedEvents []*envelopespec.Envelope
+
+	for {
+		events, more, err := reader.ReadEvents(
+			context.Background(),
+			hk,
+			id,
+			offset,
+		)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		producedEvents = append(producedEvents, events...)
+
+		if !more {
+			break
+		}
+
+		offset += uint64(len(events))
+	}
+
+	Expect(producedEvents).To(EqualX(expectedEvents))
+}
