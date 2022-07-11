@@ -145,8 +145,6 @@ func (w *Worker) handleCommand(
 		cmd.Parcel.Message,
 	)
 
-	w.snapshotAge += uint64(len(sc.EventEnvelopes))
-
 	if err := w.EventWriter.WriteEvents(
 		ctx,
 		w.HandlerIdentity.Key,
@@ -163,10 +161,10 @@ func (w *Worker) handleCommand(
 	// responses are handled by the supervisor.
 	cmd.Result <- nil
 
+	w.snapshotAge += uint64(len(sc.EventEnvelopes))
 	w.nextOffset += uint64(len(sc.EventEnvelopes))
 
 	if sc.IsDestroyed {
-		w.firstOffset = w.nextOffset
 		return true, w.archiveSnapshots(ctx)
 	}
 
