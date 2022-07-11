@@ -312,7 +312,7 @@ func (l *Loader) writeSnapshot(
 	); err != nil {
 		logging.Log(
 			l.Logger,
-			"(possibly outdated) snapshot of aggregate root %s[%s] cannot be be written at offset %d: %w",
+			"snapshot of aggregate root %s[%s] cannot be be written at offset %d (possibly outdated): %w",
 			h.Name,
 			id,
 			snapshotOffset,
@@ -324,7 +324,7 @@ func (l *Loader) writeSnapshot(
 
 	logging.Log(
 		l.Logger,
-		"(possibly outdated) snapshot of aggregate root %s[%s] written at offset %d",
+		"snapshot of aggregate root %s[%s] written at offset %d (possibly outdated)",
 		h.Name,
 		id,
 		snapshotOffset,
