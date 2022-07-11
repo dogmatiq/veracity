@@ -97,12 +97,11 @@ func (s *AggregateEventStore) ReadEvents(
 // hk is the identity key of the aggregate message handler. id is the aggregate
 // instance ID.
 //
-// startOffset must be the offset of the first non-archived event, as
-// returned by ReadBounds(); otherwise, no action is taken and an error is
-// returned.
+// firstOffset must be the offset of the first non-archived event, as returned
+// by ReadBounds(); otherwise, no action is taken and an error is returned.
 //
-// nextOffset must be the offset immediately after the offset of the last
-// event written; otherwise, no action is taken and an error is returned.
+// nextOffset must be the offset immediately after the offset of the last event
+// written; otherwise, no action is taken and an error is returned.
 //
 // If archive is true, all prior events and the events being written by this
 // call are archived. Archived events are typically still made available to

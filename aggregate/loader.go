@@ -333,7 +333,7 @@ func (l *Loader) writeSnapshot(
 
 // readEvents loads historical events and applies them to r.
 //
-// startOffset is the offset of the first event to read.
+// firstOffset is the offset of the first event to read.
 //
 // It returns the offset of the next event to be recorded by this instance. Note
 // this may be greater than the nextOffset loaded by the initial bounds check.
@@ -343,9 +343,9 @@ func (l *Loader) readEvents(
 	h configkit.Identity,
 	id string,
 	r dogma.AggregateRoot,
-	startOffset uint64,
+	firstOffset uint64,
 ) (nextOffset uint64, err error) {
-	nextOffset = startOffset
+	nextOffset = firstOffset
 
 	for {
 		envelopes, more, err := l.EventReader.ReadEvents(
