@@ -200,6 +200,54 @@ var _ = Describe("type Worker", func() {
 					)
 				})
 			})
+
+			It("returns an error when there is an OCC failure", func() {
+				go func() {
+					defer GinkgoRecover()
+
+					By("executing a command to ensure the worker is running")
+
+					executeCommand(
+						ctx,
+						commands,
+						NewParcel("<command-1>", MessageC1),
+					)
+
+					By("writing an event to the event store that the worker doesn't know about")
+
+					err := eventStore.WriteEvents(
+						ctx,
+						"<handler-key>",
+						"<instance>",
+						0,
+						1,
+						[]*envelopespec.Envelope{
+							NewEnvelope("<existing>", MessageX1),
+						},
+						false,
+					)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					By("sending a second command")
+
+					select {
+					case <-ctx.Done():
+						Expect(ctx.Err()).ShouldNot(HaveOccurred())
+					case commands <- Command{
+						Context: ctx,
+						Parcel:  NewParcel("<command-2>", MessageC1),
+						Result:  make(chan error),
+					}:
+					}
+				}()
+
+				err := worker.Run(ctx)
+				Expect(err).To(
+					MatchError(
+						`optimistic concurrency conflict, 1 is not the next offset`,
+					),
+				)
+			})
 		})
 
 		When("the instance is destroyed", func() {
