@@ -154,6 +154,7 @@ func (w *Worker) handleCommand(
 		Command:         cmd.Parcel,
 		HandlerIdentity: w.envHandlerIdentity,
 		ID:              w.InstanceID,
+		Root:            w.root,
 		Packer:          w.Packer,
 	}
 

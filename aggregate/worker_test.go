@@ -55,7 +55,9 @@ var _ = Describe("type Worker", func() {
 			EventWriter: eventStore,
 		}
 
-		snapshotStore = &memory.AggregateSnapshotStore{}
+		snapshotStore = &memory.AggregateSnapshotStore{
+			Marshaler: Marshaler,
+		}
 
 		snapshotReader = &snapshotReaderStub{
 			SnapshotReader: snapshotStore,
@@ -140,8 +142,30 @@ var _ = Describe("type Worker", func() {
 				Expect(err).To(Equal(context.Canceled))
 			})
 
-			XIt("applies recorded events to the aggregate root", func() {
+			It("applies recorded events to the aggregate root", func() {
+				handler.HandleCommandFunc = func(
+					r dogma.AggregateRoot,
+					s dogma.AggregateCommandScope,
+					m dogma.Message,
+				) {
+					s.RecordEvent(MessageE1)
 
+					x := r.(*AggregateRoot)
+					Expect(x.AppliedEvents).To(ConsistOf(
+						MessageE1,
+					))
+
+					cancel()
+				}
+
+				executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
+
+				err := worker.Run(ctx)
+				Expect(err).To(Equal(context.Canceled))
 			})
 
 			When("the instance has no historical events", func() {

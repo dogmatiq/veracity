@@ -14,8 +14,12 @@ type scope struct {
 	// HandlerIdentity is the identity of the handler.
 	HandlerIdentity *envelopespec.Identity
 
-	// ID is the instance ID.
+	// ID is the ID of the aggregate instance to which the command was routed.
 	ID string
+
+	// Root is the aggregate root of the instance that to which the command was
+	// routed.
+	Root dogma.AggregateRoot
 
 	// Packer is used to create parcels containing the recorded events.
 	Packer *parcel.Packer
@@ -41,6 +45,8 @@ func (s *scope) Destroy() {
 // RecordEvent records the occurrence of an event as a result of the command
 // message that is being handled.
 func (s *scope) RecordEvent(m dogma.Message) {
+	s.Root.ApplyEvent(m)
+
 	s.EventEnvelopes = append(
 		s.EventEnvelopes,
 		s.Packer.PackChildEvent(
