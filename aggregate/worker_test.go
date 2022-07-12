@@ -71,7 +71,7 @@ var _ = Describe("type Worker", func() {
 			Marshaler:      Marshaler,
 		}
 
-		commands = make(chan Command)
+		commands = make(chan Command, 5)
 
 		handler = &AggregateMessageHandler{
 			ConfigureFunc: func(c dogma.AggregateConfigurer) {
@@ -120,17 +120,51 @@ var _ = Describe("type Worker", func() {
 
 	Describe("func Run()", func() {
 		When("a command is received", func() {
-			It("writes events recorded by the handler", func() {
+			It("passes the command message to the handler", func() {
+				handler.HandleCommandFunc = func(
+					r dogma.AggregateRoot,
+					s dogma.AggregateCommandScope,
+					m dogma.Message,
+				) {
+					Expect(m).To(Equal(MessageC1))
+					cancel()
+				}
+
+				executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
+
+				err := worker.Run(ctx)
+				Expect(err).To(Equal(context.Canceled))
+			})
+
+			XIt("applies recorded events to the aggregate root", func() {
+
+			})
+
+			When("the instance has no historical events", func() {
+				XIt("passes the handler an zero-valued aggregate root", func() {
+				})
+			})
+
+			When("the instance has historical events", func() {
+				XIt("passes the handler the correct aggregate root", func() {
+				})
+			})
+
+			It("persists recorded events", func() {
 				go func() {
 					defer GinkgoRecover()
 
-					executeCommand(
+					executeCommandSync(
 						ctx,
 						commands,
 						NewParcel("<command-1>", MessageC1),
 					)
 
-					executeCommand(
+					executeCommandSync(
 						ctx,
 						commands,
 						NewParcel("<command-2>", MessageC2),
@@ -184,7 +218,7 @@ var _ = Describe("type Worker", func() {
 
 					By("executing a command to ensure the worker is running")
 
-					executeCommand(
+					executeCommandSync(
 						ctx,
 						commands,
 						NewParcel("<command-1>", MessageC1),
@@ -232,7 +266,7 @@ var _ = Describe("type Worker", func() {
 
 					By("executing a command to ensure the worker is running")
 
-					executeCommand(
+					executeCommandSync(
 						ctx,
 						commands,
 						NewParcel("<command-1>", MessageC1),
@@ -274,11 +308,25 @@ var _ = Describe("type Worker", func() {
 		})
 
 		When("the instance is destroyed", func() {
+			BeforeEach(func() {
+				err := eventStore.WriteEvents(
+					ctx,
+					"<handler-key>",
+					"<instance>",
+					0,
+					1,
+					[]*envelopespec.Envelope{
+						NewEnvelope("<existing>", MessageX1),
+					},
+					false, // archive
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+			})
+
 			XIt("archives historical events", func() {
 			})
 
 			XIt("archives snapshots", func() {
-
 			})
 
 			XIt("returns nil", func() {
@@ -302,7 +350,7 @@ var _ = Describe("type Worker", func() {
 			})
 		})
 
-		XIt("applies the snapshot write timeout", func() {
+		XIt("honours the snapshot write timeout", func() {
 
 		})
 
@@ -355,14 +403,30 @@ func expectEvents(
 	Expect(producedEvents).To(EqualX(expectedEvents))
 }
 
-// executeCommand executes a command by sending it to a command channel and
+// executeCommandSync executes a command by sending it to a command channel and
 // waiting for it to complete.
-func executeCommand(
+func executeCommandSync(
 	ctx context.Context,
 	commands chan<- Command,
 	command parcel.Parcel,
 ) {
-	result := make(chan error)
+	result := executeCommandAsync(ctx, commands, command)
+
+	select {
+	case <-ctx.Done():
+		Expect(ctx.Err()).ShouldNot(HaveOccurred())
+	case err := <-result:
+		Expect(err).ShouldNot(HaveOccurred())
+	}
+}
+
+// executeCommandSync executes a command by sending it to a command channel.
+func executeCommandAsync(
+	ctx context.Context,
+	commands chan<- Command,
+	command parcel.Parcel,
+) <-chan error {
+	result := make(chan error, 1)
 
 	cmd := Command{
 		Context: ctx,
@@ -376,10 +440,5 @@ func executeCommand(
 	case commands <- cmd:
 	}
 
-	select {
-	case <-ctx.Done():
-		Expect(ctx.Err()).ShouldNot(HaveOccurred())
-	case err := <-result:
-		Expect(err).ShouldNot(HaveOccurred())
-	}
+	return result
 }
