@@ -155,7 +155,49 @@ var _ = Describe("type Worker", func() {
 			})
 
 			When("a second command is received", func() {
-				XIt("does not produce an OCC error", func() {
+				It("does not produce an OCC error", func() {
+					go func() {
+						defer GinkgoRecover()
+
+						executeCommand(
+							ctx,
+							commands,
+							NewParcel("<command-1>", MessageC1),
+						)
+
+						executeCommand(
+							ctx,
+							commands,
+							NewParcel("<command-2>", MessageC1),
+						)
+
+						cancel()
+					}()
+
+					err := worker.Run(ctx)
+					Expect(err).To(Equal(context.Canceled))
+
+					expectEvents(
+						eventStore,
+						"<handler-key>",
+						"<instance>",
+						1,
+						[]*envelopespec.Envelope{
+							{
+								MessageId:         "1",
+								CausationId:       "<command-2>",
+								CorrelationId:     "<correlation>",
+								SourceApplication: packer.Application,
+								SourceHandler:     marshalkit.MustMarshalEnvelopeIdentity(worker.HandlerIdentity),
+								SourceInstanceId:  "<instance>",
+								CreatedAt:         "2000-01-01T00:00:01Z",
+								Description:       "{E1}",
+								PortableName:      MessageEPortableName,
+								MediaType:         MessageE1Packet.MediaType,
+								Data:              MessageE1Packet.Data,
+							},
+						},
+					)
 				})
 			})
 		})
