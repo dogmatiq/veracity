@@ -84,7 +84,12 @@ var _ = Describe("type Worker", func() {
 				s dogma.AggregateCommandScope,
 				m dogma.Message,
 			) {
-				s.RecordEvent(MessageE1)
+				switch m {
+				case MessageC1:
+					s.RecordEvent(MessageE1)
+				case MessageC2:
+					s.RecordEvent(MessageE2)
+				}
 			},
 		}
 
@@ -122,7 +127,13 @@ var _ = Describe("type Worker", func() {
 					executeCommand(
 						ctx,
 						commands,
-						NewParcel("<command>", MessageC1),
+						NewParcel("<command-1>", MessageC1),
+					)
+
+					executeCommand(
+						ctx,
+						commands,
+						NewParcel("<command-2>", MessageC2),
 					)
 
 					cancel()
@@ -139,7 +150,7 @@ var _ = Describe("type Worker", func() {
 					[]*envelopespec.Envelope{
 						{
 							MessageId:         "0",
-							CausationId:       "<command>",
+							CausationId:       "<command-1>",
 							CorrelationId:     "<correlation>",
 							SourceApplication: packer.Application,
 							SourceHandler:     marshalkit.MustMarshalEnvelopeIdentity(worker.HandlerIdentity),
@@ -150,58 +161,24 @@ var _ = Describe("type Worker", func() {
 							MediaType:         MessageE1Packet.MediaType,
 							Data:              MessageE1Packet.Data,
 						},
+						{
+							MessageId:         "1",
+							CausationId:       "<command-2>",
+							CorrelationId:     "<correlation>",
+							SourceApplication: packer.Application,
+							SourceHandler:     marshalkit.MustMarshalEnvelopeIdentity(worker.HandlerIdentity),
+							SourceInstanceId:  "<instance>",
+							CreatedAt:         "2000-01-01T00:00:01Z",
+							Description:       "{E2}",
+							PortableName:      MessageEPortableName,
+							MediaType:         MessageE2Packet.MediaType,
+							Data:              MessageE2Packet.Data,
+						},
 					},
 				)
 			})
 
-			When("a second command is received", func() {
-				It("does not produce an OCC error", func() {
-					go func() {
-						defer GinkgoRecover()
-
-						executeCommand(
-							ctx,
-							commands,
-							NewParcel("<command-1>", MessageC1),
-						)
-
-						executeCommand(
-							ctx,
-							commands,
-							NewParcel("<command-2>", MessageC1),
-						)
-
-						cancel()
-					}()
-
-					err := worker.Run(ctx)
-					Expect(err).To(Equal(context.Canceled))
-
-					expectEvents(
-						eventStore,
-						"<handler-key>",
-						"<instance>",
-						1,
-						[]*envelopespec.Envelope{
-							{
-								MessageId:         "1",
-								CausationId:       "<command-2>",
-								CorrelationId:     "<correlation>",
-								SourceApplication: packer.Application,
-								SourceHandler:     marshalkit.MustMarshalEnvelopeIdentity(worker.HandlerIdentity),
-								SourceInstanceId:  "<instance>",
-								CreatedAt:         "2000-01-01T00:00:01Z",
-								Description:       "{E1}",
-								PortableName:      MessageEPortableName,
-								MediaType:         MessageE1Packet.MediaType,
-								Data:              MessageE1Packet.Data,
-							},
-						},
-					)
-				})
-			})
-
-			It("returns an error when there is an OCC failure", func() {
+			It("returns an error when there is an OCC failure due to a nextOffset mismatch", func() {
 				go func() {
 					defer GinkgoRecover()
 
@@ -224,7 +201,7 @@ var _ = Describe("type Worker", func() {
 						[]*envelopespec.Envelope{
 							NewEnvelope("<existing>", MessageX1),
 						},
-						false,
+						false, // archive
 					)
 					Expect(err).ShouldNot(HaveOccurred())
 
@@ -245,6 +222,52 @@ var _ = Describe("type Worker", func() {
 				Expect(err).To(
 					MatchError(
 						`optimistic concurrency conflict, 1 is not the next offset`,
+					),
+				)
+			})
+
+			It("returns an error where there is an OCC failure due to a firstOffset mismatch", func() {
+				go func() {
+					defer GinkgoRecover()
+
+					By("executing a command to ensure the worker is running")
+
+					executeCommand(
+						ctx,
+						commands,
+						NewParcel("<command-1>", MessageC1),
+					)
+
+					By("archiving existing events without the worker's knowledge")
+
+					err := eventStore.WriteEvents(
+						ctx,
+						"<handler-key>",
+						"<instance>",
+						0,
+						1,
+						nil,  // no events
+						true, // archive
+					)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					By("sending a second command")
+
+					select {
+					case <-ctx.Done():
+						Expect(ctx.Err()).ShouldNot(HaveOccurred())
+					case commands <- Command{
+						Context: ctx,
+						Parcel:  NewParcel("<command-2>", MessageC1),
+						Result:  make(chan error),
+					}:
+					}
+				}()
+
+				err := worker.Run(ctx)
+				Expect(err).To(
+					MatchError(
+						`optimistic concurrency conflict, 0 is not the first offset`,
 					),
 				)
 			})
