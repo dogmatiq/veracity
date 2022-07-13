@@ -166,12 +166,14 @@ var _ = Describe("type Worker", func() {
 
 			When("the instance has no historical events", func() {
 				It("passes the handler an zero-valued aggregate root", func() {
+					expect := handler.New()
+
 					handler.HandleCommandFunc = func(
 						r dogma.AggregateRoot,
 						s dogma.AggregateCommandScope,
 						m dogma.Message,
 					) {
-						Expect(r).To(Equal(handler.New()))
+						Expect(r).To(Equal(expect))
 						cancel()
 					}
 
@@ -187,7 +189,42 @@ var _ = Describe("type Worker", func() {
 			})
 
 			When("the instance has historical events", func() {
-				XIt("passes the handler the correct aggregate root", func() {
+				BeforeEach(func() {
+					err := eventStore.WriteEvents(
+						ctx,
+						"<handler-key>",
+						"<instance>",
+						0,
+						0,
+						[]*envelopespec.Envelope{
+							NewEnvelope("<existing>", MessageX1),
+						},
+						false, // archive
+					)
+					Expect(err).ShouldNot(HaveOccurred())
+				})
+
+				It("passes the handler the correct aggregate root", func() {
+					expect := handler.New()
+					expect.ApplyEvent(MessageX1)
+
+					handler.HandleCommandFunc = func(
+						r dogma.AggregateRoot,
+						s dogma.AggregateCommandScope,
+						m dogma.Message,
+					) {
+						Expect(r).To(Equal(expect))
+						cancel()
+					}
+
+					executeCommandAsync(
+						ctx,
+						commands,
+						NewParcel("<command>", MessageC1),
+					)
+
+					err := worker.Run(ctx)
+					Expect(err).To(Equal(context.Canceled))
 				})
 			})
 
