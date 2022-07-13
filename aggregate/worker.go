@@ -164,24 +164,28 @@ func (w *Worker) handleCommand(
 		cmd.Parcel.Message,
 	)
 
-	if err := w.EventWriter.WriteEvents(
-		ctx,
-		w.HandlerIdentity.Key,
-		w.InstanceID,
-		w.firstOffset,
-		w.nextOffset,
-		sc.EventEnvelopes,
-		sc.IsDestroyed, // archive events if instance is destroyed
-	); err != nil {
-		return true, err
+	eventCount := uint64(len(sc.EventEnvelopes))
+
+	if eventCount != 0 || sc.IsDestroyed {
+		if err := w.EventWriter.WriteEvents(
+			ctx,
+			w.HandlerIdentity.Key,
+			w.InstanceID,
+			w.firstOffset,
+			w.nextOffset,
+			sc.EventEnvelopes,
+			sc.IsDestroyed, // archive events if instance is destroyed
+		); err != nil {
+			return true, err
+		}
 	}
 
 	// We are only responsible for writing "success" responses, all error
 	// responses are handled by the supervisor.
 	cmd.Result <- nil
 
-	w.snapshotAge += uint64(len(sc.EventEnvelopes))
-	w.nextOffset += uint64(len(sc.EventEnvelopes))
+	w.snapshotAge += eventCount
+	w.nextOffset += eventCount
 
 	if sc.IsDestroyed {
 		return true, w.archiveSnapshots(ctx)
