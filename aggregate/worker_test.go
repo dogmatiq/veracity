@@ -375,6 +375,81 @@ var _ = Describe("type Worker", func() {
 			)
 		})
 
+		It("writes a snapshot when the snapshot interval is exceeded", func() {
+			worker.SnapshotInterval = 2
+
+			go func() {
+				defer GinkgoRecover()
+
+				By("sending a command")
+
+				executeCommandSync(
+					ctx,
+					commands,
+					NewParcel("<command-1>", MessageC1),
+				)
+
+				By("ensuring no snapshot has been taken")
+
+				_, ok, err := snapshotStore.ReadSnapshot(
+					ctx,
+					"<handler-key>",
+					"<instance>",
+					&AggregateRoot{},
+					0,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(ok).To(BeFalse())
+
+				By("sending a second command")
+
+				executeCommandSync(
+					ctx,
+					commands,
+					NewParcel("<command-2>", MessageC2),
+				)
+
+				By("ensuring that a snapshot has been written")
+
+				snapshotOffset, ok, err := snapshotStore.ReadSnapshot(
+					ctx,
+					"<handler-key>",
+					"<instance>",
+					&AggregateRoot{},
+					0,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(ok).To(BeTrue())
+				Expect(snapshotOffset).To(BeNumerically("==", 1))
+
+				By("sending a third command")
+
+				executeCommandSync(
+					ctx,
+					commands,
+					NewParcel("<command-2>", MessageC2),
+				)
+
+				By("ensuring that no newer snapshot has been taken")
+
+				snapshotOffset, ok, err = snapshotStore.ReadSnapshot(
+					ctx,
+					"<handler-key>",
+					"<instance>",
+					&AggregateRoot{},
+					0,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(ok).To(BeTrue())
+				Expect(snapshotOffset).To(BeNumerically("==", 1))
+
+				cancel()
+			}()
+
+			err := worker.Run(ctx)
+			Expect(err).To(Equal(context.Canceled))
+		})
+
 		When("the instance is destroyed", func() {
 			BeforeEach(func() {
 				err := eventStore.WriteEvents(

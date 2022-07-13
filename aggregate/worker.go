@@ -231,8 +231,8 @@ func (w *Worker) takeSnapshot(ctx context.Context) error {
 		w.root,
 		snapshotOffset,
 	); err != nil {
-		// If the error was due to a context cancelation/timeout of the PARENT
-		// content we bail with the context error.
+		// If the error was due to a context cancelation/timeout of the context
+		// we bail with the context error.
 		if err == ctx.Err() {
 			return err
 		}
