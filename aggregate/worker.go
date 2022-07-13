@@ -2,6 +2,7 @@ package aggregate
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/dogmatiq/configkit"
@@ -170,7 +171,12 @@ func (w *Worker) handleCommand(
 			sc.EventEnvelopes,
 			sc.IsDestroyed, // archive events if instance is destroyed
 		); err != nil {
-			return true, err
+			return true, fmt.Errorf(
+				"cannot write events for aggregate root %s[%s]: %w",
+				w.HandlerIdentity.Name,
+				w.InstanceID,
+				err,
+			)
 		}
 	}
 

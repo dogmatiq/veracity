@@ -325,7 +325,7 @@ var _ = Describe("type Worker", func() {
 			err := worker.Run(ctx)
 			Expect(err).To(
 				MatchError(
-					`optimistic concurrency conflict, 1 is not the next offset`,
+					`cannot write events for aggregate root <handler-name>[<instance>]: optimistic concurrency conflict, 1 is not the next offset`,
 				),
 			)
 		})
@@ -371,7 +371,7 @@ var _ = Describe("type Worker", func() {
 			err := worker.Run(ctx)
 			Expect(err).To(
 				MatchError(
-					`optimistic concurrency conflict, 0 is not the first offset`,
+					`cannot write events for aggregate root <handler-name>[<instance>]: optimistic concurrency conflict, 0 is not the first offset`,
 				),
 			)
 		})
@@ -708,13 +708,38 @@ var _ = Describe("type Worker", func() {
 			)
 		})
 
-		XIt("returns an error if events cannot be written", func() {
+		It("returns an error if events cannot be written", func() {
+			eventWriter.WriteEventsFunc = func(
+				ctx context.Context,
+				hk, id string,
+				firstOffset, nextOffset uint64,
+				events []*envelopespec.Envelope,
+				archive bool,
+			) error {
+				return errors.New("<error>")
+			}
+
+			executeCommandAsync(
+				ctx,
+				commands,
+				NewParcel("<command>", MessageC1),
+			)
+
+			err := worker.Run(ctx)
+			Expect(err).To(
+				MatchError(
+					`cannot write events for aggregate root <handler-name>[<instance>]: <error>`,
+				),
+			)
 		})
 
 		XIt("returns an error if the context is canceled while waiting for a command", func() {
 		})
 
 		XIt("returns an error if the context is canceled while persisting a snapshot", func() {
+		})
+
+		XIt("returns an error if the context is canceled while archiving a snapshot", func() {
 		})
 
 		XIt("makes the instance ID available via the scope", func() {
