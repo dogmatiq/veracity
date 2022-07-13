@@ -36,10 +36,9 @@ type EventReader interface {
 	//
 	// events is the set of events starting at the begin revision.
 	//
-	// If end > begin, there are more events to be loaded, and ReadEvents()
-	// should be called again with begin set to end.
-	//
-	// If end == begin there are no subsequent historical events to be loaded.
+	// If begin >= end there are no subsequent historical events to be loaded.
+	// Otherwise, ReadEvents() should be called again with begin set to end to
+	// continue reading events.
 	//
 	// The number of revisions (and hence events) returned by a single call to
 	// ReadEvents() is implementation defined.

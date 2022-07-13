@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	// DefaultSnapshotInterval is the default number of events (not revisions)
-	// that can be recorded by an aggregate instance before it is considered
+	// DefaultSnapshotInterval is the default number of revisions (not events)
+	// that can occur on an aggregate instance before it is considered
 	// neccessary to take a new snapshot.
 	DefaultSnapshotInterval = 1000
 )

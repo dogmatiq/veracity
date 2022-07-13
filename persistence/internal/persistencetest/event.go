@@ -52,46 +52,45 @@ func DeclareAggregateEventTests(
 	})
 
 	ginkgo.Describe("func ReadBounds()", func() {
-		ginkgo.It("returns zero offsets when there are no historical events", func() {
-			firstOffset, nextOffset, err := tc.Reader.ReadBounds(
+		ginkgo.It("returns [0, 0) when there have not been any writes", func() {
+			begin, end, err := tc.Reader.ReadBounds(
 				ctx,
 				"<handler>",
 				"<instance>",
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-			gomega.Expect(firstOffset).To(gomega.BeNumerically("==", 0))
-			gomega.Expect(nextOffset).To(gomega.BeNumerically("==", 0))
+			gomega.Expect(begin).To(gomega.BeNumerically("==", 0))
+			gomega.Expect(end).To(gomega.BeNumerically("==", 0))
 		})
 
-		ginkgo.It("returns the next unused offset", func() {
+		ginkgo.It("returns [0, 1) after a single write", func() {
 			err := tc.Writer.WriteEvents(
 				ctx,
 				"<handler>",
 				"<instance>",
-				0,
 				0,
 				allEvents,
 				false, // archive
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-			_, nextOffset, err := tc.Reader.ReadBounds(
+			begin, end, err := tc.Reader.ReadBounds(
 				ctx,
 				"<handler>",
 				"<instance>",
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-			gomega.Expect(nextOffset).To(gomega.BeNumerically("==", 5))
+			gomega.Expect(begin).To(gomega.BeNumerically("==", 0))
+			gomega.Expect(end).To(gomega.BeNumerically("==", 1))
 		})
 
-		ginkgo.It("returns the next unused offset after several writes", func() {
+		ginkgo.It("returns [0, 2) after two writes", func() {
 			err := tc.Writer.WriteEvents(
 				ctx,
 				"<handler>",
 				"<instance>",
 				0,
-				0,
-				allEvents[:3],
+				allEvents,
 				false, // archive
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
@@ -100,51 +99,29 @@ func DeclareAggregateEventTests(
 				ctx,
 				"<handler>",
 				"<instance>",
-				0,
-				3,
-				allEvents[3:],
-				false, // archive
-			)
-			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-
-			_, nextOffset, err := tc.Reader.ReadBounds(
-				ctx,
-				"<handler>",
-				"<instance>",
-			)
-			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-			gomega.Expect(nextOffset).To(gomega.BeNumerically("==", 5))
-		})
-
-		ginkgo.It("returns a zero firstOffset when there are historical events", func() {
-			err := tc.Writer.WriteEvents(
-				ctx,
-				"<handler>",
-				"<instance>",
-				0,
-				0,
+				1,
 				allEvents,
 				false, // archive
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-			firstOffset, _, err := tc.Reader.ReadBounds(
+			begin, end, err := tc.Reader.ReadBounds(
 				ctx,
 				"<handler>",
 				"<instance>",
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-			gomega.Expect(firstOffset).To(gomega.BeNumerically("==", 0))
+			gomega.Expect(begin).To(gomega.BeNumerically("==", 0))
+			gomega.Expect(end).To(gomega.BeNumerically("==", 2))
 		})
 
-		ginkgo.It("returns a firstOffset equal to nextOffset when all events are archived", func() {
+		ginkgo.It("returns [n, n) when all events are archived", func() {
 			err := tc.Writer.WriteEvents(
 				ctx,
 				"<handler>",
 				"<instance>",
 				0,
-				0,
-				allEvents[:3],
+				allEvents,
 				false, // archive
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
@@ -153,31 +130,29 @@ func DeclareAggregateEventTests(
 				ctx,
 				"<handler>",
 				"<instance>",
-				0,
-				3,
-				allEvents[3:],
+				1,
+				allEvents,
 				true, // archive
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-			firstOffset, nextOffset, err := tc.Reader.ReadBounds(
+			begin, end, err := tc.Reader.ReadBounds(
 				ctx,
 				"<handler>",
 				"<instance>",
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-			gomega.Expect(firstOffset).To(gomega.BeNumerically("==", 5))
-			gomega.Expect(nextOffset).To(gomega.BeNumerically("==", 5))
+			gomega.Expect(begin).To(gomega.BeNumerically("==", 2))
+			gomega.Expect(end).To(gomega.BeNumerically("==", 2))
 		})
 
-		ginkgo.It("returns a firstOffset equal to the offset of the first unarchived event", func() {
+		ginkgo.It("returns [n-1, n) when there is a revision written after archiving", func() {
 			err := tc.Writer.WriteEvents(
 				ctx,
 				"<handler>",
 				"<instance>",
 				0,
-				0,
-				allEvents[:3],
+				allEvents,
 				true, // archive
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
@@ -186,28 +161,27 @@ func DeclareAggregateEventTests(
 				ctx,
 				"<handler>",
 				"<instance>",
-				3,
-				3,
-				allEvents[3:],
+				1,
+				allEvents,
 				false, // archive
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-			firstOffset, nextOffset, err := tc.Reader.ReadBounds(
+			begin, end, err := tc.Reader.ReadBounds(
 				ctx,
 				"<handler>",
 				"<instance>",
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-			gomega.Expect(firstOffset).To(gomega.BeNumerically("==", 3))
-			gomega.Expect(nextOffset).To(gomega.BeNumerically("==", 5))
+			gomega.Expect(begin).To(gomega.BeNumerically("==", 1))
+			gomega.Expect(end).To(gomega.BeNumerically("==", 2))
 		})
 	})
 
 	ginkgo.Describe("func ReadEvents()", func() {
-		ginkgo.When("there are no historical events", func() {
-			ginkgo.It("returns no events when reading from the next offset (0, in this case)", func() {
-				events, more, err := tc.Reader.ReadEvents(
+		ginkgo.When("no writes have occurred", func() {
+			ginkgo.It("returns 0 events when starting at revision 0", func() {
+				events, end, err := tc.Reader.ReadEvents(
 					ctx,
 					"<handler>",
 					"<instance>",
@@ -215,11 +189,11 @@ func DeclareAggregateEventTests(
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 				gomega.Expect(events).To(gomega.BeEmpty())
-				gomega.Expect(more).To(gomega.BeFalse())
+				gomega.Expect(end).To(gomega.BeNumerically("==", 0))
 			})
 
-			ginkgo.It("returns no events when reading from a non-existent offset (i.e. any non-zero offset)", func() {
-				events, more, err := tc.Reader.ReadEvents(
+			ginkgo.It("returns 0 events when starting from a non-existent future revision", func() {
+				events, end, err := tc.Reader.ReadEvents(
 					ctx,
 					"<handler>",
 					"<instance>",
@@ -227,17 +201,16 @@ func DeclareAggregateEventTests(
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 				gomega.Expect(events).To(gomega.BeEmpty())
-				gomega.Expect(more).To(gomega.BeFalse())
+				gomega.Expect(end).To(gomega.BeNumerically("<=", 2))
 			})
 		})
 
-		ginkgo.When("there are historical events", func() {
+		ginkgo.When("writes have occurred", func() {
 			ginkgo.BeforeEach(func() {
 				err := tc.Writer.WriteEvents(
 					ctx,
 					"<handler>",
 					"<instance>",
-					0,
 					0,
 					allEvents[:3],
 					false, // archive
@@ -248,8 +221,7 @@ func DeclareAggregateEventTests(
 					ctx,
 					"<handler>",
 					"<instance>",
-					0,
-					3,
+					1,
 					allEvents[3:],
 					false, // archive
 				)
@@ -267,31 +239,20 @@ func DeclareAggregateEventTests(
 				)
 			})
 
-			ginkgo.It("returns the events starting at an offset from the middle of an atomic write", func() {
-				expectEvents(
+			ginkgo.It("returns 0 events when starting from the next revision", func() {
+				events, end, err := tc.Reader.ReadEvents(
 					ctx,
-					tc.Reader,
 					"<handler>",
 					"<instance>",
 					2,
-					allEvents[2:],
-				)
-			})
-
-			ginkgo.It("returns no events when the offset is the next offset", func() {
-				events, more, err := tc.Reader.ReadEvents(
-					ctx,
-					"<handler>",
-					"<instance>",
-					5,
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 				gomega.Expect(events).To(gomega.BeEmpty())
-				gomega.Expect(more).To(gomega.BeFalse())
+				gomega.Expect(end).To(gomega.BeNumerically("<=", 2))
 			})
 
-			ginkgo.It("returns no events when the offset is greater than the next offset", func() {
-				events, more, err := tc.Reader.ReadEvents(
+			ginkgo.It("returns 0 events when starting from a non-existent future revision after the next revision", func() {
+				events, end, err := tc.Reader.ReadEvents(
 					ctx,
 					"<handler>",
 					"<instance>",
@@ -299,7 +260,7 @@ func DeclareAggregateEventTests(
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 				gomega.Expect(events).To(gomega.BeEmpty())
-				gomega.Expect(more).To(gomega.BeFalse())
+				gomega.Expect(end).To(gomega.BeNumerically("<=", 6))
 			})
 		})
 
@@ -310,14 +271,13 @@ func DeclareAggregateEventTests(
 					"<handler>",
 					"<instance>",
 					0,
-					0,
 					allEvents[:3],
 					true, // archive
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 			})
 
-			ginkgo.It("returns an error when the offset refers to an archived event", func() {
+			ginkgo.It("returns an error when the revision refers to an archived revision", func() {
 				if tc.ArchiveIsSoftDelete {
 					ginkgo.Skip("archived events are soft-deleted")
 				}
@@ -328,16 +288,15 @@ func DeclareAggregateEventTests(
 					"<instance>",
 					0,
 				)
-				gomega.Expect(err).To(gomega.MatchError("event at offset 0 is archived"))
+				gomega.Expect(err).To(gomega.MatchError("revision 0 is archived"))
 			})
 
-			ginkgo.It("does not return an error when the offset refers to an event after the last archived event", func() {
+			ginkgo.It("does not return an error when the revision is after the last archived revision", func() {
 				err := tc.Writer.WriteEvents(
 					ctx,
 					"<handler>",
 					"<instance>",
-					3,
-					3,
+					1,
 					allEvents[3:],
 					false, // archive
 				)
@@ -348,89 +307,59 @@ func DeclareAggregateEventTests(
 					tc.Reader,
 					"<handler>",
 					"<instance>",
-					4,
-					allEvents[4:],
+					1,
+					allEvents[3:],
 				)
 			})
 		})
 	})
 
 	ginkgo.Describe("func WriteEvents()", func() {
-		ginkgo.When("there are no historical events", func() {
-			ginkgo.It("returns an error if firstOffset is not the actual first offset", func() {
+		ginkgo.When("no writes have occurred", func() {
+			ginkgo.It("returns an error if the given revision is not the (exclusive) end revision", func() {
 				err := tc.Writer.WriteEvents(
 					ctx,
 					"<handler>",
 					"<instance>",
-					3, // incorrect firstOffset
-					0,
+					3, // incorrect end revision
 					allEvents,
 					false, // archive
 				)
-				gomega.Expect(err).To(gomega.MatchError("optimistic concurrency conflict, 3 is not the first offset"))
-			})
-
-			ginkgo.It("returns an error if nextOffset is not the actual next offset", func() {
-				err := tc.Writer.WriteEvents(
-					ctx,
-					"<handler>",
-					"<instance>",
-					0,
-					3, // incorrect nextOffset
-					allEvents,
-					false, // archive
-				)
-				gomega.Expect(err).To(gomega.MatchError("optimistic concurrency conflict, 3 is not the next offset"))
+				gomega.Expect(err).To(gomega.MatchError("optimistic concurrency conflict, 3 is not the next revision"))
 			})
 		})
 
-		ginkgo.When("there are historical events", func() {
+		ginkgo.When("writes have occurred", func() {
 			ginkgo.BeforeEach(func() {
 				err := tc.Writer.WriteEvents(
 					ctx,
 					"<handler>",
 					"<instance>",
 					0,
-					0,
-					allEvents[:3],
-					true, // archive
+					allEvents,
+					false, // archive
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 			})
 
-			ginkgo.It("returns an error if firstOffset is not the actual first offset", func() {
+			ginkgo.It("returns an error if the given revision is not the (exclusive) end revision", func() {
 				err := tc.Writer.WriteEvents(
 					ctx,
 					"<handler>",
 					"<instance>",
-					4, // incorrect firstOffset
-					3,
+					3, // incorrect end revision
 					allEvents,
 					false, // archive
 				)
-				gomega.Expect(err).To(gomega.MatchError("optimistic concurrency conflict, 4 is not the first offset"))
-			})
-
-			ginkgo.It("returns an error if nextOffset is not the actual next offset", func() {
-				err := tc.Writer.WriteEvents(
-					ctx,
-					"<handler>",
-					"<instance>",
-					3,
-					4, // incorrect nextOffset
-					allEvents,
-					false, // archive
-				)
-				gomega.Expect(err).To(gomega.MatchError("optimistic concurrency conflict, 4 is not the next offset"))
+				gomega.Expect(err).To(gomega.MatchError("optimistic concurrency conflict, 3 is not the next revision"))
 			})
 		})
 
-		ginkgo.It("allows archiving without adding more events", func() {
+		ginkgo.It("allows archiving without writing events", func() {
 			err := tc.Writer.WriteEvents(
 				ctx,
 				"<handler>",
 				"<instance>",
-				0,
 				0,
 				allEvents,
 				false, // archive
@@ -441,21 +370,20 @@ func DeclareAggregateEventTests(
 				ctx,
 				"<handler>",
 				"<instance>",
-				0,
-				5,
+				1,
 				nil, // don't add more events
 				true,
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-			firstOffset, nextOffset, err := tc.Reader.ReadBounds(
+			begin, end, err := tc.Reader.ReadBounds(
 				ctx,
 				"<handler>",
 				"<instance>",
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-			gomega.Expect(firstOffset).To(gomega.BeNumerically("==", 5))
-			gomega.Expect(nextOffset).To(gomega.BeNumerically("==", 5))
+			gomega.Expect(begin).To(gomega.BeNumerically("==", 2))
+			gomega.Expect(end).To(gomega.BeNumerically("==", 2))
 		})
 
 		ginkgo.It("stores separate bounds for each combination of handler key and instance ID", func() {
@@ -472,44 +400,60 @@ func DeclareAggregateEventTests(
 			}
 
 			for i, inst := range instances {
-				events := allEvents[:i+1]
+				events := allEvents[:i]
+
+				var rev uint64
+				for _, ev := range events {
+					err := tc.Writer.WriteEvents(
+						ctx,
+						inst.HandlerKey,
+						inst.InstanceID,
+						rev,
+						[]*envelopespec.Envelope{ev},
+						false, // archive
+					)
+					gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
+					rev++
+				}
 
 				err := tc.Writer.WriteEvents(
 					ctx,
 					inst.HandlerKey,
 					inst.InstanceID,
-					0,
-					0,
-					events,
+					rev,
+					[]*envelopespec.Envelope{},
 					true, // archive
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
+				rev++
 
-				err = tc.Writer.WriteEvents(
-					ctx,
-					inst.HandlerKey,
-					inst.InstanceID,
-					uint64(len(events)),
-					uint64(len(events)),
-					events,
-					false, // archive
-				)
-				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
+				for _, ev := range events {
+					err = tc.Writer.WriteEvents(
+						ctx,
+						inst.HandlerKey,
+						inst.InstanceID,
+						rev,
+						[]*envelopespec.Envelope{ev},
+						false, // archive
+					)
+					gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
+					rev++
+				}
 			}
 
 			for i, inst := range instances {
-				firstOffset, nextOffset, err := tc.Reader.ReadBounds(
+				begin, end, err := tc.Reader.ReadBounds(
 					ctx,
 					inst.HandlerKey,
 					inst.InstanceID,
 				)
 
-				expectedFirstOffset := i + 1
-				expectedNextOffset := expectedFirstOffset + i + 1
+				expectedBegin := i + 1
+				expectedEnd := (i * 2) + 1
 
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-				gomega.Expect(firstOffset).To(gomega.BeNumerically("==", expectedFirstOffset))
-				gomega.Expect(nextOffset).To(gomega.BeNumerically("==", expectedNextOffset))
+				gomega.Expect(begin).To(gomega.BeNumerically("==", expectedBegin))
+				gomega.Expect(end).To(gomega.BeNumerically("==", expectedEnd))
 			}
 		})
 
@@ -527,29 +471,45 @@ func DeclareAggregateEventTests(
 			}
 
 			for i, inst := range instances {
-				events := allEvents[:i+1]
+				events := allEvents[:i]
+
+				var rev uint64
+				for _, ev := range events {
+					err := tc.Writer.WriteEvents(
+						ctx,
+						inst.HandlerKey,
+						inst.InstanceID,
+						rev,
+						[]*envelopespec.Envelope{ev},
+						false, // archive
+					)
+					gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
+					rev++
+				}
 
 				err := tc.Writer.WriteEvents(
 					ctx,
 					inst.HandlerKey,
 					inst.InstanceID,
-					0,
-					0,
-					events,
+					rev,
+					[]*envelopespec.Envelope{},
 					true, // archive
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
+				rev++
 
-				err = tc.Writer.WriteEvents(
-					ctx,
-					inst.HandlerKey,
-					inst.InstanceID,
-					uint64(len(events)),
-					uint64(len(events)),
-					events,
-					false, // archive
-				)
-				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
+				for _, ev := range events {
+					err = tc.Writer.WriteEvents(
+						ctx,
+						inst.HandlerKey,
+						inst.InstanceID,
+						rev,
+						[]*envelopespec.Envelope{ev},
+						false, // archive
+					)
+					gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
+					rev++
+				}
 			}
 
 			for i, inst := range instances {
@@ -559,40 +519,44 @@ func DeclareAggregateEventTests(
 					inst.HandlerKey,
 					inst.InstanceID,
 					uint64(i+1),
-					allEvents[:i+1],
+					allEvents[:i],
 				)
 			}
 		})
 	})
 }
 
-// expectEvents reads all events from store starting from offset and asserts
+// expectEvents reads all events from store starting from begin and asserts
 // that they are equal to expectedEvents.
 func expectEvents(
 	ctx context.Context,
 	reader aggregate.EventReader,
 	hk, id string,
-	offset uint64,
+	begin uint64,
 	expectedEvents []*envelopespec.Envelope,
 ) {
 	var producedEvents []*envelopespec.Envelope
 
 	for {
-		events, more, err := reader.ReadEvents(
+		events, end, err := reader.ReadEvents(
 			ctx,
 			hk,
 			id,
-			offset,
+			begin,
 		)
 		gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
 		producedEvents = append(producedEvents, events...)
 
-		if !more {
+		if begin >= end {
 			break
 		}
 
-		offset += uint64(len(events))
+		begin = end
+	}
+
+	if len(producedEvents) == 0 && len(expectedEvents) == 0 {
+		return
 	}
 
 	gomega.Expect(producedEvents).To(gomegax.EqualX(expectedEvents))
