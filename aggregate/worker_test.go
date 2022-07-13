@@ -74,7 +74,7 @@ var _ = Describe("type Worker", func() {
 			Marshaler:      Marshaler,
 		}
 
-		commands = make(chan Command, 5)
+		commands = make(chan Command, DefaultCommandBuffer)
 
 		handler = &AggregateMessageHandler{
 			ConfigureFunc: func(c dogma.AggregateConfigurer) {
@@ -357,15 +357,11 @@ var _ = Describe("type Worker", func() {
 
 				By("sending a second command")
 
-				select {
-				case <-ctx.Done():
-					Expect(ctx.Err()).ShouldNot(HaveOccurred())
-				case commands <- Command{
-					Context: ctx,
-					Parcel:  NewParcel("<command-2>", MessageC1),
-					Result:  make(chan error),
-				}:
-				}
+				executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command-2>", MessageC1),
+				)
 			}()
 
 			err := worker.Run(ctx)
@@ -804,7 +800,7 @@ func executeCommandAsync(
 	commands chan<- Command,
 	command parcel.Parcel,
 ) <-chan error {
-	result := make(chan error, 1)
+	result := make(chan error)
 
 	cmd := Command{
 		Context: ctx,

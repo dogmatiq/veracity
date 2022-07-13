@@ -180,9 +180,8 @@ func (w *Worker) handleCommand(
 		}
 	}
 
-	// We are only responsible for writing "success" responses, all error
-	// responses are handled by the supervisor.
-	cmd.Result <- nil
+	// Signal to the goroutine that sent the command that it has been handled.
+	close(cmd.Result)
 
 	w.snapshotAge += eventCount
 	w.nextOffset += eventCount
