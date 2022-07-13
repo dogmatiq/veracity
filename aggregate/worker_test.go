@@ -640,7 +640,9 @@ var _ = Describe("type Worker", func() {
 		})
 
 		XIt("does not return an error if writing a snapshot fails", func() {
+		})
 
+		XIt("does not return an error if the SnapshotWriter is nil", func() {
 		})
 
 		XIt("returns an error if the root cannot be loaded", func() {
@@ -653,6 +655,12 @@ var _ = Describe("type Worker", func() {
 		})
 
 		XIt("returns an error if the context is canceled while persisting a snapshot", func() {
+		})
+
+		XIt("makes the instance ID available via the scope", func() {
+		})
+
+		XIt("allows logging via the scope", func() {
 		})
 	})
 })
