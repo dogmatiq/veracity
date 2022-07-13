@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/marshalkit"
@@ -18,7 +19,7 @@ import (
 type AggregateSnapshotContext struct {
 	Reader              aggregate.SnapshotReader
 	Writer              aggregate.SnapshotWriter
-	ArchiveIsHardDelete bool
+	ArchiveIsSoftDelete bool
 	AfterEach           func()
 }
 
@@ -34,7 +35,10 @@ func DeclareAggregateSnapshotTests(
 	)
 
 	ginkgo.BeforeEach(func() {
-		ctx = context.Background()
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		ginkgo.DeferCleanup(cancel)
+
 		root = &aggregateRoot{}
 
 		m, err := codec.NewMarshaler(
@@ -49,11 +53,8 @@ func DeclareAggregateSnapshotTests(
 		gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
 		tc = new(m)
-	})
-
-	ginkgo.AfterEach(func() {
 		if tc.AfterEach != nil {
-			tc.AfterEach()
+			ginkgo.DeferCleanup(tc.AfterEach)
 		}
 	})
 
@@ -296,6 +297,10 @@ func DeclareAggregateSnapshotTests(
 		})
 
 		ginkgo.It("does not find archived snapshots", func() {
+			if tc.ArchiveIsSoftDelete {
+				ginkgo.Skip("archived snapshots are soft-deleted")
+			}
+
 			err := tc.Writer.WriteSnapshot(
 				ctx,
 				"<handler>",
@@ -313,10 +318,6 @@ func DeclareAggregateSnapshotTests(
 				"<instance>",
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-
-			if !tc.ArchiveIsHardDelete {
-				ginkgo.Skip("archived snapshots are not hard deleted")
-			}
 
 			_, ok, err := tc.Reader.ReadSnapshot(
 				ctx,

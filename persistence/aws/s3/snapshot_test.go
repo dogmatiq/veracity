@@ -65,7 +65,6 @@ var _ = Describe("type AggregateSnapshotReader and AggregateSnapshotWriter", fun
 					Bucket:    bucket,
 					Marshaler: m,
 				},
-				ArchiveIsHardDelete: true,
 				AfterEach: func() {
 					err := deleteBucket(client, bucket)
 					gomega.Expect(err).ShouldNot(gomega.HaveOccurred())

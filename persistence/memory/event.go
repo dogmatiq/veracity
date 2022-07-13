@@ -79,7 +79,7 @@ func (s *AggregateEventStore) ReadEvents(
 	}
 
 	if firstOffset > e.NextOffset {
-		return nil, false, fmt.Errorf("event at offset %d does not exist yet", firstOffset)
+		return nil, false, nil
 	}
 
 	data := e.Envelopes[firstOffset-e.FirstOffset]
