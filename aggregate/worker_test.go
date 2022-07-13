@@ -518,7 +518,7 @@ var _ = Describe("type Worker", func() {
 			})
 		})
 
-		When("the idle timeout is reached", func() {
+		When("the idle timeout is exceeded", func() {
 			BeforeEach(func() {
 				worker.IdleTimeout = 1 * time.Millisecond
 			})
@@ -545,7 +545,19 @@ var _ = Describe("type Worker", func() {
 				Expect(snapshotOffset).To(BeNumerically("==", 0))
 			})
 
-			XIt("does not take a snapshot if the existing snapshot is up-to-date", func() {
+			It("does not take a snapshot if the existing snapshot is up-to-date", func() {
+				err := worker.Run(ctx)
+				Expect(err).ShouldNot(HaveOccurred())
+
+				_, ok, err := snapshotStore.ReadSnapshot(
+					ctx,
+					"<handler-key>",
+					"<instance>",
+					&AggregateRoot{},
+					0,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(ok).To(BeFalse())
 			})
 
 			It("returns nil", func() {
