@@ -48,12 +48,6 @@ type WorkerConfig struct {
 	// If it is 0, DefaultSnapshotInterval is used.
 	SnapshotInterval uint64
 
-	// SnapshotWriteTimeout is the maximum duration to allow for a snapshot to
-	// be written to persistent storage.
-	//
-	// If it is non-positive, DefaultSnapshotWriteTimeout is used instead.
-	SnapshotWriteTimeout time.Duration
-
 	// Logger is the target for log messages about the aggregate instance.
 	Logger logging.Logger
 }
@@ -228,17 +222,10 @@ func (w *Worker) takeSnapshot(ctx context.Context) error {
 		return nil
 	}
 
-	timeoutCtx, cancel := linger.ContextWithTimeout(
-		ctx,
-		w.SnapshotWriteTimeout,
-		DefaultSnapshotWriteTimeout,
-	)
-	defer cancel()
-
 	snapshotOffset := w.nextOffset - 1
 
 	if err := w.SnapshotWriter.WriteSnapshot(
-		timeoutCtx,
+		ctx,
 		w.HandlerIdentity.Key,
 		w.InstanceID,
 		w.root,

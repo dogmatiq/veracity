@@ -566,10 +566,6 @@ var _ = Describe("type Worker", func() {
 			})
 		})
 
-		XIt("honours the snapshot write timeout", func() {
-
-		})
-
 		XIt("does not return an error if writing a snapshot fails", func() {
 
 		})
