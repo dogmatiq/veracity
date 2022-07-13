@@ -692,7 +692,20 @@ var _ = Describe("type Worker", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 
-		XIt("returns an error if the root cannot be loaded", func() {
+		It("returns an error if the root cannot be loaded", func() {
+			eventReader.ReadBoundsFunc = func(
+				ctx context.Context,
+				hk, id string,
+			) (uint64, uint64, error) {
+				return 0, 0, errors.New("<error>")
+			}
+
+			err := worker.Run(ctx)
+			Expect(err).To(
+				MatchError(
+					`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read event offset bounds: <error>`,
+				),
+			)
 		})
 
 		XIt("returns an error if events cannot be written", func() {
