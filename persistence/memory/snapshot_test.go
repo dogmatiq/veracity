@@ -8,13 +8,13 @@ import (
 )
 
 var _ = Describe("type AggregateSnapshotStore", func() {
-	persistencetest.DeclareSnapshotTests(
-		func(m marshalkit.ValueMarshaler) persistencetest.SnapshotContext {
+	persistencetest.DeclareAggregateSnapshotTests(
+		func(m marshalkit.ValueMarshaler) persistencetest.AggregateSnapshotContext {
 			store := &AggregateSnapshotStore{
 				Marshaler: m,
 			}
 
-			return persistencetest.SnapshotContext{
+			return persistencetest.AggregateSnapshotContext{
 				Reader:              store,
 				Writer:              store,
 				ArchiveIsHardDelete: true,

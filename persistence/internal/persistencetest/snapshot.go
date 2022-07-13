@@ -14,21 +14,21 @@ import (
 	"github.com/onsi/gomega"
 )
 
-// SnapshotContext encapsulates values used during snapshot tests.
-type SnapshotContext struct {
+// AggregateSnapshotContext encapsulates values used during snapshot tests.
+type AggregateSnapshotContext struct {
 	Reader              aggregate.SnapshotReader
 	Writer              aggregate.SnapshotWriter
 	ArchiveIsHardDelete bool
 	AfterEach           func()
 }
 
-// DeclareSnapshotTests declares a function test-suite for persistence of
-// aggregate snapshots.
-func DeclareSnapshotTests(
-	new func(marshalkit.ValueMarshaler) SnapshotContext,
+// DeclareAggregateSnapshotTests declares a function test-suite for persistence
+// of aggregate snapshots.
+func DeclareAggregateSnapshotTests(
+	new func(marshalkit.ValueMarshaler) AggregateSnapshotContext,
 ) {
 	var (
-		tc   SnapshotContext
+		tc   AggregateSnapshotContext
 		ctx  context.Context
 		root *aggregateRoot
 	)

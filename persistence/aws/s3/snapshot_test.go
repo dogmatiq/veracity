@@ -17,8 +17,8 @@ import (
 )
 
 var _ = Describe("type AggregateSnapshotReader and AggregateSnapshotWriter", func() {
-	persistencetest.DeclareSnapshotTests(
-		func(m marshalkit.ValueMarshaler) persistencetest.SnapshotContext {
+	persistencetest.DeclareAggregateSnapshotTests(
+		func(m marshalkit.ValueMarshaler) persistencetest.AggregateSnapshotContext {
 			accessKey := os.Getenv("DOGMATIQ_TEST_MINIO_ACCESS_KEY")
 			if accessKey == "" {
 				accessKey = "minio"
@@ -54,7 +54,7 @@ var _ = Describe("type AggregateSnapshotReader and AggregateSnapshotWriter", fun
 			})
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-			return persistencetest.SnapshotContext{
+			return persistencetest.AggregateSnapshotContext{
 				Reader: &AggregateSnapshotReader{
 					Client:    client,
 					Bucket:    bucket,
