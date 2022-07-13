@@ -17,7 +17,6 @@ import (
 	. "github.com/dogmatiq/veracity/internal/fixtures"
 	"github.com/dogmatiq/veracity/parcel"
 	"github.com/dogmatiq/veracity/persistence/memory"
-	. "github.com/jmalloc/gomegax"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -823,74 +822,3 @@ var _ = Describe("type Worker", func() {
 		})
 	})
 })
-
-// expectEvents reads all events from store starting from offset and asserts
-// that they are equal to expectedEvents.
-func expectEvents(
-	reader EventReader,
-	hk, id string,
-	offset uint64,
-	expectedEvents []*envelopespec.Envelope,
-) {
-	var producedEvents []*envelopespec.Envelope
-
-	for {
-		events, more, err := reader.ReadEvents(
-			context.Background(),
-			hk,
-			id,
-			offset,
-		)
-		Expect(err).ShouldNot(HaveOccurred())
-
-		producedEvents = append(producedEvents, events...)
-
-		if !more {
-			break
-		}
-
-		offset += uint64(len(events))
-	}
-
-	Expect(producedEvents).To(EqualX(expectedEvents))
-}
-
-// executeCommandSync executes a command by sending it to a command channel and
-// waiting for it to complete.
-func executeCommandSync(
-	ctx context.Context,
-	commands chan<- Command,
-	command parcel.Parcel,
-) {
-	result := executeCommandAsync(ctx, commands, command)
-
-	select {
-	case <-ctx.Done():
-		Expect(ctx.Err()).ShouldNot(HaveOccurred())
-	case err := <-result:
-		Expect(err).ShouldNot(HaveOccurred())
-	}
-}
-
-// executeCommandSync executes a command by sending it to a command channel.
-func executeCommandAsync(
-	ctx context.Context,
-	commands chan<- Command,
-	command parcel.Parcel,
-) <-chan error {
-	result := make(chan error)
-
-	cmd := Command{
-		Context: ctx,
-		Parcel:  command,
-		Result:  result,
-	}
-
-	select {
-	case <-ctx.Done():
-		Expect(ctx.Err()).ShouldNot(HaveOccurred())
-	case commands <- cmd:
-	}
-
-	return result
-}

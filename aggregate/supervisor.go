@@ -3,20 +3,11 @@ package aggregate
 import (
 	"context"
 	"errors"
-
-	"github.com/dogmatiq/veracity/parcel"
 )
 
 // DefaultCommandBuffer is the default number of commands to buffer in memory
 // per aggregate instance.
 const DefaultCommandBuffer = 100
-
-// Command encapsulates a message that is to be executed as a command.
-type Command struct {
-	Context context.Context
-	Parcel  parcel.Parcel
-	Result  chan<- error
-}
 
 // Supervisor manages the lifecycle of all workers for a specific aggregate.
 type Supervisor struct {
