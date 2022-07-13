@@ -523,7 +523,26 @@ var _ = Describe("type Worker", func() {
 				worker.IdleTimeout = 1 * time.Millisecond
 			})
 
-			XIt("takes a snapshot if the existing snapshot is out-of-date", func() {
+			It("takes a snapshot if the existing snapshot is out-of-date", func() {
+				executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
+
+				err := worker.Run(ctx)
+				Expect(err).ShouldNot(HaveOccurred())
+
+				snapshotOffset, ok, err := snapshotStore.ReadSnapshot(
+					ctx,
+					"<handler-key>",
+					"<instance>",
+					&AggregateRoot{},
+					0,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(ok).To(BeTrue())
+				Expect(snapshotOffset).To(BeNumerically("==", 0))
 			})
 
 			XIt("does not take a snapshot if the existing snapshot is up-to-date", func() {
