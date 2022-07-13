@@ -77,37 +77,36 @@ type Loader struct {
 // Load never returns an error as a result of reading or writing snapshots; it
 // will always fall-back to using the historical events.
 //
-// It returns firstOffset, which is the offset of the first non-archived event;
-// and nextOffset, which is the offset that will be occupied by the next event
-// to be recorded by this instance.
+// end is latest (exclusive) revision of the instance. Because it is
+// exclusive it is equivalent to the next revision of this instance.
 //
-// snapshotAge is the number of events that have been recorded since the last
-// snapshot was taken.
+// snapshotAge is the number of revisions have been made since the last snapshot
+// was taken.
 func (l *Loader) Load(
 	ctx context.Context,
 	h configkit.Identity,
 	id string,
 	r dogma.AggregateRoot,
-) (firstOffset, nextOffset, snapshotAge uint64, _ error) {
-	// First read the event bounds that we are interested in. This helps us
-	// optimize the reads we perform by ignoring any snapshots and events that
-	// are no longer relevant.
-	firstOffset, nextOffset, err := l.EventReader.ReadBounds(
+) (end, snapshotAge uint64, _ error) {
+	// First read the bounds that we are interested in. This helps us optimize
+	// the reads we perform by ignoring any snapshots and events that are no
+	// longer relevant.
+	begin, end, err := l.EventReader.ReadBounds(
 		ctx,
 		h.Key,
 		id,
 	)
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf(
-			"aggregate root %s[%s] cannot be loaded: unable to read event offset bounds: %w",
+		return 0, 0, fmt.Errorf(
+			"aggregate root %s[%s] cannot be loaded: unable to read event revision bounds: %w",
 			h.Name,
 			id,
 			err,
 		)
 	}
 
-	// If the nextOffset is zero this instance has no events at all.
-	if nextOffset == 0 {
+	// If the end is zero this instance has no revisions at all.
+	if end == 0 {
 		logging.Log(
 			l.Logger,
 			"aggregate root %s[%s] has no historical events",
@@ -115,35 +114,35 @@ func (l *Loader) Load(
 			id,
 		)
 
-		return 0, 0, 0, nil
+		return 0, 0, nil
 	}
 
-	// If the firstOffset and the nextOffset are the same then the instance was
-	// destroyed at the same time the most recent event was recorded and
-	// therefore no events need to be applied.
-	if firstOffset == nextOffset {
+	// If begin and end are the same then the instance was destroyed at the same
+	// time the most recent revision was made, and therefore no events need to
+	// be applied.
+	if begin == end {
 		logging.Log(
 			l.Logger,
-			"aggregate root %s[%s] has no historical events since being destroyed at offset %d",
+			"aggregate root %s[%s] has no historical events since being destroyed at revision %d",
 			h.Name,
 			id,
-			firstOffset-1,
+			begin-1,
 		)
 
-		return firstOffset, nextOffset, 0, nil
+		return end, 0, nil
 	}
 
-	// Attempt to read a snapshot that is newer than firstOffset so that we
+	// Attempt to read a snapshot that is newer than begin so that we
 	// don't have to read the entire set of historical events.
-	snapshotOffset, hasSnapshot, err := l.readSnapshot(
+	snapshotRev, hasSnapshot, err := l.readSnapshot(
 		ctx,
 		h,
 		id,
 		r,
-		firstOffset, // ignore any snapshots that were taken before the first relevant event
+		begin, // ignore any snapshots that were taken before the first relevant revision
 	)
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf(
+		return 0, 0, fmt.Errorf(
 			"aggregate root %s[%s] cannot be loaded: unable to read snapshot: %w",
 			h.Name,
 			id,
@@ -151,42 +150,39 @@ func (l *Loader) Load(
 		)
 	}
 
-	// Start reading events at the first non-archived offset.
-	readOffset := firstOffset
-
 	if hasSnapshot {
 		// We found a snapshot, so the first event we want to read is the one
-		// after that snapshot was taken.
-		readOffset = snapshotOffset + 1
+		// from the revision after that snapshot was taken.
+		begin = snapshotRev + 1
 
-		// If the firstReadOffset after the snapshot is the same as the
-		// nextOffset then no events have occurred since the snapshot was taken,
-		// and therefore there's nothing more to load.
-		if readOffset == nextOffset {
+		// If the revision after the snapshot is the same as the end then no
+		// revisions have been made since the snapshot was taken, and therefore
+		// there's nothing more to load.
+		if begin == end {
 			logging.Log(
 				l.Logger,
-				"aggregate root %s[%s] loaded from up-to-date snapshot taken at offset %d",
+				"aggregate root %s[%s] loaded from up-to-date snapshot taken at revision %d",
 				h.Name,
 				id,
-				snapshotOffset,
+				snapshotRev,
 			)
 
-			return firstOffset, nextOffset, 0, nil
+			return end, 0, nil
 		}
 	}
 
 	// Finally, we read and apply the historical events that occurred after the
 	// snapshot (or since the instance was last destroyed if there is no
 	// snapshot available).
-	nextOffset, err = l.readEvents(
+	end, err = l.readEvents(
 		ctx,
 		h,
 		id,
 		r,
-		readOffset,
+		begin,
 	)
 	if err != nil {
-		if nextOffset > readOffset {
+		if end > begin {
 			// We managed to read _some_ events before this error occurred,
 			// so we write a new snapshot so that we can "pick up where we
 			// left off" next time we attempt to load this instance.
@@ -194,11 +190,11 @@ func (l *Loader) Load(
 				h,
 				id,
 				r,
-				nextOffset-1, // snapshot offset
+				end-1, // snapshot revision
 			)
 		}
 
-		return 0, 0, 0, fmt.Errorf(
+		return 0, 0, fmt.Errorf(
 			"aggregate root %s[%s] cannot be loaded: unable to read events: %w",
 			h.Name,
 			id,
@@ -206,37 +202,37 @@ func (l *Loader) Load(
 		)
 	}
 
-	snapshotAge = nextOffset - readOffset
+	snapshotAge = end - begin
 
 	// Log about how the aggregate root was loaded.
 	if hasSnapshot {
 		logging.Log(
 			l.Logger,
-			"aggregate root %s[%s] loaded from outdated snapshot taken at offset %d and %d subsequent event(s)",
+			"aggregate root %s[%s] loaded from outdated snapshot taken at revision %d and events from %d subsequent revision(s)",
 			h.Name,
 			id,
-			snapshotOffset,
+			snapshotRev,
 			snapshotAge,
 		)
 	} else {
 		logging.Log(
 			l.Logger,
-			"aggregate root %s[%s] loaded from %d event(s)",
+			"aggregate root %s[%s] loaded from %d revision(s)",
 			h.Name,
 			id,
 			snapshotAge,
 		)
 	}
 
-	return firstOffset, nextOffset, snapshotAge, nil
+	return end, snapshotAge, nil
 }
 
 // readSnapshot updates the contents of r to match the most recent snapshot that
-// was taken at or after minOffset.
+// was taken at or after minRev.
 //
-// ok is true if such a snapshot is available, in which case snapshotOffset is
-// the offset at which the snapshot was taken. If ok is false, r is guaranteed
-// not to have been modified.
+// ok is true if such a snapshot is available, in which case rev is the revision
+// at which the snapshot was taken. If ok is false, r is guaranteed not to have
+// been modified.
 //
 // A failure to load a snapshot is not treated as an error; err is non-nil only
 // if ctx is canceled.
@@ -245,19 +241,19 @@ func (l *Loader) readSnapshot(
 	h configkit.Identity,
 	id string,
 	r dogma.AggregateRoot,
-	minOffset uint64,
-) (snapshotOffset uint64, ok bool, err error) {
+	minRev uint64,
+) (rev uint64, ok bool, err error) {
 	// Snapshots are entirely optional, bail if no reader is configured.
 	if l.SnapshotReader == nil {
 		return 0, false, nil
 	}
 
-	snapshotOffset, ok, err = l.SnapshotReader.ReadSnapshot(
+	rev, ok, err = l.SnapshotReader.ReadSnapshot(
 		ctx,
 		h.Key,
 		id,
 		r,
-		minOffset,
+		minRev,
 	)
 	if err != nil {
 		// If the error was due to a context cancelation/timeout we bail with
@@ -280,18 +276,18 @@ func (l *Loader) readSnapshot(
 		return 0, false, nil
 	}
 
-	return snapshotOffset, ok, nil
+	return rev, ok, nil
 }
 
 // writeSnapshot writes a snapshot of an aggregate root.
 //
-// snapshotOffset is the offset of the last event to be applied to r, which
-// is not necessarily the instance's most recent event.
+// rev is the revision of the aggregate instance as represented by r, which is
+// not necessarily the instance's most recent revision.
 func (l *Loader) writeSnapshot(
 	h configkit.Identity,
 	id string,
 	r dogma.AggregateRoot,
-	snapshotOffset uint64,
+	rev uint64,
 ) {
 	// Snapshots are entirely optional, bail if no writer is configured.
 	if l.SnapshotWriter == nil {
@@ -314,14 +310,14 @@ func (l *Loader) writeSnapshot(
 		h.Key,
 		id,
 		r,
-		snapshotOffset,
+		rev,
 	); err != nil {
 		logging.Log(
 			l.Logger,
-			"snapshot of aggregate root %s[%s] cannot be be written at offset %d (possibly outdated): %w",
+			"snapshot of aggregate root %s[%s] cannot be be written at revision %d (possibly outdated): %w",
 			h.Name,
 			id,
-			snapshotOffset,
+			rev,
 			err,
 		)
 
@@ -330,52 +326,62 @@ func (l *Loader) writeSnapshot(
 
 	logging.Log(
 		l.Logger,
-		"snapshot of aggregate root %s[%s] written at offset %d (possibly outdated)",
+		"snapshot of aggregate root %s[%s] written at revision %d (possibly outdated)",
 		h.Name,
 		id,
-		snapshotOffset,
+		rev,
 	)
 }
 
 // readEvents loads historical events and applies them to r.
 //
-// firstOffset is the offset of the first event to read.
+// begin is the (inclusive) revision containing the first events to read.
 //
-// It returns the offset of the next event to be recorded by this instance. Note
-// this may be greater than the nextOffset loaded by the initial bounds check.
-// The next offset is returned even if err is non-nil.
+// end is latest (exclusive) revision of the instance. Because it is exclusive
+// it is equivalent to the next revision of this instance. It may be greater
+// than the end revision returned by the initial bounds check. end is valid even
+// even if err is non-nil.
 func (l *Loader) readEvents(
 	ctx context.Context,
 	h configkit.Identity,
 	id string,
 	r dogma.AggregateRoot,
-	firstOffset uint64,
-) (nextOffset uint64, err error) {
-	nextOffset = firstOffset
+	begin uint64,
+) (end uint64, err error) {
+	var events []dogma.Message
 
 	for {
-		envelopes, more, err := l.EventReader.ReadEvents(
+		events = events[:0]
+
+		envelopes, end, err := l.EventReader.ReadEvents(
 			ctx,
 			h.Key,
 			id,
-			nextOffset,
+			begin,
 		)
 		if err != nil {
-			return nextOffset, err
+			return begin, err
 		}
 
+		// Unmarshal the envelopes first before applying them to guarantee that
+		// we can apply them all.
 		for _, env := range envelopes {
 			ev, err := marshalkit.UnmarshalMessageFromEnvelope(l.Marshaler, env)
 			if err != nil {
-				return nextOffset, err
+				return begin, err
 			}
 
-			r.ApplyEvent(ev)
-			nextOffset++
+			events = append(events, ev)
 		}
 
-		if !more {
-			return nextOffset, nil
+		for _, ev := range events {
+			r.ApplyEvent(ev)
 		}
+
+		if begin >= end {
+			return end, nil
+		}
+
+		begin = end
 	}
 }
