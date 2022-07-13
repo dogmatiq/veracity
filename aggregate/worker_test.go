@@ -561,6 +561,24 @@ var _ = Describe("type Worker", func() {
 				Expect(err).To(Equal(context.Canceled))
 			})
 
+			It("does not return an error if archiving snapshots fails", func() {
+				snapshotWriter.ArchiveSnapshotsFunc = func(
+					ctx context.Context,
+					hk, id string,
+				) error {
+					return errors.New("<error>")
+				}
+
+				executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
+
+				err := worker.Run(ctx)
+				Expect(err).ShouldNot(HaveOccurred())
+			})
+
 			When("events are recorded after the Destroy() is called", func() {
 				It("archives neither events nor snapshots", func() {
 					handler.HandleCommandFunc = func(
