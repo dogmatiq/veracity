@@ -444,7 +444,32 @@ var _ = Describe("type Worker", func() {
 				Expect(ok).To(BeFalse())
 			})
 
-			XIt("archives snapshots", func() {
+			It("archives newly recorded events", func() {
+				handler.HandleCommandFunc = func(
+					r dogma.AggregateRoot,
+					s dogma.AggregateCommandScope,
+					m dogma.Message,
+				) {
+					s.RecordEvent(MessageE3)
+					s.Destroy()
+				}
+
+				executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
+
+				err := worker.Run(ctx)
+				Expect(err).ShouldNot(HaveOccurred())
+
+				firstOffset, nextOffset, err := eventStore.ReadBounds(
+					ctx,
+					"<handler-key>",
+					"<instance>",
+				)
+				Expect(firstOffset).To(BeNumerically("==", 3))
+				Expect(nextOffset).To(BeNumerically("==", 3))
 			})
 
 			XIt("returns nil", func() {
