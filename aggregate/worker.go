@@ -2,12 +2,16 @@ package aggregate
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/dogmatiq/configkit"
 	"github.com/dogmatiq/dodeca/logging"
 	"github.com/dogmatiq/dogma"
+	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/linger"
+	"github.com/dogmatiq/marshalkit"
+	"github.com/dogmatiq/veracity/parcel"
 )
 
 // DefaultIdleTimeout is the default amount of time a worker will continue
@@ -20,8 +24,11 @@ type WorkerConfig struct {
 	// this instance.
 	Handler dogma.AggregateMessageHandler
 
-	// Identity is the identity of the handler.
+	// HandlerIdentity is the identity of the handler.
 	HandlerIdentity configkit.Identity
+
+	// Packer is used to create parcels containing the recorded events.
+	Packer *parcel.Packer
 
 	// Loader is used to load aggregate state from persistent storage.
 	Loader *Loader
@@ -42,12 +49,6 @@ type WorkerConfig struct {
 	// If it is 0, DefaultSnapshotInterval is used.
 	SnapshotInterval uint64
 
-	// SnapshotWriteTimeout is the maximum duration to allow for a snapshot to
-	// be written to persistent storage.
-	//
-	// If it is non-positive, DefaultSnapshotWriteTimeout is used instead.
-	SnapshotWriteTimeout time.Duration
-
 	// Logger is the target for log messages about the aggregate instance.
 	Logger logging.Logger
 }
@@ -60,7 +61,11 @@ type Worker struct {
 	InstanceID string
 
 	// Commands is a channel that receives commands to be executed.
-	Commands chan Command
+	Commands <-chan Command
+
+	// envHandlerIdentity is the identity of the handler in the representation
+	// used within envelopes.
+	envHandlerIdentity *envelopespec.Identity
 
 	// root is the aggregate root for this instance.
 	root dogma.AggregateRoot
@@ -80,6 +85,8 @@ type Worker struct {
 // Run starts the worker until ctx is canceled or the worker exits due to an
 // idle timeout.
 func (w *Worker) Run(ctx context.Context) error {
+	w.envHandlerIdentity = marshalkit.MustMarshalEnvelopeIdentity(w.HandlerIdentity)
+
 	if err := w.loadRoot(ctx); err != nil {
 		return err
 	}
@@ -125,9 +132,10 @@ func (w *Worker) handleNextCommand(ctx context.Context) (done bool, _ error) {
 		return w.handleCommand(ctx, cmd)
 
 	case <-idle.C:
-		// We've been idle for a while without receiving a command, we always
-		// take a snapshot before shutting down to mininize the time it takes to
-		// reload this aggregate in the future.
+		// We've been idle for a while without receiving a command.
+		//
+		// We always take a snapshot before shutting down to mininize the time
+		// it takes to reload this aggregate in the future.
 		return true, w.takeSnapshot(ctx)
 	}
 }
@@ -137,7 +145,19 @@ func (w *Worker) handleCommand(
 	ctx context.Context,
 	cmd Command,
 ) (done bool, _ error) {
-	sc := &scope{}
+	sc := &scope{
+		Command:         cmd.Parcel,
+		HandlerIdentity: w.envHandlerIdentity,
+		ID:              w.InstanceID,
+		Root:            w.root,
+		Packer:          w.Packer,
+		Logger: logging.Prefix(
+			w.Logger,
+			"aggregate %s[%s]: ",
+			w.HandlerIdentity.Name,
+			w.InstanceID,
+		),
+	}
 
 	w.Handler.HandleCommand(
 		w.root,
@@ -145,24 +165,32 @@ func (w *Worker) handleCommand(
 		cmd.Parcel.Message,
 	)
 
-	if err := w.EventWriter.WriteEvents(
-		ctx,
-		w.HandlerIdentity.Key,
-		w.InstanceID,
-		w.firstOffset,
-		w.nextOffset,
-		sc.EventEnvelopes,
-		sc.IsDestroyed, // archive events if instance is destroyed
-	); err != nil {
-		return true, err
+	eventCount := uint64(len(sc.EventEnvelopes))
+
+	if eventCount != 0 || sc.IsDestroyed {
+		if err := w.EventWriter.WriteEvents(
+			ctx,
+			w.HandlerIdentity.Key,
+			w.InstanceID,
+			w.firstOffset,
+			w.nextOffset,
+			sc.EventEnvelopes,
+			sc.IsDestroyed, // archive events if instance is destroyed
+		); err != nil {
+			return true, fmt.Errorf(
+				"cannot write events for aggregate root %s[%s]: %w",
+				w.HandlerIdentity.Name,
+				w.InstanceID,
+				err,
+			)
+		}
 	}
 
-	// We are only responsible for writing "success" responses, all error
-	// responses are handled by the supervisor.
-	cmd.Result <- nil
+	// Signal to the goroutine that sent the command that it has been handled.
+	close(cmd.Result)
 
-	w.snapshotAge += uint64(len(sc.EventEnvelopes))
-	w.nextOffset += uint64(len(sc.EventEnvelopes))
+	w.snapshotAge += eventCount
+	w.nextOffset += eventCount
 
 	if sc.IsDestroyed {
 		return true, w.archiveSnapshots(ctx)
@@ -214,8 +242,8 @@ func (w *Worker) takeSnapshot(ctx context.Context) error {
 		w.root,
 		snapshotOffset,
 	); err != nil {
-		// If the error was due to a context cancelation/timeout we bail with
-		// the context error.
+		// If the error was due to a context cancelation/timeout of the context
+		// we bail with the context error.
 		if err == ctx.Err() {
 			return err
 		}

@@ -2,7 +2,6 @@ package aggregate
 
 import (
 	"context"
-	"time"
 
 	"github.com/dogmatiq/dogma"
 )
@@ -12,10 +11,6 @@ const (
 	// recorded by an aggregate instance before it is considered neccessary to
 	// take a new snapshot.
 	DefaultSnapshotInterval = 1000
-
-	// DefaultSnapshotWriteTimeout is the default amount of time to allow for
-	// writing a snapshot.
-	DefaultSnapshotWriteTimeout = 250 * time.Millisecond
 )
 
 // SnapshotReader is an interface for reading snapshots of aggregate roots from

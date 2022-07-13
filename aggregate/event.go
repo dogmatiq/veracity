@@ -74,7 +74,7 @@ type EventWriter interface {
 	WriteEvents(
 		ctx context.Context,
 		hk, id string,
-		firstOffset, nextOffset uint64, // TODO: think about command idempotence
+		firstOffset, nextOffset uint64,
 		events []*envelopespec.Envelope,
 		archive bool,
 	) error

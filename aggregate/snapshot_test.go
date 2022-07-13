@@ -46,6 +46,11 @@ type snapshotWriterStub struct {
 		r dogma.AggregateRoot,
 		snapshotOffset uint64,
 	) error
+
+	ArchiveSnapshotsFunc func(
+		ctx context.Context,
+		hk, id string,
+	) error
 }
 
 func (s *snapshotWriterStub) WriteSnapshot(
@@ -60,6 +65,21 @@ func (s *snapshotWriterStub) WriteSnapshot(
 
 	if s.SnapshotWriter != nil {
 		return s.SnapshotWriter.WriteSnapshot(ctx, hk, id, r, snapshotOffset)
+	}
+
+	return nil
+}
+
+func (s *snapshotWriterStub) ArchiveSnapshots(
+	ctx context.Context,
+	hk, id string,
+) error {
+	if s.ArchiveSnapshotsFunc != nil {
+		return s.ArchiveSnapshotsFunc(ctx, hk, id)
+	}
+
+	if s.SnapshotWriter != nil {
+		return s.SnapshotWriter.ArchiveSnapshots(ctx, hk, id)
 	}
 
 	return nil

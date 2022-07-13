@@ -5,6 +5,8 @@ import (
 
 	"github.com/dogmatiq/interopspec/envelopespec"
 	. "github.com/dogmatiq/veracity/aggregate"
+	. "github.com/jmalloc/gomegax"
+	. "github.com/onsi/gomega"
 )
 
 // eventReaderStub is a test implementation of the EventReader interface.
@@ -52,4 +54,66 @@ func (s *eventReaderStub) ReadEvents(
 	}
 
 	return nil, false, nil
+}
+
+// eventWriterStub is a test implementation of the EventWriter interface.
+type eventWriterStub struct {
+	EventWriter
+
+	WriteEventsFunc func(
+		ctx context.Context,
+		hk, id string,
+		firstOffset, nextOffset uint64,
+		events []*envelopespec.Envelope,
+		archive bool,
+	) error
+}
+
+func (s *eventWriterStub) WriteEvents(
+	ctx context.Context,
+	hk, id string,
+	firstOffset, nextOffset uint64,
+	events []*envelopespec.Envelope,
+	archive bool,
+) error {
+	if s.WriteEventsFunc != nil {
+		return s.WriteEventsFunc(ctx, hk, id, firstOffset, nextOffset, events, archive)
+	}
+
+	if s.EventWriter != nil {
+		return s.EventWriter.WriteEvents(ctx, hk, id, firstOffset, nextOffset, events, archive)
+	}
+
+	return nil
+}
+
+// expectEvents reads all events from store starting from offset and asserts
+// that they are equal to expectedEvents.
+func expectEvents(
+	reader EventReader,
+	hk, id string,
+	offset uint64,
+	expectedEvents []*envelopespec.Envelope,
+) {
+	var producedEvents []*envelopespec.Envelope
+
+	for {
+		events, more, err := reader.ReadEvents(
+			context.Background(),
+			hk,
+			id,
+			offset,
+		)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		producedEvents = append(producedEvents, events...)
+
+		if !more {
+			break
+		}
+
+		offset += uint64(len(events))
+	}
+
+	Expect(producedEvents).To(EqualX(expectedEvents))
 }

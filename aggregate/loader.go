@@ -12,6 +12,12 @@ import (
 	"github.com/dogmatiq/marshalkit"
 )
 
+const (
+	// DefaultLoaderSnapshotWriteTimeout is the default amount of time to allow
+	// for writing a snapshot after a failure to read events.
+	DefaultLoaderSnapshotWriteTimeout = 250 * time.Millisecond
+)
+
 // Loader loads aggregate roots from persistent storage.
 type Loader struct {
 	// EventReader is used to read historical events from persistent storage.
@@ -40,7 +46,7 @@ type Loader struct {
 	// SnapshotWriteTimeout is the maximum duration to allow for a snapshot to
 	// be written to persistent storage.
 	//
-	// If it is non-positive, DefaultSnapshotWriteTimeout is used instead.
+	// If it is non-positive, DefaultLoaderSnapshotWriteTimeout is used instead.
 	SnapshotWriteTimeout time.Duration
 
 	// Logger is the target for messages about the loading process.
@@ -299,7 +305,7 @@ func (l *Loader) writeSnapshot(
 	ctx, cancel := linger.ContextWithTimeout(
 		context.Background(),
 		l.SnapshotWriteTimeout,
-		DefaultSnapshotWriteTimeout,
+		DefaultLoaderSnapshotWriteTimeout,
 	)
 	defer cancel()
 
@@ -312,7 +318,7 @@ func (l *Loader) writeSnapshot(
 	); err != nil {
 		logging.Log(
 			l.Logger,
-			"(possibly outdated) snapshot of aggregate root %s[%s] cannot be be written at offset %d: %w",
+			"snapshot of aggregate root %s[%s] cannot be be written at offset %d (possibly outdated): %w",
 			h.Name,
 			id,
 			snapshotOffset,
@@ -324,7 +330,7 @@ func (l *Loader) writeSnapshot(
 
 	logging.Log(
 		l.Logger,
-		"(possibly outdated) snapshot of aggregate root %s[%s] written at offset %d",
+		"snapshot of aggregate root %s[%s] written at offset %d (possibly outdated)",
 		h.Name,
 		id,
 		snapshotOffset,

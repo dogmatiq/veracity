@@ -3,22 +3,13 @@ package aggregate
 import (
 	"context"
 	"errors"
-
-	"github.com/dogmatiq/veracity/parcel"
 )
 
 // DefaultCommandBuffer is the default number of commands to buffer in memory
 // per aggregate instance.
 const DefaultCommandBuffer = 100
 
-// Command encapsulates a message that is to be executed as a command.
-type Command struct {
-	Context context.Context
-	Parcel  parcel.Parcel
-	Result  chan<- error
-}
-
-// Supervisor manages the lifecycle of all instance-specific workers.
+// Supervisor manages the lifecycle of all workers for a specific aggregate.
 type Supervisor struct {
 	WorkerConfig
 
@@ -30,8 +21,8 @@ type Supervisor struct {
 
 	Commands <-chan Command
 
-	workers       map[string]*Worker
-	workerResults chan workerResult
+	workerCommands map[string]chan<- Command
+	workerResults  chan workerResult
 }
 
 type workerResult struct {
@@ -60,7 +51,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 			}
 
 		case res := <-s.workerResults:
-			delete(s.workers, res.InstanceID)
+			delete(s.workerCommands, res.InstanceID)
 			if res.Err != nil {
 				return res.Err
 			}
@@ -75,9 +66,9 @@ func (s *Supervisor) Run(ctx context.Context) error {
 func (s *Supervisor) dispatchCommand(ctx context.Context, cmd Command) error {
 	id := s.Handler.RouteCommandToInstance(cmd.Parcel.Message)
 
-	w, ok := s.workers[id]
+	commands, ok := s.workerCommands[id]
 	if !ok {
-		w = s.startWorker(ctx, id)
+		commands = s.startWorker(ctx, id)
 	}
 
 	for {
@@ -90,13 +81,13 @@ func (s *Supervisor) dispatchCommand(ctx context.Context, cmd Command) error {
 			cmd.Result <- cmd.Context.Err()
 			return nil
 
-		case w.Commands <- cmd:
+		case commands <- cmd:
 			// Once we hand the command off to the worker it is responsible for
 			// writing "success" responses to cmd.Result.
 			return nil
 
 		case res := <-s.workerResults:
-			delete(s.workers, res.InstanceID)
+			delete(s.workerCommands, res.InstanceID)
 			if res.Err != nil {
 				cmd.Result <- errors.New("shutting down")
 				return res.Err
@@ -105,7 +96,7 @@ func (s *Supervisor) dispatchCommand(ctx context.Context, cmd Command) error {
 			// If the worker that stopped is the one we're waiting for _and_ it
 			// just happened to idle-timeout, simply start it again.
 			if res.InstanceID == id {
-				w = s.startWorker(ctx, id)
+				commands = s.startWorker(ctx, id)
 			}
 		}
 	}
@@ -118,32 +109,37 @@ func (s *Supervisor) dispatchCommand(ctx context.Context, cmd Command) error {
 func (s *Supervisor) startWorker(
 	ctx context.Context,
 	id string,
-) *Worker {
+) chan<- Command {
 	buffer := s.CommandBuffer
 	if buffer <= 0 {
 		buffer = DefaultCommandBuffer
 	}
 
-	w := &Worker{
-		WorkerConfig: s.WorkerConfig,
-		InstanceID:   id,
-		Commands:     make(chan Command, buffer),
+	if s.workerCommands == nil {
+		s.workerCommands = map[string]chan<- Command{}
 	}
 
-	s.workers[id] = w
+	commands := make(chan Command, buffer)
+	s.workerCommands[id] = commands
 
 	go func() {
+		w := &Worker{
+			WorkerConfig: s.WorkerConfig,
+			InstanceID:   id,
+			Commands:     commands,
+		}
+
 		err := w.Run(ctx)
 		s.workerResults <- workerResult{id, err}
 	}()
 
-	return w
+	return commands
 }
 
 // waitForAllWorkers blocks until all workers have stopped running.
 func (s *Supervisor) waitForAllWorkers() {
-	for len(s.workers) != 0 {
+	for len(s.workerCommands) != 0 {
 		res := <-s.workerResults
-		delete(s.workers, res.InstanceID)
+		delete(s.workerCommands, res.InstanceID)
 	}
 }
