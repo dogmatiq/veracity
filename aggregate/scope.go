@@ -39,12 +39,13 @@ func (s *scope) InstanceID() string {
 
 // Destroy destroys the targeted instance.
 func (s *scope) Destroy() {
-	panic("not implemented")
+	s.IsDestroyed = true
 }
 
 // RecordEvent records the occurrence of an event as a result of the command
 // message that is being handled.
 func (s *scope) RecordEvent(m dogma.Message) {
+	s.IsDestroyed = false
 	s.Root.ApplyEvent(m)
 
 	s.EventEnvelopes = append(

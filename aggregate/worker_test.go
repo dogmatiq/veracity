@@ -384,16 +384,64 @@ var _ = Describe("type Worker", func() {
 					"<handler-key>",
 					"<instance>",
 					0,
-					1,
+					0,
 					[]*envelopespec.Envelope{
-						NewEnvelope("<existing>", MessageX1),
+						NewEnvelope("<existing-1>", MessageX1),
+						NewEnvelope("<existing-2>", MessageX2),
 					},
 					false, // archive
 				)
 				Expect(err).ShouldNot(HaveOccurred())
+
+				err = snapshotStore.WriteSnapshot(
+					context.Background(),
+					"<handler-key>",
+					"<instance>",
+					&AggregateRoot{
+						AppliedEvents: []dogma.Message{
+							"<snapshot>",
+						},
+					},
+					0,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
 			})
 
-			XIt("archives historical events", func() {
+			It("archives historical events and snapshots, and returns nil", func() {
+				handler.HandleCommandFunc = func(
+					r dogma.AggregateRoot,
+					s dogma.AggregateCommandScope,
+					m dogma.Message,
+				) {
+					s.Destroy()
+				}
+
+				executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
+
+				err := worker.Run(ctx)
+				Expect(err).ShouldNot(HaveOccurred())
+
+				firstOffset, nextOffset, err := eventStore.ReadBounds(
+					ctx,
+					"<handler-key>",
+					"<instance>",
+				)
+				Expect(firstOffset).To(BeNumerically("==", 2))
+				Expect(nextOffset).To(BeNumerically("==", 2))
+
+				_, ok, err := snapshotStore.ReadSnapshot(
+					ctx,
+					"<handler-key>",
+					"<instance>",
+					&AggregateRoot{},
+					0,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(ok).To(BeFalse())
 			})
 
 			XIt("archives snapshots", func() {
