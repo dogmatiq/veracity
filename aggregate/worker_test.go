@@ -626,7 +626,7 @@ var _ = Describe("type Worker", func() {
 
 		When("the idle timeout is exceeded", func() {
 			BeforeEach(func() {
-				worker.IdleTimeout = 1 * time.Millisecond
+				worker.IdleTimeout = 5 * time.Millisecond
 			})
 
 			It("takes a snapshot if the existing snapshot is out-of-date", func() {
@@ -675,7 +675,7 @@ var _ = Describe("type Worker", func() {
 		It("does not return an error if writing a snapshot fails", func() {
 			// Rely on the fact that a snapshot is taken when the worker shuts
 			// down due to idle timeout.
-			worker.IdleTimeout = 1 * time.Millisecond
+			worker.IdleTimeout = 5 * time.Millisecond
 
 			called := false
 			snapshotWriter.WriteSnapshotFunc = func(
@@ -702,7 +702,7 @@ var _ = Describe("type Worker", func() {
 		It("does not return an error if the SnapshotWriter is nil", func() {
 			// Rely on the fact that a snapshot is taken when the worker shuts
 			// down due to idle timeout.
-			worker.IdleTimeout = 1 * time.Millisecond
+			worker.IdleTimeout = 5 * time.Millisecond
 			worker.SnapshotWriter = nil
 
 			snapshotWriter.WriteSnapshotFunc = func(
@@ -776,7 +776,7 @@ var _ = Describe("type Worker", func() {
 		It("returns an error if the context is canceled while persisting a snapshot", func() {
 			// Rely on the fact that a snapshot is taken when the worker shuts
 			// down due to idle timeout.
-			worker.IdleTimeout = 1 * time.Millisecond
+			worker.IdleTimeout = 5 * time.Millisecond
 
 			snapshotWriter.WriteSnapshotFunc = func(
 				ctx context.Context,
