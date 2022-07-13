@@ -151,6 +151,12 @@ func (w *Worker) handleCommand(
 		ID:              w.InstanceID,
 		Root:            w.root,
 		Packer:          w.Packer,
+		Logger: logging.Prefix(
+			w.Logger,
+			"aggregate %s[%s]: ",
+			w.HandlerIdentity.Name,
+			w.InstanceID,
+		),
 	}
 
 	w.Handler.HandleCommand(

@@ -1,6 +1,7 @@
 package aggregate
 
 import (
+	"github.com/dogmatiq/dodeca/logging"
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/parcel"
@@ -30,6 +31,9 @@ type scope struct {
 
 	// EventEnvelopes is a slice of envelopes containing the recorded events.
 	EventEnvelopes []*envelopespec.Envelope
+
+	// Logger is the target for log messages from the handler.
+	Logger logging.Logger
 }
 
 // InstanceID returns the ID of the targeted aggregate instance.
@@ -62,5 +66,5 @@ func (s *scope) RecordEvent(m dogma.Message) {
 // Log records an informational message within the context of the message
 // that is being handled.
 func (s *scope) Log(f string, v ...interface{}) {
-	panic("not implemented")
+	logging.Log(s.Logger, f, v...)
 }

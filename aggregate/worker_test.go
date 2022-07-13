@@ -8,6 +8,7 @@ import (
 	"github.com/dogmatiq/configkit"
 	. "github.com/dogmatiq/configkit/fixtures"
 	"github.com/dogmatiq/configkit/message"
+	"github.com/dogmatiq/dodeca/logging"
 	"github.com/dogmatiq/dogma"
 	. "github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/interopspec/envelopespec"
@@ -38,6 +39,7 @@ var _ = Describe("type Worker", func() {
 		loader   *Loader
 		commands chan Command
 		handler  *AggregateMessageHandler
+		logger   *logging.BufferedLogger
 		worker   *Worker
 	)
 
@@ -102,6 +104,8 @@ var _ = Describe("type Worker", func() {
 			},
 		)
 
+		logger = &logging.BufferedLogger{}
+
 		worker = &Worker{
 			WorkerConfig: WorkerConfig{
 				Handler:         handler,
@@ -110,6 +114,7 @@ var _ = Describe("type Worker", func() {
 				Loader:          loader,
 				EventWriter:     eventWriter,
 				SnapshotWriter:  snapshotWriter,
+				Logger:          logger,
 			},
 			InstanceID: "<instance>",
 			Commands:   commands,
@@ -696,6 +701,7 @@ var _ = Describe("type Worker", func() {
 
 			err := worker.Run(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
+
 			Expect(called).To(BeTrue())
 		})
 
@@ -818,7 +824,30 @@ var _ = Describe("type Worker", func() {
 			Expect(err).To(Equal(context.Canceled))
 		})
 
-		XIt("allows logging via the scope", func() {
+		It("allows logging via the scope", func() {
+			handler.HandleCommandFunc = func(
+				r dogma.AggregateRoot,
+				s dogma.AggregateCommandScope,
+				m dogma.Message,
+			) {
+				s.Log("<log-message %d %d %d>", 1, 2, 3)
+				cancel()
+			}
+
+			executeCommandAsync(
+				ctx,
+				commands,
+				NewParcel("<command>", MessageC1),
+			)
+
+			err := worker.Run(ctx)
+			Expect(err).To(Equal(context.Canceled))
+
+			Expect(logger.Messages()).To(ContainElement(
+				logging.BufferedLogMessage{
+					Message: "aggregate <handler-name>[<instance>]: <log-message 1 2 3>",
+				},
+			))
 		})
 	})
 })
