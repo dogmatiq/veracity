@@ -472,7 +472,49 @@ var _ = Describe("type Worker", func() {
 				Expect(nextOffset).To(BeNumerically("==", 3))
 			})
 
-			XIt("returns nil", func() {
+			When("events are recorded after the Destroy() is called", func() {
+				It("archives neither events nor snapshots", func() {
+					handler.HandleCommandFunc = func(
+						r dogma.AggregateRoot,
+						s dogma.AggregateCommandScope,
+						m dogma.Message,
+					) {
+						s.Destroy()
+						s.RecordEvent(MessageE3)
+					}
+
+					go func() {
+						executeCommandSync(
+							ctx,
+							commands,
+							NewParcel("<command>", MessageC1),
+						)
+
+						cancel()
+					}()
+
+					err := worker.Run(ctx)
+					Expect(err).To(Equal(context.Canceled))
+
+					firstOffset, nextOffset, err := eventStore.ReadBounds(
+						ctx,
+						"<handler-key>",
+						"<instance>",
+					)
+					Expect(firstOffset).To(BeNumerically("==", 0))
+					Expect(nextOffset).To(BeNumerically("==", 3))
+
+					snapshotOffset, ok, err := snapshotStore.ReadSnapshot(
+						ctx,
+						"<handler-key>",
+						"<instance>",
+						&AggregateRoot{},
+						0,
+					)
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(ok).To(BeTrue())
+					Expect(snapshotOffset).To(BeNumerically("==", 0))
+				})
 			})
 		})
 
