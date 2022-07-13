@@ -20,20 +20,19 @@ type AggregateSnapshotStore struct {
 }
 
 type snapshot struct {
-	Packet marshalkit.Packet
-	Offset uint64
+	Packet   marshalkit.Packet
+	Revision uint64
 }
 
 // ReadSnapshot updates the contents of r to match the most recent snapshot that
-// was taken at or after minOffset.
+// was taken at or after minRev.
 //
 // hk is the identity key of the aggregate message handler. id is the aggregate
 // instance ID.
 //
-// If ok is false, no compatible snapshot was found at or after minOffset; root
-// is guaranteed not to have been modified. Otherwise, snapshotOffset is the
-// offset of the most recent event applied to the root when the snapshot was
-// taken.
+// If ok is false, no compatible snapshot was found at or after minRev; root is
+// guaranteed not to have been modified. Otherwise, rev is the revision of the
+// aggregate instance when the snapshot was taken.
 //
 // A snapshot is considered compatible if it can assigned to the underlying type
 // of r.
@@ -41,8 +40,8 @@ func (s *AggregateSnapshotStore) ReadSnapshot(
 	ctx context.Context,
 	hk, id string,
 	r dogma.AggregateRoot,
-	minOffset uint64,
-) (snapshotOffset uint64, ok bool, _ error) {
+	minRev uint64,
+) (rev uint64, ok bool, _ error) {
 	s.m.RLock()
 	defer s.m.RUnlock()
 
@@ -52,7 +51,7 @@ func (s *AggregateSnapshotStore) ReadSnapshot(
 		return 0, false, nil
 	}
 
-	if sn.Offset < minOffset {
+	if sn.Revision < minRev {
 		return 0, false, nil
 	}
 
@@ -70,7 +69,7 @@ func (s *AggregateSnapshotStore) ReadSnapshot(
 
 	dst.Set(src)
 
-	return sn.Offset, true, nil
+	return sn.Revision, true, nil
 }
 
 // WriteSnapshot saves a snapshot of a specific aggregate instance.
@@ -78,13 +77,12 @@ func (s *AggregateSnapshotStore) ReadSnapshot(
 // hk is the identity key of the aggregate message handler. id is the aggregate
 // instance ID.
 //
-// snapshotOffset is the offset of the most recent event that has been applied
-// to r.
+// rev is the revision of the aggregate instance as represented by r.
 func (s *AggregateSnapshotStore) WriteSnapshot(
 	ctx context.Context,
 	hk, id string,
 	r dogma.AggregateRoot,
-	snapshotOffset uint64,
+	rev uint64,
 ) error {
 	p, err := s.Marshaler.Marshal(r)
 	if err != nil {
@@ -99,13 +97,12 @@ func (s *AggregateSnapshotStore) WriteSnapshot(
 	}
 
 	k := instanceKey{hk, id}
-	s.snapshots[k] = snapshot{p, snapshotOffset}
+	s.snapshots[k] = snapshot{p, rev}
 
 	return nil
 }
 
-// ArchiveSnapshots archives any existing snapshots of a specific aggregate
-// instance.
+// ArchiveSnapshots archives any existing snapshots of a specific instance.
 //
 // The precise meaning of "archive" is implementation-defined. It is typical to
 // hard-delete the snapshots as they no longer serve a purpose and will not be

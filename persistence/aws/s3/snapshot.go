@@ -39,15 +39,14 @@ type AggregateSnapshotReader struct {
 }
 
 // ReadSnapshot updates the contents of r to match the most recent snapshot that
-// was taken at or after minOffset.
+// was taken at or after minRev.
 //
 // hk is the identity key of the aggregate message handler. id is the aggregate
 // instance ID.
 //
-// If ok is false, no compatible snapshot was found at or after minOffset; root
-// is guaranteed not to have been modified. Otherwise, snapshotOffset is the
-// offset of the most recent event applied to the root when the snapshot was
-// taken.
+// If ok is false, no compatible snapshot was found at or after minRev; root is
+// guaranteed not to have been modified. Otherwise, rev is the revision of the
+// aggregate instance when the snapshot was taken.
 //
 // A snapshot is considered compatible if it can assigned to the underlying type
 // of r.
@@ -55,8 +54,8 @@ func (s *AggregateSnapshotReader) ReadSnapshot(
 	ctx context.Context,
 	hk, id string,
 	r dogma.AggregateRoot,
-	minOffset uint64,
-) (snapshotOffset uint64, ok bool, _ error) {
+	minRev uint64,
+) (rev uint64, ok bool, _ error) {
 	in := &s3.GetObjectInput{}
 	in.SetBucket(s.Bucket)
 	in.SetKey(snapshotKey(hk, id))
@@ -85,24 +84,24 @@ func (s *AggregateSnapshotReader) ReadSnapshot(
 		)
 	}
 
-	offsetString := out.Metadata[snapshotOffsetMetaDataKey]
-	if offsetString == nil {
+	revString := out.Metadata[snapshotRevisionMetaDataKey]
+	if revString == nil {
 		return 0, false, fmt.Errorf(
 			"S3 object meta-data is missing the %s key",
-			snapshotOffsetMetaDataKey,
+			snapshotRevisionMetaDataKey,
 		)
 	}
 
-	snapshotOffset, err = strconv.ParseUint(*offsetString, 10, 64)
+	rev, err = strconv.ParseUint(*revString, 10, 64)
 	if err != nil {
 		return 0, false, fmt.Errorf(
 			"S3 object meta-data has an invalid value for %s: %w",
-			snapshotOffsetMetaDataKey,
+			snapshotRevisionMetaDataKey,
 			err,
 		)
 	}
 
-	if snapshotOffset < minOffset {
+	if rev < minRev {
 		return 0, false, nil
 	}
 
@@ -128,7 +127,7 @@ func (s *AggregateSnapshotReader) ReadSnapshot(
 
 	dst.Set(src)
 
-	return snapshotOffset, true, nil
+	return rev, true, nil
 }
 
 // AggregateSnapshotWriter writes snapshots of aggregate roots to an S3 bucket.
@@ -161,16 +160,15 @@ type AggregateSnapshotWriter struct {
 
 // WriteSnapshot saves a snapshot of a specific aggregate instance.
 //
-// hk is the identity key of the aggregate message handler. id is the
-// aggregate instance ID.
+// hk is the identity key of the aggregate message handler. id is the aggregate
+// instance ID.
 //
-// snapshotOffset is the offset of the most recent event that has been
-// applied to r.
+// rev is the revision of the aggregate instance as represented by r.
 func (s *AggregateSnapshotWriter) WriteSnapshot(
 	ctx context.Context,
 	hk, id string,
 	r dogma.AggregateRoot,
-	snapshotOffset uint64,
+	rev uint64,
 ) error {
 	p, err := s.Marshaler.Marshal(r)
 	if err != nil {
@@ -184,8 +182,8 @@ func (s *AggregateSnapshotWriter) WriteSnapshot(
 	in.SetBody(bytes.NewReader(p.Data))
 	in.SetMetadata(
 		map[string]*string{
-			snapshotOffsetMetaDataKey: aws.String(
-				strconv.FormatUint(snapshotOffset, 10),
+			snapshotRevisionMetaDataKey: aws.String(
+				strconv.FormatUint(rev, 10),
 			),
 		},
 	)
@@ -199,8 +197,7 @@ func (s *AggregateSnapshotWriter) WriteSnapshot(
 	return err
 }
 
-// ArchiveSnapshots archives any existing snapshots of a specific aggregate
-// instance.
+// ArchiveSnapshots archives any existing snapshots of a specific instance.
 //
 // The precise meaning of "archive" is implementation-defined. It is typical to
 // hard-delete the snapshots as they no longer serve a purpose and will not be
@@ -231,6 +228,6 @@ func snapshotKey(hk, id string) string {
 	return hk + "/" + id
 }
 
-// snapshotOffsetMetaDataKey is the S3 metadata key used to store the offset of the
-// snapshots.
-const snapshotOffsetMetaDataKey = "Dogma-Snapshot-Offset"
+// snapshotRevisionMetaDataKey is the S3 metadata key used to store the revision
+// of the snapshots.
+const snapshotRevisionMetaDataKey = "Dogma-Snapshot-Revision"
