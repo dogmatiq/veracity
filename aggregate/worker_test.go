@@ -449,6 +449,14 @@ var _ = Describe("type Worker", func() {
 
 		When("the instance is destroyed", func() {
 			BeforeEach(func() {
+				handler.HandleCommandFunc = func(
+					r dogma.AggregateRoot,
+					s dogma.AggregateCommandScope,
+					m dogma.Message,
+				) {
+					s.Destroy()
+				}
+
 				err := eventStore.WriteEvents(
 					ctx,
 					"<handler-key>",
@@ -478,14 +486,6 @@ var _ = Describe("type Worker", func() {
 			})
 
 			It("archives historical events and snapshots, and returns nil", func() {
-				handler.HandleCommandFunc = func(
-					r dogma.AggregateRoot,
-					s dogma.AggregateCommandScope,
-					m dogma.Message,
-				) {
-					s.Destroy()
-				}
-
 				executeCommandAsync(
 					ctx,
 					commands,
@@ -540,6 +540,25 @@ var _ = Describe("type Worker", func() {
 				)
 				Expect(firstOffset).To(BeNumerically("==", 3))
 				Expect(nextOffset).To(BeNumerically("==", 3))
+			})
+
+			It("returns an error if the context is canceled while archiving a snapshot", func() {
+				snapshotWriter.ArchiveSnapshotsFunc = func(
+					ctx context.Context,
+					hk, id string,
+				) error {
+					cancel()
+					return ctx.Err()
+				}
+
+				executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
+
+				err := worker.Run(ctx)
+				Expect(err).To(Equal(context.Canceled))
 			})
 
 			When("events are recorded after the Destroy() is called", func() {
@@ -729,13 +748,37 @@ var _ = Describe("type Worker", func() {
 			)
 		})
 
-		XIt("returns an error if the context is canceled while waiting for a command", func() {
+		It("returns an error if the context is canceled while waiting for a command", func() {
+			// This test relies on the fact that the memory-based persistence
+			// being used does not use the context.
+			cancel()
+			err := worker.Run(ctx)
+			Expect(err).To(Equal(context.Canceled))
 		})
 
-		XIt("returns an error if the context is canceled while persisting a snapshot", func() {
-		})
+		It("returns an error if the context is canceled while persisting a snapshot", func() {
+			// Rely on the fact that a snapshot is taken when the worker shuts
+			// down due to idle timeout.
+			worker.IdleTimeout = 1 * time.Millisecond
 
-		XIt("returns an error if the context is canceled while archiving a snapshot", func() {
+			snapshotWriter.WriteSnapshotFunc = func(
+				ctx context.Context,
+				hk, id string,
+				r dogma.AggregateRoot,
+				snapshotOffset uint64,
+			) error {
+				cancel()
+				return ctx.Err()
+			}
+
+			executeCommandAsync(
+				ctx,
+				commands,
+				NewParcel("<command>", MessageC1),
+			)
+
+			err := worker.Run(ctx)
+			Expect(err).To(Equal(context.Canceled))
 		})
 
 		XIt("makes the instance ID available via the scope", func() {
