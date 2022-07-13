@@ -165,7 +165,24 @@ var _ = Describe("type Worker", func() {
 			})
 
 			When("the instance has no historical events", func() {
-				XIt("passes the handler an zero-valued aggregate root", func() {
+				It("passes the handler an zero-valued aggregate root", func() {
+					handler.HandleCommandFunc = func(
+						r dogma.AggregateRoot,
+						s dogma.AggregateCommandScope,
+						m dogma.Message,
+					) {
+						Expect(r).To(Equal(handler.New()))
+						cancel()
+					}
+
+					executeCommandAsync(
+						ctx,
+						commands,
+						NewParcel("<command>", MessageC1),
+					)
+
+					err := worker.Run(ctx)
+					Expect(err).To(Equal(context.Canceled))
 				})
 			})
 
