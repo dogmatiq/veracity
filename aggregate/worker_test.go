@@ -199,7 +199,6 @@ var _ = Describe("type Worker", func() {
 					"<handler-key>",
 					"<instance>",
 					0,
-					0,
 					[]*envelopespec.Envelope{
 						NewEnvelope("<existing>", MessageX1),
 					},
@@ -290,7 +289,7 @@ var _ = Describe("type Worker", func() {
 			)
 		})
 
-		It("returns an error when there is an OCC failure due to a nextOffset mismatch", func() {
+		It("returns an error when there is an OCC failure", func() {
 			go func() {
 				defer GinkgoRecover()
 
@@ -308,7 +307,6 @@ var _ = Describe("type Worker", func() {
 					ctx,
 					"<handler-key>",
 					"<instance>",
-					0,
 					1,
 					[]*envelopespec.Envelope{
 						NewEnvelope("<existing>", MessageX1),
@@ -329,49 +327,7 @@ var _ = Describe("type Worker", func() {
 			err := worker.Run(ctx)
 			Expect(err).To(
 				MatchError(
-					`cannot write events for aggregate root <handler-name>[<instance>]: optimistic concurrency conflict, 1 is not the next offset`,
-				),
-			)
-		})
-
-		It("returns an error where there is an OCC failure due to a firstOffset mismatch", func() {
-			go func() {
-				defer GinkgoRecover()
-
-				By("executing a command to ensure the worker is running")
-
-				executeCommandSync(
-					ctx,
-					commands,
-					NewParcel("<command-1>", MessageC1),
-				)
-
-				By("archiving existing events without the worker's knowledge")
-
-				err := eventStore.WriteEvents(
-					ctx,
-					"<handler-key>",
-					"<instance>",
-					0,
-					1,
-					nil,  // no events
-					true, // archive
-				)
-				Expect(err).ShouldNot(HaveOccurred())
-
-				By("sending a second command")
-
-				executeCommandAsync(
-					ctx,
-					commands,
-					NewParcel("<command-2>", MessageC1),
-				)
-			}()
-
-			err := worker.Run(ctx)
-			Expect(err).To(
-				MatchError(
-					`cannot write events for aggregate root <handler-name>[<instance>]: optimistic concurrency conflict, 0 is not the first offset`,
+					`cannot write events for aggregate root <handler-name>[<instance>]: optimistic concurrency conflict, 1 is not the next revision`,
 				),
 			)
 		})
@@ -412,7 +368,7 @@ var _ = Describe("type Worker", func() {
 
 				By("ensuring that a snapshot has been written")
 
-				snapshotOffset, ok, err := snapshotStore.ReadSnapshot(
+				snapshotRev, ok, err := snapshotStore.ReadSnapshot(
 					ctx,
 					"<handler-key>",
 					"<instance>",
@@ -421,7 +377,7 @@ var _ = Describe("type Worker", func() {
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(ok).To(BeTrue())
-				Expect(snapshotOffset).To(BeNumerically("==", 1))
+				Expect(snapshotRev).To(BeNumerically("==", 1))
 
 				By("sending a third command")
 
@@ -433,7 +389,7 @@ var _ = Describe("type Worker", func() {
 
 				By("ensuring that no newer snapshot has been taken")
 
-				snapshotOffset, ok, err = snapshotStore.ReadSnapshot(
+				snapshotRev, ok, err = snapshotStore.ReadSnapshot(
 					ctx,
 					"<handler-key>",
 					"<instance>",
@@ -442,7 +398,7 @@ var _ = Describe("type Worker", func() {
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(ok).To(BeTrue())
-				Expect(snapshotOffset).To(BeNumerically("==", 1))
+				Expect(snapshotRev).To(BeNumerically("==", 1))
 
 				cancel()
 			}()
@@ -465,7 +421,6 @@ var _ = Describe("type Worker", func() {
 					ctx,
 					"<handler-key>",
 					"<instance>",
-					0,
 					0,
 					[]*envelopespec.Envelope{
 						NewEnvelope("<existing-1>", MessageX1),
@@ -499,13 +454,13 @@ var _ = Describe("type Worker", func() {
 				err := worker.Run(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
 
-				firstOffset, nextOffset, err := eventStore.ReadBounds(
+				begin, end, err := eventStore.ReadBounds(
 					ctx,
 					"<handler-key>",
 					"<instance>",
 				)
-				Expect(firstOffset).To(BeNumerically("==", 2))
-				Expect(nextOffset).To(BeNumerically("==", 2))
+				Expect(begin).To(BeNumerically("==", 2))
+				Expect(end).To(BeNumerically("==", 2))
 
 				_, ok, err := snapshotStore.ReadSnapshot(
 					ctx,
@@ -537,13 +492,13 @@ var _ = Describe("type Worker", func() {
 				err := worker.Run(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
 
-				firstOffset, nextOffset, err := eventStore.ReadBounds(
+				begin, end, err := eventStore.ReadBounds(
 					ctx,
 					"<handler-key>",
 					"<instance>",
 				)
-				Expect(firstOffset).To(BeNumerically("==", 3))
-				Expect(nextOffset).To(BeNumerically("==", 3))
+				Expect(begin).To(BeNumerically("==", 2))
+				Expect(end).To(BeNumerically("==", 2))
 			})
 
 			It("returns an error if the context is canceled while archiving a snapshot", func() {
@@ -607,15 +562,15 @@ var _ = Describe("type Worker", func() {
 					err := worker.Run(ctx)
 					Expect(err).To(Equal(context.Canceled))
 
-					firstOffset, nextOffset, err := eventStore.ReadBounds(
+					begin, end, err := eventStore.ReadBounds(
 						ctx,
 						"<handler-key>",
 						"<instance>",
 					)
-					Expect(firstOffset).To(BeNumerically("==", 0))
-					Expect(nextOffset).To(BeNumerically("==", 3))
+					Expect(begin).To(BeNumerically("==", 0))
+					Expect(end).To(BeNumerically("==", 2))
 
-					snapshotOffset, ok, err := snapshotStore.ReadSnapshot(
+					snapshotRev, ok, err := snapshotStore.ReadSnapshot(
 						ctx,
 						"<handler-key>",
 						"<instance>",
@@ -624,7 +579,7 @@ var _ = Describe("type Worker", func() {
 					)
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(ok).To(BeTrue())
-					Expect(snapshotOffset).To(BeNumerically("==", 0))
+					Expect(snapshotRev).To(BeNumerically("==", 0))
 				})
 			})
 		})
@@ -644,7 +599,7 @@ var _ = Describe("type Worker", func() {
 				err := worker.Run(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
 
-				snapshotOffset, ok, err := snapshotStore.ReadSnapshot(
+				snapshotRev, ok, err := snapshotStore.ReadSnapshot(
 					ctx,
 					"<handler-key>",
 					"<instance>",
@@ -653,7 +608,7 @@ var _ = Describe("type Worker", func() {
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(ok).To(BeTrue())
-				Expect(snapshotOffset).To(BeNumerically("==", 0))
+				Expect(snapshotRev).To(BeNumerically("==", 0))
 			})
 
 			It("does not take a snapshot if the existing snapshot is up-to-date", func() {
@@ -687,7 +642,7 @@ var _ = Describe("type Worker", func() {
 				ctx context.Context,
 				hk, id string,
 				r dogma.AggregateRoot,
-				snapshotOffset uint64,
+				rev uint64,
 			) error {
 				called = true
 				return errors.New("<error>")
@@ -715,7 +670,7 @@ var _ = Describe("type Worker", func() {
 				ctx context.Context,
 				hk, id string,
 				r dogma.AggregateRoot,
-				snapshotOffset uint64,
+				rev uint64,
 			) error {
 				panic("unexpected call")
 			}
@@ -741,7 +696,7 @@ var _ = Describe("type Worker", func() {
 			err := worker.Run(ctx)
 			Expect(err).To(
 				MatchError(
-					`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read event offset bounds: <error>`,
+					`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read event revision bounds: <error>`,
 				),
 			)
 		})
@@ -750,7 +705,7 @@ var _ = Describe("type Worker", func() {
 			eventWriter.WriteEventsFunc = func(
 				ctx context.Context,
 				hk, id string,
-				firstOffset, nextOffset uint64,
+				end uint64,
 				events []*envelopespec.Envelope,
 				archive bool,
 			) error {
@@ -788,7 +743,7 @@ var _ = Describe("type Worker", func() {
 				ctx context.Context,
 				hk, id string,
 				r dogma.AggregateRoot,
-				snapshotOffset uint64,
+				rev uint64,
 			) error {
 				cancel()
 				return ctx.Err()

@@ -16,19 +16,19 @@ type eventReaderStub struct {
 	ReadBoundsFunc func(
 		ctx context.Context,
 		hk, id string,
-	) (firstOffset, nextOffset uint64, _ error)
+	) (begin, end uint64, _ error)
 
 	ReadEventsFunc func(
 		ctx context.Context,
 		hk, id string,
-		firstOffset uint64,
-	) (events []*envelopespec.Envelope, more bool, _ error)
+		begin uint64,
+	) (events []*envelopespec.Envelope, end uint64, _ error)
 }
 
 func (s *eventReaderStub) ReadBounds(
 	ctx context.Context,
 	hk, id string,
-) (firstOffset, nextOffset uint64, _ error) {
+) (begin, end uint64, _ error) {
 	if s.ReadBoundsFunc != nil {
 		return s.ReadBoundsFunc(ctx, hk, id)
 	}
@@ -43,17 +43,17 @@ func (s *eventReaderStub) ReadBounds(
 func (s *eventReaderStub) ReadEvents(
 	ctx context.Context,
 	hk, id string,
-	firstOffset uint64,
-) (events []*envelopespec.Envelope, more bool, _ error) {
+	begin uint64,
+) (events []*envelopespec.Envelope, end uint64, _ error) {
 	if s.ReadEventsFunc != nil {
-		return s.ReadEventsFunc(ctx, hk, id, firstOffset)
+		return s.ReadEventsFunc(ctx, hk, id, begin)
 	}
 
 	if s.EventReader != nil {
-		return s.EventReader.ReadEvents(ctx, hk, id, firstOffset)
+		return s.EventReader.ReadEvents(ctx, hk, id, begin)
 	}
 
-	return nil, false, nil
+	return nil, begin, nil
 }
 
 // eventWriterStub is a test implementation of the EventWriter interface.
@@ -63,7 +63,7 @@ type eventWriterStub struct {
 	WriteEventsFunc func(
 		ctx context.Context,
 		hk, id string,
-		firstOffset, nextOffset uint64,
+		end uint64,
 		events []*envelopespec.Envelope,
 		archive bool,
 	) error
@@ -72,47 +72,51 @@ type eventWriterStub struct {
 func (s *eventWriterStub) WriteEvents(
 	ctx context.Context,
 	hk, id string,
-	firstOffset, nextOffset uint64,
+	end uint64,
 	events []*envelopespec.Envelope,
 	archive bool,
 ) error {
 	if s.WriteEventsFunc != nil {
-		return s.WriteEventsFunc(ctx, hk, id, firstOffset, nextOffset, events, archive)
+		return s.WriteEventsFunc(ctx, hk, id, end, events, archive)
 	}
 
 	if s.EventWriter != nil {
-		return s.EventWriter.WriteEvents(ctx, hk, id, firstOffset, nextOffset, events, archive)
+		return s.EventWriter.WriteEvents(ctx, hk, id, end, events, archive)
 	}
 
 	return nil
 }
 
-// expectEvents reads all events from store starting from offset and asserts
-// that they are equal to expectedEvents.
+// expectEvents reads all events from store starting and the given beginning
+// revision and asserts that they are equal to expectedEvents.
 func expectEvents(
 	reader EventReader,
 	hk, id string,
-	offset uint64,
+	begin uint64,
 	expectedEvents []*envelopespec.Envelope,
 ) {
 	var producedEvents []*envelopespec.Envelope
 
 	for {
-		events, more, err := reader.ReadEvents(
+		events, end, err := reader.ReadEvents(
 			context.Background(),
 			hk,
 			id,
-			offset,
+			begin,
 		)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		producedEvents = append(producedEvents, events...)
 
-		if !more {
+		if begin >= end {
 			break
 		}
 
-		offset += uint64(len(events))
+		begin = end
+	}
+
+	if len(producedEvents) == 0 && len(expectedEvents) == 0 {
+		return
 	}
 
 	Expect(producedEvents).To(EqualX(expectedEvents))

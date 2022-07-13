@@ -68,7 +68,7 @@ var _ = Describe("type Loader", func() {
 				return 0, 0, errors.New("<error>")
 			}
 
-			_, _, _, err := loader.Load(
+			_, _, err := loader.Load(
 				context.Background(),
 				handlerID,
 				"<instance>",
@@ -76,34 +76,32 @@ var _ = Describe("type Loader", func() {
 			)
 			Expect(err).To(
 				MatchError(
-					`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read event offset bounds: <error>`,
+					`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read event revision bounds: <error>`,
 				),
 			)
 		})
 
-		When("the instance has no historical events", func() {
+		When("the instance has no revisions", func() {
 			It("does not modify the root", func() {
-				firstOffset, nextOffset, snapshotAge, err := loader.Load(
+				end, snapshotAge, err := loader.Load(
 					context.Background(),
 					handlerID,
 					"<instance>",
 					root,
 				)
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(firstOffset).To(BeNumerically("==", 0))
-				Expect(nextOffset).To(BeNumerically("==", 0))
+				Expect(end).To(BeNumerically("==", 0))
 				Expect(snapshotAge).To(BeNumerically("==", 0))
 				Expect(root.AppliedEvents).To(BeEmpty())
 			})
 		})
 
-		When("the instance has historical events", func() {
+		When("the instance has revisions", func() {
 			BeforeEach(func() {
 				err := eventStore.WriteEvents(
 					context.Background(),
 					handlerID.Key,
 					"<instance>",
-					0,
 					0,
 					[]*envelopespec.Envelope{
 						NewEnvelope("<event-0>", MessageA1),
@@ -117,16 +115,15 @@ var _ = Describe("type Loader", func() {
 
 			When("there is no snapshot reader", func() {
 				It("applies all historical events to the root", func() {
-					firstOffset, nextOffset, snapshotAge, err := loader.Load(
+					end, snapshotAge, err := loader.Load(
 						context.Background(),
 						handlerID,
 						"<instance>",
 						root,
 					)
 					Expect(err).ShouldNot(HaveOccurred())
-					Expect(firstOffset).To(BeNumerically("==", 0))
-					Expect(nextOffset).To(BeNumerically("==", 3))
-					Expect(snapshotAge).To(BeNumerically("==", 3))
+					Expect(end).To(BeNumerically("==", 1))
+					Expect(snapshotAge).To(BeNumerically("==", 1))
 					Expect(root.AppliedEvents).To(Equal(
 						[]dogma.Message{
 							MessageA1,
@@ -150,13 +147,13 @@ var _ = Describe("type Loader", func() {
 						ctx context.Context,
 						hk, id string,
 						r dogma.AggregateRoot,
-						minOffset uint64,
+						minRev uint64,
 					) (uint64, bool, error) {
 						cancel()
 						return 0, false, ctx.Err()
 					}
 
-					_, _, _, err := loader.Load(
+					_, _, err := loader.Load(
 						ctx,
 						handlerID,
 						"<instance>",
@@ -174,21 +171,20 @@ var _ = Describe("type Loader", func() {
 						ctx context.Context,
 						hk, id string,
 						r dogma.AggregateRoot,
-						minOffset uint64,
+						minRev uint64,
 					) (uint64, bool, error) {
 						return 0, false, errors.New("<error>")
 					}
 
-					firstOffset, nextOffset, snapshotAge, err := loader.Load(
+					end, snapshotAge, err := loader.Load(
 						context.Background(),
 						handlerID,
 						"<instance>",
 						root,
 					)
 					Expect(err).ShouldNot(HaveOccurred())
-					Expect(firstOffset).To(BeNumerically("==", 0))
-					Expect(nextOffset).To(BeNumerically("==", 3))
-					Expect(snapshotAge).To(BeNumerically("==", 3))
+					Expect(end).To(BeNumerically("==", 1))
+					Expect(snapshotAge).To(BeNumerically("==", 1))
 					Expect(root.AppliedEvents).To(Equal(
 						[]dogma.Message{
 							MessageA1,
@@ -199,32 +195,31 @@ var _ = Describe("type Loader", func() {
 				})
 
 				When("there is a snapshot available", func() {
-					When("the snapshot is up-to-date", func() {
-						BeforeEach(func() {
-							err := snapshotStore.WriteSnapshot(
-								context.Background(),
-								handlerID.Key,
-								"<instance>",
-								&AggregateRoot{
-									AppliedEvents: []dogma.Message{
-										"<snapshot>",
-									},
+					BeforeEach(func() {
+						err := snapshotStore.WriteSnapshot(
+							context.Background(),
+							handlerID.Key,
+							"<instance>",
+							&AggregateRoot{
+								AppliedEvents: []dogma.Message{
+									"<snapshot>",
 								},
-								2,
-							)
-							Expect(err).ShouldNot(HaveOccurred())
-						})
+							},
+							0,
+						)
+						Expect(err).ShouldNot(HaveOccurred())
+					})
 
+					When("the snapshot is up-to-date", func() {
 						It("does not apply any events", func() {
-							firstOffset, nextOffset, snapshotAge, err := loader.Load(
+							end, snapshotAge, err := loader.Load(
 								context.Background(),
 								handlerID,
 								"<instance>",
 								root,
 							)
 							Expect(err).ShouldNot(HaveOccurred())
-							Expect(firstOffset).To(BeNumerically("==", 0))
-							Expect(nextOffset).To(BeNumerically("==", 3))
+							Expect(end).To(BeNumerically("==", 1))
 							Expect(snapshotAge).To(BeNumerically("==", 0))
 							Expect(root.AppliedEvents).To(Equal(
 								[]dogma.Message{
@@ -236,35 +231,33 @@ var _ = Describe("type Loader", func() {
 
 					When("the snapshot is out-of-date", func() {
 						BeforeEach(func() {
-							err := snapshotStore.WriteSnapshot(
+							err := eventStore.WriteEvents(
 								context.Background(),
 								handlerID.Key,
 								"<instance>",
-								&AggregateRoot{
-									AppliedEvents: []dogma.Message{
-										"<snapshot>",
-									},
-								},
 								1,
+								[]*envelopespec.Envelope{
+									NewEnvelope("<event-3>", MessageD1),
+								},
+								false, // archive
 							)
 							Expect(err).ShouldNot(HaveOccurred())
 						})
 
 						It("applies only those events that occurred after the snapshot", func() {
-							firstOffset, nextOffset, snapshotAge, err := loader.Load(
+							end, snapshotAge, err := loader.Load(
 								context.Background(),
 								handlerID,
 								"<instance>",
 								root,
 							)
 							Expect(err).ShouldNot(HaveOccurred())
-							Expect(firstOffset).To(BeNumerically("==", 0))
-							Expect(nextOffset).To(BeNumerically("==", 3))
+							Expect(end).To(BeNumerically("==", 2))
 							Expect(snapshotAge).To(BeNumerically("==", 1))
 							Expect(root.AppliedEvents).To(Equal(
 								[]dogma.Message{
 									"<snapshot>",
-									MessageC1,
+									MessageD1,
 								},
 							))
 						})
@@ -279,7 +272,7 @@ var _ = Describe("type Loader", func() {
 
 				When("all historical events are applied", func() {
 					It("does not write a snapshot", func() {
-						_, _, _, err := loader.Load(
+						_, _, err := loader.Load(
 							context.Background(),
 							handlerID,
 							"<instance>",
@@ -304,12 +297,12 @@ var _ = Describe("type Loader", func() {
 						eventReader.ReadEventsFunc = func(
 							ctx context.Context,
 							hk, id string,
-							firstOffset uint64,
-						) ([]*envelopespec.Envelope, bool, error) {
-							return nil, false, errors.New("<error>")
+							begin uint64,
+						) ([]*envelopespec.Envelope, uint64, error) {
+							return nil, 0, errors.New("<error>")
 						}
 
-						_, _, _, err := loader.Load(
+						_, _, err := loader.Load(
 							context.Background(),
 							handlerID,
 							"<instance>",
@@ -338,17 +331,17 @@ var _ = Describe("type Loader", func() {
 						eventReader.ReadEventsFunc = func(
 							ctx context.Context,
 							hk, id string,
-							firstOffset uint64,
-						) ([]*envelopespec.Envelope, bool, error) {
-							events, _, _ := eventStore.ReadEvents(ctx, hk, id, firstOffset)
+							begin uint64,
+						) ([]*envelopespec.Envelope, uint64, error) {
+							events, _, _ := eventStore.ReadEvents(ctx, hk, id, begin)
 							if len(events) > 0 {
-								return events, true, nil
+								return events, begin + 1, nil
 							}
 
-							return nil, false, errors.New("<error>")
+							return nil, 0, errors.New("<error>")
 						}
 
-						_, _, _, err := loader.Load(
+						_, _, err := loader.Load(
 							context.Background(),
 							handlerID,
 							"<instance>",
@@ -360,7 +353,7 @@ var _ = Describe("type Loader", func() {
 							),
 						)
 
-						snapshotOffset, ok, err := snapshotStore.ReadSnapshot(
+						snapshotRev, ok, err := snapshotStore.ReadSnapshot(
 							context.Background(),
 							handlerID.Key,
 							"<instance>",
@@ -369,7 +362,7 @@ var _ = Describe("type Loader", func() {
 						)
 						Expect(err).ShouldNot(HaveOccurred())
 						Expect(ok).To(BeTrue())
-						Expect(snapshotOffset).To(BeNumerically("==", 2))
+						Expect(snapshotRev).To(BeNumerically("==", 0))
 						Expect(root.AppliedEvents).To(Equal(
 							[]dogma.Message{
 								map[string]any{"Value": "A1"},
@@ -383,17 +376,17 @@ var _ = Describe("type Loader", func() {
 						eventReader.ReadEventsFunc = func(
 							ctx context.Context,
 							hk, id string,
-							firstOffset uint64,
-						) ([]*envelopespec.Envelope, bool, error) {
-							events, _, _ := eventStore.ReadEvents(ctx, hk, id, firstOffset)
+							begin uint64,
+						) ([]*envelopespec.Envelope, uint64, error) {
+							events, _, _ := eventStore.ReadEvents(ctx, hk, id, begin)
 							if len(events) > 0 {
-								return events, true, nil
+								return events, begin + 1, nil
 							}
 
-							return []*envelopespec.Envelope{{ /*empty envelope*/ }}, false, nil
+							return []*envelopespec.Envelope{{ /*empty envelope*/ }}, begin, nil
 						}
 
-						_, _, _, err := loader.Load(
+						_, _, err := loader.Load(
 							context.Background(),
 							handlerID,
 							"<instance>",
@@ -405,7 +398,7 @@ var _ = Describe("type Loader", func() {
 							),
 						)
 
-						snapshotOffset, ok, err := snapshotStore.ReadSnapshot(
+						snapshotRev, ok, err := snapshotStore.ReadSnapshot(
 							context.Background(),
 							handlerID.Key,
 							"<instance>",
@@ -414,7 +407,7 @@ var _ = Describe("type Loader", func() {
 						)
 						Expect(err).ShouldNot(HaveOccurred())
 						Expect(ok).To(BeTrue())
-						Expect(snapshotOffset).To(BeNumerically("==", 2))
+						Expect(snapshotRev).To(BeNumerically("==", 0))
 						Expect(root.AppliedEvents).To(Equal(
 							[]dogma.Message{
 								map[string]any{"Value": "A1"},
@@ -428,26 +421,26 @@ var _ = Describe("type Loader", func() {
 						eventReader.ReadEventsFunc = func(
 							ctx context.Context,
 							hk, id string,
-							firstOffset uint64,
-						) ([]*envelopespec.Envelope, bool, error) {
-							events, _, _ := eventStore.ReadEvents(ctx, hk, id, firstOffset)
+							begin uint64,
+						) ([]*envelopespec.Envelope, uint64, error) {
+							events, _, _ := eventStore.ReadEvents(ctx, hk, id, begin)
 							if len(events) > 0 {
-								return events, true, nil
+								return events, begin + 1, nil
 							}
 
-							return nil, false, errors.New("<causal error>")
+							return nil, 0, errors.New("<causal error>")
 						}
 
 						snapshotWriter.WriteSnapshotFunc = func(
 							ctx context.Context,
 							hk, id string,
 							r dogma.AggregateRoot,
-							snapshotOffset uint64,
+							rev uint64,
 						) error {
 							return errors.New("<snapshot error>")
 						}
 
-						_, _, _, err := loader.Load(
+						_, _, err := loader.Load(
 							context.Background(),
 							handlerID,
 							"<instance>",
@@ -468,8 +461,7 @@ var _ = Describe("type Loader", func() {
 						context.Background(),
 						handlerID.Key,
 						"<instance>",
-						0,
-						3,
+						1,
 						nil,
 						true, // archive
 					)
@@ -477,15 +469,14 @@ var _ = Describe("type Loader", func() {
 				})
 
 				It("does not apply any events", func() {
-					firstOffset, nextOffset, snapshotAge, err := loader.Load(
+					end, snapshotAge, err := loader.Load(
 						context.Background(),
 						handlerID,
 						"<instance>",
 						root,
 					)
 					Expect(err).ShouldNot(HaveOccurred())
-					Expect(firstOffset).To(BeNumerically("==", 3))
-					Expect(nextOffset).To(BeNumerically("==", 3))
+					Expect(end).To(BeNumerically("==", 2))
 					Expect(snapshotAge).To(BeNumerically("==", 0))
 					Expect(root.AppliedEvents).To(BeEmpty())
 				})
@@ -496,10 +487,20 @@ var _ = Describe("type Loader", func() {
 							context.Background(),
 							handlerID.Key,
 							"<instance>",
-							3,
-							3,
+							2,
 							[]*envelopespec.Envelope{
 								NewEnvelope("<event-3>", MessageD1),
+							},
+							false, // archive
+						)
+						Expect(err).ShouldNot(HaveOccurred())
+
+						err = eventStore.WriteEvents(
+							context.Background(),
+							handlerID.Key,
+							"<instance>",
+							3,
+							[]*envelopespec.Envelope{
 								NewEnvelope("<event-4>", MessageE1),
 							},
 							false, // archive
@@ -508,15 +509,14 @@ var _ = Describe("type Loader", func() {
 					})
 
 					It("applies only those events that occurred after destruction", func() {
-						firstOffset, nextOffset, snapshotAge, err := loader.Load(
+						end, snapshotAge, err := loader.Load(
 							context.Background(),
 							handlerID,
 							"<instance>",
 							root,
 						)
 						Expect(err).ShouldNot(HaveOccurred())
-						Expect(firstOffset).To(BeNumerically("==", 3))
-						Expect(nextOffset).To(BeNumerically("==", 5))
+						Expect(end).To(BeNumerically("==", 4))
 						Expect(snapshotAge).To(BeNumerically("==", 2))
 						Expect(root.AppliedEvents).To(Equal(
 							[]dogma.Message{
@@ -541,19 +541,18 @@ var _ = Describe("type Loader", func() {
 										"<snapshot>",
 									},
 								},
-								3,
+								2,
 							)
 							Expect(err).ShouldNot(HaveOccurred())
 
-							firstOffset, nextOffset, snapshotAge, err := loader.Load(
+							end, snapshotAge, err := loader.Load(
 								context.Background(),
 								handlerID,
 								"<instance>",
 								root,
 							)
 							Expect(err).ShouldNot(HaveOccurred())
-							Expect(firstOffset).To(BeNumerically("==", 3))
-							Expect(nextOffset).To(BeNumerically("==", 5))
+							Expect(end).To(BeNumerically("==", 4))
 							Expect(snapshotAge).To(BeNumerically("==", 1))
 							Expect(root.AppliedEvents).To(Equal(
 								[]dogma.Message{
@@ -573,19 +572,18 @@ var _ = Describe("type Loader", func() {
 										"<snapshot>",
 									},
 								},
-								2,
+								0,
 							)
 							Expect(err).ShouldNot(HaveOccurred())
 
-							firstOffset, nextOffset, snapshotAge, err := loader.Load(
+							end, snapshotAge, err := loader.Load(
 								context.Background(),
 								handlerID,
 								"<instance>",
 								root,
 							)
 							Expect(err).ShouldNot(HaveOccurred())
-							Expect(firstOffset).To(BeNumerically("==", 3))
-							Expect(nextOffset).To(BeNumerically("==", 5))
+							Expect(end).To(BeNumerically("==", 4))
 							Expect(snapshotAge).To(BeNumerically("==", 2))
 							Expect(root.AppliedEvents).To(Equal(
 								[]dogma.Message{

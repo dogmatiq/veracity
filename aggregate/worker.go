@@ -70,12 +70,8 @@ type Worker struct {
 	// root is the aggregate root for this instance.
 	root dogma.AggregateRoot
 
-	// firstOffset is the offset of the first non-archived event.
-	firstOffset uint64
-
-	// nextOffset is the offset of the next event that will be recorded by this
-	// instance.
-	nextOffset uint64
+	// nextRev is latest (exclusive) revision for this instance.
+	nextRev uint64
 
 	// snapshotAge is the number of events that have been recorded since the
 	// last snapshot was taken.
@@ -98,13 +94,14 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 }
 
-// loadRoot loads the aggregate root, populating w.root, w.firstOffset,
-// w.nextOffset and w.snapshotAge.
+// loadRoot loads the aggregate root.
+//
+// It populates w.root, w.nextRevision and w.snapshotAge.
 func (w *Worker) loadRoot(ctx context.Context) error {
 	var err error
 	w.root = w.Handler.New()
 
-	w.firstOffset, w.nextOffset, w.snapshotAge, err = w.Loader.Load(
+	w.nextRev, w.snapshotAge, err = w.Loader.Load(
 		ctx,
 		w.HandlerIdentity,
 		w.InstanceID,
@@ -172,8 +169,7 @@ func (w *Worker) handleCommand(
 			ctx,
 			w.HandlerIdentity.Key,
 			w.InstanceID,
-			w.firstOffset,
-			w.nextOffset,
+			w.nextRev,
 			sc.EventEnvelopes,
 			sc.IsDestroyed, // archive events if instance is destroyed
 		); err != nil {
@@ -189,8 +185,8 @@ func (w *Worker) handleCommand(
 	// Signal to the goroutine that sent the command that it has been handled.
 	close(cmd.Result)
 
-	w.snapshotAge += eventCount
-	w.nextOffset += eventCount
+	w.nextRev++
+	w.snapshotAge++
 
 	if sc.IsDestroyed {
 		return true, w.archiveSnapshots(ctx)
@@ -233,14 +229,14 @@ func (w *Worker) takeSnapshot(ctx context.Context) error {
 		return nil
 	}
 
-	snapshotOffset := w.nextOffset - 1
+	snapshotRev := w.nextRev - 1
 
 	if err := w.SnapshotWriter.WriteSnapshot(
 		ctx,
 		w.HandlerIdentity.Key,
 		w.InstanceID,
 		w.root,
-		snapshotOffset,
+		snapshotRev,
 	); err != nil {
 		// If the error was due to a context cancelation/timeout of the context
 		// we bail with the context error.
@@ -250,10 +246,10 @@ func (w *Worker) takeSnapshot(ctx context.Context) error {
 
 		logging.Log(
 			w.Logger,
-			"up-to-date snapshot of aggregate root %s[%s] cannot be be written at offset %d: %w",
+			"up-to-date snapshot of aggregate root %s[%s] cannot be be written at revision %d: %w",
 			w.HandlerIdentity.Name,
 			w.InstanceID,
-			snapshotOffset,
+			snapshotRev,
 			err,
 		)
 
@@ -264,10 +260,10 @@ func (w *Worker) takeSnapshot(ctx context.Context) error {
 
 	logging.Log(
 		w.Logger,
-		"up-to-date snapshot of aggregate root %s[%s] written at offset %d: %w",
+		"up-to-date snapshot of aggregate root %s[%s] written at revision %d: %w",
 		w.HandlerIdentity.Name,
 		w.InstanceID,
-		snapshotOffset,
+		snapshotRev,
 	)
 
 	return nil

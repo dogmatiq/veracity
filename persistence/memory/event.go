@@ -11,39 +11,39 @@ import (
 
 // AggregateEventStore stores event messages produced by aggregates
 type AggregateEventStore struct {
-	m      sync.RWMutex
-	events map[instanceKey]instanceEvents
+	m         sync.RWMutex
+	revisions map[instanceKey]instanceRevisions
 }
 
-type instanceEvents struct {
-	FirstOffset uint64
-	NextOffset  uint64
-	Envelopes   [][]byte
+type instanceRevisions struct {
+	Begin     uint64
+	End       uint64
+	Revisions [][][]byte
 }
 
-// ReadBounds returns the offsets that are the bounds of the relevant historical
-// events for a specific aggregate instance.
+// ReadBounds returns the revisions that are the bounds of the relevant
+// historical events for a specific aggregate instance.
 //
 // hk is the identity key of the aggregate message handler. id is the aggregate
 // instance ID.
 //
-// firstOffset is the offset of the first event recorded by the instance that is
-// considered relevant to its current state. It begins as zero, but is advanced
-// to the offset after the last archived event when events are archived.
+// begin is the earliest (inclusive) revision that is considered relevant to the
+// current state of the instance. It begins as zero, but is advanced as events
+// are archived.
 //
-// nextOffset is the offset that will be occupied by the next event to be
-// recorded by this instance.
+// end is latest (exclusive) revision of the instance. Because it is exclusive
+// it is equivalent to the next revision of this instance.
 func (s *AggregateEventStore) ReadBounds(
 	ctx context.Context,
 	hk, id string,
-) (firstOffset, nextOffset uint64, _ error) {
+) (begin, end uint64, _ error) {
 	s.m.RLock()
 	defer s.m.RUnlock()
 
 	k := instanceKey{hk, id}
-	e := s.events[k]
+	r := s.revisions[k]
 
-	return e.FirstOffset, e.NextOffset, nil
+	return r.Begin, r.End, nil
 }
 
 // ReadEvents loads some historical events for a specific aggregate instance.
@@ -51,45 +51,48 @@ func (s *AggregateEventStore) ReadBounds(
 // hk is the identity key of the aggregate message handler. id is the aggregate
 // instance ID.
 //
-// If more is true there are more events to be loaded, and ReadEvents() should
-// be called again with firstOffset incremented by len(events).
+// begin is the earliest (inclusive) revision to include in the result.
 //
-// If more is false there are no subsequent historical events to be loaded.
+// events is the set of events starting at the begin revision.
 //
-// The maximum number of events returned by each call is implementation defined.
+// If begin >= end there are no subsequent historical events to be loaded.
+// Otherwise, ReadEvents() should be called again with begin set to end to
+// continue reading events.
 //
-// It returns an error if firstOffset refers to an archived event.
+// The number of revisions (and hence events) returned by a single call to
+// ReadEvents() is implementation defined.
+//
+// It may return an error if begin refers to an archived revision.
 func (s *AggregateEventStore) ReadEvents(
 	ctx context.Context,
 	hk, id string,
-	firstOffset uint64,
-) (events []*envelopespec.Envelope, more bool, _ error) {
+	begin uint64,
+) (events []*envelopespec.Envelope, end uint64, _ error) {
 	s.m.RLock()
 	defer s.m.RUnlock()
 
 	k := instanceKey{hk, id}
-	e := s.events[k]
+	r := s.revisions[k]
 
-	if firstOffset < e.FirstOffset {
-		return nil, false, fmt.Errorf("event at offset %d is archived", firstOffset)
+	if begin < r.Begin {
+		return nil, 0, fmt.Errorf("revision %d is archived", begin)
 	}
 
-	if firstOffset == e.NextOffset {
-		return nil, false, nil
+	if begin >= r.End {
+		return nil, r.End, nil
 	}
 
-	if firstOffset > e.NextOffset {
-		return nil, false, nil
+	for _, data := range r.Revisions[begin-r.Begin] {
+		env := &envelopespec.Envelope{}
+
+		if err := proto.Unmarshal(data, env); err != nil {
+			return nil, 0, err
+		}
+
+		events = append(events, env)
 	}
 
-	data := e.Envelopes[firstOffset-e.FirstOffset]
-	env := &envelopespec.Envelope{}
-
-	if err := proto.Unmarshal(data, env); err != nil {
-		return nil, false, err
-	}
-
-	return []*envelopespec.Envelope{env}, firstOffset < e.NextOffset-1, nil
+	return events, begin + 1, nil
 }
 
 // WriteEvents writes events that were recorded by an aggregate instance.
@@ -97,13 +100,11 @@ func (s *AggregateEventStore) ReadEvents(
 // hk is the identity key of the aggregate message handler. id is the aggregate
 // instance ID.
 //
-// firstOffset must be the offset of the first non-archived event, as returned
-// by ReadBounds(); otherwise, no action is taken and an error is returned.
+// end must be the revision after the most recent revision of the instance;
+// otherwise an "optimistic concurrency control" error occurs and no changes are
+// persisted.
 //
-// nextOffset must be the offset immediately after the offset of the last event
-// written; otherwise, no action is taken and an error is returned.
-//
-// If archive is true, all prior events and the events being written by this
+// If archive is true, all historical events, including those written by this
 // call are archived. Archived events are typically still made available to
 // external event consumers, but will no longer be needed for loading aggregate
 // roots.
@@ -113,7 +114,7 @@ func (s *AggregateEventStore) ReadEvents(
 func (s *AggregateEventStore) WriteEvents(
 	ctx context.Context,
 	hk, id string,
-	firstOffset, nextOffset uint64,
+	end uint64,
 	events []*envelopespec.Envelope,
 	archive bool,
 ) error {
@@ -134,30 +135,26 @@ func (s *AggregateEventStore) WriteEvents(
 	defer s.m.Unlock()
 
 	k := instanceKey{hk, id}
-	e := s.events[k]
+	r := s.revisions[k]
 
-	if firstOffset != e.FirstOffset {
-		return fmt.Errorf("optimistic concurrency conflict, %d is not the first offset", firstOffset)
+	if end != r.End {
+		return fmt.Errorf("optimistic concurrency conflict, %d is not the next revision", end)
 	}
 
-	if nextOffset != e.NextOffset {
-		return fmt.Errorf("optimistic concurrency conflict, %d is not the next offset", nextOffset)
-	}
-
-	e.NextOffset += uint64(len(events))
+	r.End++
 
 	if archive {
-		e.FirstOffset = e.NextOffset
-		e.Envelopes = nil
+		r.Begin = r.End
+		r.Revisions = nil
 	} else {
-		e.Envelopes = append(e.Envelopes, envelopes...)
+		r.Revisions = append(r.Revisions, envelopes)
 	}
 
-	if s.events == nil {
-		s.events = map[instanceKey]instanceEvents{}
+	if s.revisions == nil {
+		s.revisions = map[instanceKey]instanceRevisions{}
 	}
 
-	s.events[k] = e
+	s.revisions[k] = r
 
 	return nil
 }

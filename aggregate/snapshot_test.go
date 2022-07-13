@@ -15,7 +15,7 @@ type snapshotReaderStub struct {
 		ctx context.Context,
 		hk, id string,
 		r dogma.AggregateRoot,
-		minOffset uint64,
+		minRev uint64,
 	) (uint64, bool, error)
 }
 
@@ -23,14 +23,14 @@ func (s *snapshotReaderStub) ReadSnapshot(
 	ctx context.Context,
 	hk, id string,
 	r dogma.AggregateRoot,
-	minOffset uint64,
+	minRev uint64,
 ) (uint64, bool, error) {
 	if s.ReadSnapshotFunc != nil {
-		return s.ReadSnapshotFunc(ctx, hk, id, r, minOffset)
+		return s.ReadSnapshotFunc(ctx, hk, id, r, minRev)
 	}
 
 	if s.SnapshotReader != nil {
-		return s.SnapshotReader.ReadSnapshot(ctx, hk, id, r, minOffset)
+		return s.SnapshotReader.ReadSnapshot(ctx, hk, id, r, minRev)
 	}
 
 	return 0, false, nil
@@ -44,7 +44,7 @@ type snapshotWriterStub struct {
 		ctx context.Context,
 		hk, id string,
 		r dogma.AggregateRoot,
-		snapshotOffset uint64,
+		rev uint64,
 	) error
 
 	ArchiveSnapshotsFunc func(
@@ -57,14 +57,14 @@ func (s *snapshotWriterStub) WriteSnapshot(
 	ctx context.Context,
 	hk, id string,
 	r dogma.AggregateRoot,
-	snapshotOffset uint64,
+	rev uint64,
 ) error {
 	if s.WriteSnapshotFunc != nil {
-		return s.WriteSnapshotFunc(ctx, hk, id, r, snapshotOffset)
+		return s.WriteSnapshotFunc(ctx, hk, id, r, rev)
 	}
 
 	if s.SnapshotWriter != nil {
-		return s.SnapshotWriter.WriteSnapshot(ctx, hk, id, r, snapshotOffset)
+		return s.SnapshotWriter.WriteSnapshot(ctx, hk, id, r, rev)
 	}
 
 	return nil

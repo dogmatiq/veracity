@@ -61,9 +61,9 @@ func DeclareAggregateSnapshotTests(
 	ginkgo.Describe("func ReadSnapshot()", func() {
 		ginkgo.DescribeTable(
 			"it populates the root from the latest snapshot",
-			func(offset uint64) {
+			func(rev uint64) {
 				snapshot := &aggregateRoot{
-					Value: fmt.Sprintf("<offset-%d>", offset),
+					Value: fmt.Sprintf("<revision-%d>", rev),
 				}
 
 				err := tc.Writer.WriteSnapshot(
@@ -71,11 +71,11 @@ func DeclareAggregateSnapshotTests(
 					"<handler>",
 					"<instance>",
 					snapshot,
-					offset,
+					rev,
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-				snapshotOffset, ok, err := tc.Reader.ReadSnapshot(
+				snapshotRev, ok, err := tc.Reader.ReadSnapshot(
 					ctx,
 					"<handler>",
 					"<instance>",
@@ -84,12 +84,12 @@ func DeclareAggregateSnapshotTests(
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 				gomega.Expect(ok).To(gomega.BeTrue())
-				gomega.Expect(snapshotOffset).To(gomega.Equal(offset))
+				gomega.Expect(snapshotRev).To(gomega.Equal(rev))
 				gomega.Expect(root).To(gomega.Equal(snapshot))
 			},
-			ginkgo.Entry("at offset 0", uint64(0)),
-			ginkgo.Entry("at offset 1", uint64(1)),
-			ginkgo.Entry("at offset 2", uint64(2)),
+			ginkgo.Entry("at revision 0", uint64(0)),
+			ginkgo.Entry("at revision 1", uint64(1)),
+			ginkgo.Entry("at revision 2", uint64(2)),
 		)
 
 		ginkgo.It("stores separate snapshots for each combination of handler key and instance ID", func() {
@@ -119,7 +119,7 @@ func DeclareAggregateSnapshotTests(
 			}
 
 			for i, inst := range instances {
-				snapshotOffset, ok, err := tc.Reader.ReadSnapshot(
+				rev, ok, err := tc.Reader.ReadSnapshot(
 					ctx,
 					inst.HandlerKey,
 					inst.InstanceID,
@@ -128,7 +128,7 @@ func DeclareAggregateSnapshotTests(
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 				gomega.Expect(ok).To(gomega.BeTrue())
-				gomega.Expect(snapshotOffset).To(gomega.BeNumerically("==", i))
+				gomega.Expect(rev).To(gomega.BeNumerically("==", i))
 				gomega.Expect(root.Value).To(gomega.Equal(inst.HandlerKey + inst.InstanceID))
 			}
 		})
@@ -146,7 +146,7 @@ func DeclareAggregateSnapshotTests(
 			gomega.Expect(root.Value).To(gomega.BeEmpty())
 		})
 
-		ginkgo.It("does not modify the root when the latest snapshot is older than minOffset", func() {
+		ginkgo.It("does not modify the root when the latest snapshot is older than minRev", func() {
 			snapshot := &aggregateRoot{}
 
 			err := tc.Writer.WriteSnapshot(
@@ -170,31 +170,31 @@ func DeclareAggregateSnapshotTests(
 			gomega.Expect(root.Value).To(gomega.BeEmpty())
 		})
 
-		ginkgo.It("populates the root when the latest snapshot is taken at exactly minOffset", func() {
+		ginkgo.It("populates the root when the latest snapshot is taken at exactly minRev", func() {
 			snapshot := &aggregateRoot{
 				Value: "<snapshot>",
 			}
-			expectedSnapshotOffset := uint64(10)
+			expectedRev := uint64(10)
 
 			err := tc.Writer.WriteSnapshot(
 				ctx,
 				"<handler>",
 				"<instance>",
 				snapshot,
-				expectedSnapshotOffset,
+				expectedRev,
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-			snapshotOffset, ok, err := tc.Reader.ReadSnapshot(
+			rev, ok, err := tc.Reader.ReadSnapshot(
 				ctx,
 				"<handler>",
 				"<instance>",
 				root,
-				expectedSnapshotOffset,
+				expectedRev,
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 			gomega.Expect(ok).To(gomega.BeTrue())
-			gomega.Expect(snapshotOffset).To(gomega.Equal(expectedSnapshotOffset))
+			gomega.Expect(rev).To(gomega.Equal(expectedRev))
 			gomega.Expect(root).To(gomega.Equal(snapshot))
 		})
 
@@ -372,7 +372,7 @@ func DeclareAggregateSnapshotTests(
 					continue
 				}
 
-				snapshotOffset, ok, err := tc.Reader.ReadSnapshot(
+				rev, ok, err := tc.Reader.ReadSnapshot(
 					ctx,
 					inst.HandlerKey,
 					inst.InstanceID,
@@ -381,7 +381,7 @@ func DeclareAggregateSnapshotTests(
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 				gomega.Expect(ok).To(gomega.BeTrue())
-				gomega.Expect(snapshotOffset).To(gomega.BeNumerically("==", i))
+				gomega.Expect(rev).To(gomega.BeNumerically("==", i))
 				gomega.Expect(root.Value).To(gomega.Equal(inst.HandlerKey + inst.InstanceID))
 			}
 		})
