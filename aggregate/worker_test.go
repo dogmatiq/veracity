@@ -667,7 +667,29 @@ var _ = Describe("type Worker", func() {
 			Expect(called).To(BeTrue())
 		})
 
-		XIt("does not return an error if the SnapshotWriter is nil", func() {
+		It("does not return an error if the SnapshotWriter is nil", func() {
+			// Rely on the fact that a snapshot is taken when the worker shuts
+			// down due to idle timeout.
+			worker.IdleTimeout = 1 * time.Millisecond
+			worker.SnapshotWriter = nil
+
+			snapshotWriter.WriteSnapshotFunc = func(
+				ctx context.Context,
+				hk, id string,
+				r dogma.AggregateRoot,
+				snapshotOffset uint64,
+			) error {
+				panic("unexpected call")
+			}
+
+			executeCommandAsync(
+				ctx,
+				commands,
+				NewParcel("<command>", MessageC1),
+			)
+
+			err := worker.Run(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
 		})
 
 		XIt("returns an error if the root cannot be loaded", func() {
