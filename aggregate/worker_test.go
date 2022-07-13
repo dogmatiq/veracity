@@ -117,14 +117,62 @@ var _ = Describe("type Worker", func() {
 	})
 
 	Describe("func Run()", func() {
-		When("a command is received", func() {
-			It("passes the command message to the handler", func() {
+		It("passes command messages to the handler", func() {
+			handler.HandleCommandFunc = func(
+				r dogma.AggregateRoot,
+				s dogma.AggregateCommandScope,
+				m dogma.Message,
+			) {
+				Expect(m).To(Equal(MessageC1))
+				cancel()
+			}
+
+			executeCommandAsync(
+				ctx,
+				commands,
+				NewParcel("<command>", MessageC1),
+			)
+
+			err := worker.Run(ctx)
+			Expect(err).To(Equal(context.Canceled))
+		})
+
+		It("applies recorded events to the aggregate root", func() {
+			handler.HandleCommandFunc = func(
+				r dogma.AggregateRoot,
+				s dogma.AggregateCommandScope,
+				m dogma.Message,
+			) {
+				s.RecordEvent(MessageE1)
+
+				x := r.(*AggregateRoot)
+				Expect(x.AppliedEvents).To(ConsistOf(
+					MessageE1,
+				))
+
+				cancel()
+			}
+
+			executeCommandAsync(
+				ctx,
+				commands,
+				NewParcel("<command>", MessageC1),
+			)
+
+			err := worker.Run(ctx)
+			Expect(err).To(Equal(context.Canceled))
+		})
+
+		When("the instance has no historical events", func() {
+			It("passes the handler an zero-valued aggregate root", func() {
+				expect := handler.New()
+
 				handler.HandleCommandFunc = func(
 					r dogma.AggregateRoot,
 					s dogma.AggregateCommandScope,
 					m dogma.Message,
 				) {
-					Expect(m).To(Equal(MessageC1))
+					Expect(r).To(Equal(expect))
 					cancel()
 				}
 
@@ -137,244 +185,194 @@ var _ = Describe("type Worker", func() {
 				err := worker.Run(ctx)
 				Expect(err).To(Equal(context.Canceled))
 			})
+		})
 
-			It("applies recorded events to the aggregate root", func() {
-				handler.HandleCommandFunc = func(
-					r dogma.AggregateRoot,
-					s dogma.AggregateCommandScope,
-					m dogma.Message,
-				) {
-					s.RecordEvent(MessageE1)
-
-					x := r.(*AggregateRoot)
-					Expect(x.AppliedEvents).To(ConsistOf(
-						MessageE1,
-					))
-
-					cancel()
-				}
-
-				executeCommandAsync(
+		When("the instance has historical events", func() {
+			BeforeEach(func() {
+				err := eventStore.WriteEvents(
 					ctx,
-					commands,
-					NewParcel("<command>", MessageC1),
-				)
-
-				err := worker.Run(ctx)
-				Expect(err).To(Equal(context.Canceled))
-			})
-
-			When("the instance has no historical events", func() {
-				It("passes the handler an zero-valued aggregate root", func() {
-					expect := handler.New()
-
-					handler.HandleCommandFunc = func(
-						r dogma.AggregateRoot,
-						s dogma.AggregateCommandScope,
-						m dogma.Message,
-					) {
-						Expect(r).To(Equal(expect))
-						cancel()
-					}
-
-					executeCommandAsync(
-						ctx,
-						commands,
-						NewParcel("<command>", MessageC1),
-					)
-
-					err := worker.Run(ctx)
-					Expect(err).To(Equal(context.Canceled))
-				})
-			})
-
-			When("the instance has historical events", func() {
-				BeforeEach(func() {
-					err := eventStore.WriteEvents(
-						ctx,
-						"<handler-key>",
-						"<instance>",
-						0,
-						0,
-						[]*envelopespec.Envelope{
-							NewEnvelope("<existing>", MessageX1),
-						},
-						false, // archive
-					)
-					Expect(err).ShouldNot(HaveOccurred())
-				})
-
-				It("passes the handler the correct aggregate root", func() {
-					expect := handler.New()
-					expect.ApplyEvent(MessageX1)
-
-					handler.HandleCommandFunc = func(
-						r dogma.AggregateRoot,
-						s dogma.AggregateCommandScope,
-						m dogma.Message,
-					) {
-						Expect(r).To(Equal(expect))
-						cancel()
-					}
-
-					executeCommandAsync(
-						ctx,
-						commands,
-						NewParcel("<command>", MessageC1),
-					)
-
-					err := worker.Run(ctx)
-					Expect(err).To(Equal(context.Canceled))
-				})
-			})
-
-			It("persists recorded events", func() {
-				go func() {
-					defer GinkgoRecover()
-
-					executeCommandSync(
-						ctx,
-						commands,
-						NewParcel("<command-1>", MessageC1),
-					)
-
-					executeCommandSync(
-						ctx,
-						commands,
-						NewParcel("<command-2>", MessageC2),
-					)
-
-					cancel()
-				}()
-
-				err := worker.Run(ctx)
-				Expect(err).To(Equal(context.Canceled))
-
-				expectEvents(
-					eventStore,
 					"<handler-key>",
 					"<instance>",
 					0,
+					0,
 					[]*envelopespec.Envelope{
-						{
-							MessageId:         "0",
-							CausationId:       "<command-1>",
-							CorrelationId:     "<correlation>",
-							SourceApplication: packer.Application,
-							SourceHandler:     marshalkit.MustMarshalEnvelopeIdentity(worker.HandlerIdentity),
-							SourceInstanceId:  "<instance>",
-							CreatedAt:         "2000-01-01T00:00:00Z",
-							Description:       "{E1}",
-							PortableName:      MessageEPortableName,
-							MediaType:         MessageE1Packet.MediaType,
-							Data:              MessageE1Packet.Data,
-						},
-						{
-							MessageId:         "1",
-							CausationId:       "<command-2>",
-							CorrelationId:     "<correlation>",
-							SourceApplication: packer.Application,
-							SourceHandler:     marshalkit.MustMarshalEnvelopeIdentity(worker.HandlerIdentity),
-							SourceInstanceId:  "<instance>",
-							CreatedAt:         "2000-01-01T00:00:01Z",
-							Description:       "{E2}",
-							PortableName:      MessageEPortableName,
-							MediaType:         MessageE2Packet.MediaType,
-							Data:              MessageE2Packet.Data,
-						},
+						NewEnvelope("<existing>", MessageX1),
 					},
+					false, // archive
 				)
+				Expect(err).ShouldNot(HaveOccurred())
 			})
 
-			It("returns an error when there is an OCC failure due to a nextOffset mismatch", func() {
-				go func() {
-					defer GinkgoRecover()
+			It("passes the handler the correct aggregate root", func() {
+				expect := handler.New()
+				expect.ApplyEvent(MessageX1)
 
-					By("executing a command to ensure the worker is running")
+				handler.HandleCommandFunc = func(
+					r dogma.AggregateRoot,
+					s dogma.AggregateCommandScope,
+					m dogma.Message,
+				) {
+					Expect(r).To(Equal(expect))
+					cancel()
+				}
 
-					executeCommandSync(
-						ctx,
-						commands,
-						NewParcel("<command-1>", MessageC1),
-					)
-
-					By("writing an event to the event store that the worker doesn't know about")
-
-					err := eventStore.WriteEvents(
-						ctx,
-						"<handler-key>",
-						"<instance>",
-						0,
-						1,
-						[]*envelopespec.Envelope{
-							NewEnvelope("<existing>", MessageX1),
-						},
-						false, // archive
-					)
-					Expect(err).ShouldNot(HaveOccurred())
-
-					By("sending a second command")
-
-					executeCommandAsync(
-						ctx,
-						commands,
-						NewParcel("<command-2>", MessageC1),
-					)
-				}()
+				executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
 
 				err := worker.Run(ctx)
-				Expect(err).To(
-					MatchError(
-						`optimistic concurrency conflict, 1 is not the next offset`,
-					),
-				)
+				Expect(err).To(Equal(context.Canceled))
 			})
+		})
 
-			It("returns an error where there is an OCC failure due to a firstOffset mismatch", func() {
-				go func() {
-					defer GinkgoRecover()
+		It("persists recorded events", func() {
+			go func() {
+				defer GinkgoRecover()
 
-					By("executing a command to ensure the worker is running")
-
-					executeCommandSync(
-						ctx,
-						commands,
-						NewParcel("<command-1>", MessageC1),
-					)
-
-					By("archiving existing events without the worker's knowledge")
-
-					err := eventStore.WriteEvents(
-						ctx,
-						"<handler-key>",
-						"<instance>",
-						0,
-						1,
-						nil,  // no events
-						true, // archive
-					)
-					Expect(err).ShouldNot(HaveOccurred())
-
-					By("sending a second command")
-
-					select {
-					case <-ctx.Done():
-						Expect(ctx.Err()).ShouldNot(HaveOccurred())
-					case commands <- Command{
-						Context: ctx,
-						Parcel:  NewParcel("<command-2>", MessageC1),
-						Result:  make(chan error),
-					}:
-					}
-				}()
-
-				err := worker.Run(ctx)
-				Expect(err).To(
-					MatchError(
-						`optimistic concurrency conflict, 0 is not the first offset`,
-					),
+				executeCommandSync(
+					ctx,
+					commands,
+					NewParcel("<command-1>", MessageC1),
 				)
-			})
+
+				executeCommandSync(
+					ctx,
+					commands,
+					NewParcel("<command-2>", MessageC2),
+				)
+
+				cancel()
+			}()
+
+			err := worker.Run(ctx)
+			Expect(err).To(Equal(context.Canceled))
+
+			expectEvents(
+				eventStore,
+				"<handler-key>",
+				"<instance>",
+				0,
+				[]*envelopespec.Envelope{
+					{
+						MessageId:         "0",
+						CausationId:       "<command-1>",
+						CorrelationId:     "<correlation>",
+						SourceApplication: packer.Application,
+						SourceHandler:     marshalkit.MustMarshalEnvelopeIdentity(worker.HandlerIdentity),
+						SourceInstanceId:  "<instance>",
+						CreatedAt:         "2000-01-01T00:00:00Z",
+						Description:       "{E1}",
+						PortableName:      MessageEPortableName,
+						MediaType:         MessageE1Packet.MediaType,
+						Data:              MessageE1Packet.Data,
+					},
+					{
+						MessageId:         "1",
+						CausationId:       "<command-2>",
+						CorrelationId:     "<correlation>",
+						SourceApplication: packer.Application,
+						SourceHandler:     marshalkit.MustMarshalEnvelopeIdentity(worker.HandlerIdentity),
+						SourceInstanceId:  "<instance>",
+						CreatedAt:         "2000-01-01T00:00:01Z",
+						Description:       "{E2}",
+						PortableName:      MessageEPortableName,
+						MediaType:         MessageE2Packet.MediaType,
+						Data:              MessageE2Packet.Data,
+					},
+				},
+			)
+		})
+
+		It("returns an error when there is an OCC failure due to a nextOffset mismatch", func() {
+			go func() {
+				defer GinkgoRecover()
+
+				By("executing a command to ensure the worker is running")
+
+				executeCommandSync(
+					ctx,
+					commands,
+					NewParcel("<command-1>", MessageC1),
+				)
+
+				By("writing an event to the event store that the worker doesn't know about")
+
+				err := eventStore.WriteEvents(
+					ctx,
+					"<handler-key>",
+					"<instance>",
+					0,
+					1,
+					[]*envelopespec.Envelope{
+						NewEnvelope("<existing>", MessageX1),
+					},
+					false, // archive
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+
+				By("sending a second command")
+
+				executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command-2>", MessageC1),
+				)
+			}()
+
+			err := worker.Run(ctx)
+			Expect(err).To(
+				MatchError(
+					`optimistic concurrency conflict, 1 is not the next offset`,
+				),
+			)
+		})
+
+		It("returns an error where there is an OCC failure due to a firstOffset mismatch", func() {
+			go func() {
+				defer GinkgoRecover()
+
+				By("executing a command to ensure the worker is running")
+
+				executeCommandSync(
+					ctx,
+					commands,
+					NewParcel("<command-1>", MessageC1),
+				)
+
+				By("archiving existing events without the worker's knowledge")
+
+				err := eventStore.WriteEvents(
+					ctx,
+					"<handler-key>",
+					"<instance>",
+					0,
+					1,
+					nil,  // no events
+					true, // archive
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+
+				By("sending a second command")
+
+				select {
+				case <-ctx.Done():
+					Expect(ctx.Err()).ShouldNot(HaveOccurred())
+				case commands <- Command{
+					Context: ctx,
+					Parcel:  NewParcel("<command-2>", MessageC1),
+					Result:  make(chan error),
+				}:
+				}
+			}()
+
+			err := worker.Run(ctx)
+			Expect(err).To(
+				MatchError(
+					`optimistic concurrency conflict, 0 is not the first offset`,
+				),
+			)
 		})
 
 		When("the instance is destroyed", func() {
