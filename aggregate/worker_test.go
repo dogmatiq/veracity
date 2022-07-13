@@ -799,7 +799,24 @@ var _ = Describe("type Worker", func() {
 			Expect(err).To(Equal(context.Canceled))
 		})
 
-		XIt("makes the instance ID available via the scope", func() {
+		It("makes the instance ID available via the scope", func() {
+			handler.HandleCommandFunc = func(
+				r dogma.AggregateRoot,
+				s dogma.AggregateCommandScope,
+				m dogma.Message,
+			) {
+				Expect(s.InstanceID()).To(Equal("<instance>"))
+				cancel()
+			}
+
+			executeCommandAsync(
+				ctx,
+				commands,
+				NewParcel("<command>", MessageC1),
+			)
+
+			err := worker.Run(ctx)
+			Expect(err).To(Equal(context.Canceled))
 		})
 
 		XIt("allows logging via the scope", func() {

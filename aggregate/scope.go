@@ -34,7 +34,7 @@ type scope struct {
 
 // InstanceID returns the ID of the targeted aggregate instance.
 func (s *scope) InstanceID() string {
-	panic("not implemented")
+	return s.ID
 }
 
 // Destroy destroys the targeted instance.
