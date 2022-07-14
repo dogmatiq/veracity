@@ -9,3 +9,8 @@ services:
       MINIO_ROOT_PASSWORD: password
     ports:
       - "29000:9000/tcp"
+
+  dynamodb:
+    image: amazon/dynamodb-local
+    ports:
+      - "28000:8000/tcp"
