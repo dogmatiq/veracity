@@ -70,8 +70,8 @@ type Worker struct {
 	// root is the aggregate root for this instance.
 	root dogma.AggregateRoot
 
-	// nextRev is latest (exclusive) revision for this instance.
-	nextRev uint64
+	// endRev is latest (exclusive) revision of this instance.
+	endRev uint64
 
 	// snapshotAge is the number of events that have been recorded since the
 	// last snapshot was taken.
@@ -96,12 +96,12 @@ func (w *Worker) Run(ctx context.Context) error {
 
 // loadRoot loads the aggregate root.
 //
-// It populates w.root, w.nextRevision and w.snapshotAge.
+// It populates w.root, w.endRev and w.snapshotAge.
 func (w *Worker) loadRoot(ctx context.Context) error {
 	var err error
 	w.root = w.Handler.New()
 
-	w.nextRev, w.snapshotAge, err = w.Loader.Load(
+	w.endRev, w.snapshotAge, err = w.Loader.Load(
 		ctx,
 		w.HandlerIdentity,
 		w.InstanceID,
@@ -162,14 +162,12 @@ func (w *Worker) handleCommand(
 		cmd.Parcel.Message,
 	)
 
-	eventCount := uint64(len(sc.EventEnvelopes))
-
-	if eventCount != 0 || sc.IsDestroyed {
+	if len(sc.EventEnvelopes) != 0 || sc.IsDestroyed {
 		if err := w.EventWriter.WriteEvents(
 			ctx,
 			w.HandlerIdentity.Key,
 			w.InstanceID,
-			w.nextRev,
+			w.endRev,
 			sc.EventEnvelopes,
 			sc.IsDestroyed, // archive events if instance is destroyed
 		); err != nil {
@@ -185,7 +183,7 @@ func (w *Worker) handleCommand(
 	// Signal to the goroutine that sent the command that it has been handled.
 	close(cmd.Result)
 
-	w.nextRev++
+	w.endRev++
 	w.snapshotAge++
 
 	if sc.IsDestroyed {
@@ -229,7 +227,7 @@ func (w *Worker) takeSnapshot(ctx context.Context) error {
 		return nil
 	}
 
-	snapshotRev := w.nextRev - 1
+	snapshotRev := w.endRev - 1
 
 	if err := w.SnapshotWriter.WriteSnapshot(
 		ctx,
