@@ -77,11 +77,11 @@ type Loader struct {
 // Load never returns an error as a result of reading or writing snapshots; it
 // will always fall-back to using the historical events.
 //
-// end is latest (exclusive) revision of the instance. Because it is
-// exclusive it is equivalent to the next revision of this instance.
+// end is latest (exclusive) revision of the instance. Because it is exclusive
+// it is equivalent to the next revision of this instance.
 //
-// snapshotAge is the number of revisions have been made since the last snapshot
-// was taken.
+// snapshotAge is the number of revisions that have been made since the last
+// snapshot was taken.
 func (l *Loader) Load(
 	ctx context.Context,
 	h configkit.Identity,

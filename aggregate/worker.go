@@ -73,8 +73,8 @@ type Worker struct {
 	// endRev is latest (exclusive) revision of this instance.
 	endRev uint64
 
-	// snapshotAge is the number of events that have been recorded since the
-	// last snapshot was taken.
+	// snapshotAge is the number of revisions that have been made since the last
+	// snapshot was taken.
 	snapshotAge uint64
 }
 
