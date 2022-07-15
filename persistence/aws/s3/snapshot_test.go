@@ -1,15 +1,14 @@
 package s3_test
 
 import (
-	"errors"
 	"os"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/dogmatiq/marshalkit"
+	"github.com/dogmatiq/veracity/persistence/aws/internal/awsx"
 	. "github.com/dogmatiq/veracity/persistence/aws/s3"
 	"github.com/dogmatiq/veracity/persistence/internal/persistencetest"
 	. "github.com/onsi/ginkgo/v2"
@@ -82,11 +81,8 @@ func deleteBucket(client *s3.S3, bucket string) error {
 	for {
 		out, err := client.ListObjectsV2(in)
 		if err != nil {
-			var awsErr awserr.Error
-			if errors.As(err, &awsErr) {
-				if awsErr.Code() == s3.ErrCodeNoSuchBucket {
-					return nil
-				}
+			if awsx.IsErrorCode(err, s3.ErrCodeNoSuchBucket) {
+				return nil
 			}
 
 			return err

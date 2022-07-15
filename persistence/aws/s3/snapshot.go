@@ -10,11 +10,11 @@ import (
 	"strconv"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/marshalkit"
+	"github.com/dogmatiq/veracity/persistence/aws/internal/awsx"
 )
 
 // AggregateSnapshotReader reads snapshots of aggregate roots from an S3 bucket.
@@ -56,29 +56,25 @@ func (s *AggregateSnapshotReader) ReadSnapshot(
 	r dogma.AggregateRoot,
 	minRev uint64,
 ) (rev uint64, ok bool, _ error) {
-	in := &s3.GetObjectInput{}
-	in.SetBucket(s.Bucket)
-	in.SetKey(snapshotKey(hk, id))
-
-	var options []request.Option
-	if s.DecorateGet != nil {
-		options = append(options, s.DecorateGet(in)...)
-	}
-
-	out, err := s.Client.GetObjectWithContext(ctx, in, options...)
+	out, err := awsx.Do(
+		ctx,
+		s.Client.GetObjectWithContext,
+		s.DecorateGet,
+		&s3.GetObjectInput{
+			Bucket: &s.Bucket,
+			Key:    snapshotKey(hk, id),
+		},
+	)
 	if err != nil {
-		var awsErr awserr.Error
-		if errors.As(err, &awsErr) {
-			if awsErr.Code() == s3.ErrCodeNoSuchKey {
-				return 0, false, nil
-			}
+		if awsx.IsErrorCode(err, s3.ErrCodeNoSuchKey) {
+			return 0, false, nil
 		}
 
 		return 0, false, err
 	}
 	defer out.Body.Close()
 
-	if out.ContentType == nil || *out.ContentType == "" {
+	if aws.StringValue(out.ContentType) == "" {
 		return 0, false, errors.New(
 			"S3 object has an empty content-type",
 		)
@@ -175,25 +171,22 @@ func (s *AggregateSnapshotWriter) WriteSnapshot(
 		return err
 	}
 
-	in := &s3.PutObjectInput{}
-	in.SetBucket(s.Bucket)
-	in.SetKey(snapshotKey(hk, id))
-	in.SetContentType(p.MediaType)
-	in.SetBody(bytes.NewReader(p.Data))
-	in.SetMetadata(
-		map[string]*string{
-			snapshotRevisionMetaDataKey: aws.String(
-				strconv.FormatUint(rev, 10),
-			),
+	_, err = awsx.Do(
+		ctx,
+		s.Client.PutObjectWithContext,
+		s.DecoratePut,
+		&s3.PutObjectInput{
+			Bucket:      &s.Bucket,
+			Key:         snapshotKey(hk, id),
+			ContentType: &p.MediaType,
+			Body:        bytes.NewReader(p.Data),
+			Metadata: map[string]*string{
+				snapshotRevisionMetaDataKey: aws.String(
+					strconv.FormatUint(rev, 10),
+				),
+			},
 		},
 	)
-
-	var options []request.Option
-	if s.DecoratePut != nil {
-		options = append(options, s.DecoratePut(in)...)
-	}
-
-	_, err = s.Client.PutObjectWithContext(ctx, in, options...)
 	return err
 }
 
@@ -209,23 +202,22 @@ func (s *AggregateSnapshotWriter) ArchiveSnapshots(
 	ctx context.Context,
 	hk, id string,
 ) error {
-	in := &s3.DeleteObjectInput{}
-	in.SetBucket(s.Bucket)
-	in.SetKey(snapshotKey(hk, id))
-
-	var options []request.Option
-	if s.DecorateDelete != nil {
-		options = append(options, s.DecorateDelete(in)...)
-	}
-
-	_, err := s.Client.DeleteObjectWithContext(ctx, in, options...)
+	_, err := awsx.Do(
+		ctx,
+		s.Client.DeleteObjectWithContext,
+		s.DecorateDelete,
+		&s3.DeleteObjectInput{
+			Bucket: &s.Bucket,
+			Key:    snapshotKey(hk, id),
+		},
+	)
 	return err
 }
 
 // snapshotKey is the S3 key used to store snapshots for the given
 // handler/instance.
-func snapshotKey(hk, id string) string {
-	return hk + "/" + id
+func snapshotKey(hk, id string) *string {
+	return aws.String(hk + "/" + id)
 }
 
 // snapshotRevisionMetaDataKey is the S3 metadata key used to store the revision
