@@ -15,12 +15,8 @@ type EventReader interface {
 	// hk is the identity key of the aggregate message handler. id is the
 	// aggregate instance ID.
 	//
-	// begin is the earliest (inclusive) revision that is considered relevant to
-	// the current state of the instance. It begins as zero, but is advanced as
-	// events are archived.
-	//
-	// end is latest (exclusive) revision of the instance. Because it is
-	// exclusive it is equivalent to the next revision of this instance.
+	// When loading the instance, only those events from revisions in the
+	// half-open range [begin, end) should be applied to the aggregate root.
 	ReadBounds(
 		ctx context.Context,
 		hk, id string,
@@ -32,18 +28,15 @@ type EventReader interface {
 	// hk is the identity key of the aggregate message handler. id is the
 	// aggregate instance ID.
 	//
-	// begin is the earliest (inclusive) revision to include in the result.
+	// It returns an implementation-defined number of events sourced from
+	// revisions in the half-open range [begin, end).
 	//
-	// events is the set of events starting at the begin revision.
+	// When begin == end there are no more historical events to read. Otherwise,
+	// call ReadEvents() again with begin = end to continue reading events.
 	//
-	// If begin >= end there are no subsequent historical events to be loaded.
-	// Otherwise, ReadEvents() should be called again with begin set to end to
-	// continue reading events.
-	//
-	// The number of revisions (and hence events) returned by a single call to
-	// ReadEvents() is implementation defined.
-	//
-	// It may return an error if begin refers to an archived revision.
+	// The behavior is undefined if begin is lower than the begin revision
+	// returned by ReadBounds(). Implementations should return an error in this
+	// case.
 	ReadEvents(
 		ctx context.Context,
 		hk, id string,
@@ -51,7 +44,7 @@ type EventReader interface {
 	) (events []*envelopespec.Envelope, end uint64, _ error)
 }
 
-// EventWriter is an interface for recording the events produced by aggregate
+// EventWriter is an interface for persisting the events recorded by aggregate
 // instances.
 type EventWriter interface {
 	// WriteEvents writes events that were recorded by an aggregate instance.
@@ -59,22 +52,24 @@ type EventWriter interface {
 	// hk is the identity key of the aggregate message handler. id is the
 	// aggregate instance ID.
 	//
-	// end must be the revision after the most recent revision of the instance;
-	// otherwise an "optimistic concurrency control" error occurs and no changes
-	// are persisted.
+	// begin sets the first revision for the instance such that in the future
+	// only events from revisions in the half-open range [begin, end + 1) are
+	// applied when loading the aggregate root.
 	//
-	// If archive is true, all historical events, including those written by
-	// this call are archived. Archived events are typically still made
-	// available to external event consumers, but will no longer be needed for
-	// loading aggregate roots.
+	// Events from revisions prior to begin are still made available to external
+	// event consumers, but will no longer be needed for loading aggregate roots
+	// and may be archived.
 	//
-	// The events slice may be empty, which allows archiving all existing events
-	// without adding any new events.
+	// end must be the current end revision, that is, the revision after the
+	// most recent revision of the instance. Otherwise, an "optimistic
+	// concurrency control" error occurs and no changes are persisted.
+	//
+	// The events slice may be empty, which allows modifying the begin revision
+	// without recording any new events.
 	WriteEvents(
 		ctx context.Context,
 		hk, id string,
-		end uint64,
+		begin, end uint64,
 		events []*envelopespec.Envelope,
-		archive bool,
 	) error
 }

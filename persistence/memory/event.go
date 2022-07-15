@@ -12,10 +12,10 @@ import (
 // AggregateEventStore stores event messages produced by aggregates
 type AggregateEventStore struct {
 	m         sync.RWMutex
-	revisions map[instanceKey]instanceRevisions
+	instances map[instanceKey]aggregateInstance
 }
 
-type instanceRevisions struct {
+type aggregateInstance struct {
 	Begin     uint64
 	End       uint64
 	Revisions [][][]byte
@@ -27,12 +27,8 @@ type instanceRevisions struct {
 // hk is the identity key of the aggregate message handler. id is the aggregate
 // instance ID.
 //
-// begin is the earliest (inclusive) revision that is considered relevant to the
-// current state of the instance. It begins as zero, but is advanced as events
-// are archived.
-//
-// end is latest (exclusive) revision of the instance. Because it is exclusive
-// it is equivalent to the next revision of this instance.
+// When loading the instance, only those events from revisions in the half-open
+// range [begin, end) should be applied to the aggregate root.
 func (s *AggregateEventStore) ReadBounds(
 	ctx context.Context,
 	hk, id string,
@@ -41,9 +37,9 @@ func (s *AggregateEventStore) ReadBounds(
 	defer s.m.RUnlock()
 
 	k := instanceKey{hk, id}
-	r := s.revisions[k]
+	i := s.instances[k]
 
-	return r.Begin, r.End, nil
+	return i.Begin, i.End, nil
 }
 
 // ReadEvents loads some historical events for a specific aggregate instance.
@@ -51,18 +47,14 @@ func (s *AggregateEventStore) ReadBounds(
 // hk is the identity key of the aggregate message handler. id is the aggregate
 // instance ID.
 //
-// begin is the earliest (inclusive) revision to include in the result.
+// It returns an implementation-defined number of events sourced from revisions
+// in the half-open range [begin, end).
 //
-// events is the set of events starting at the begin revision.
+// When begin == end there are no more historical events to read. Otherwise,
+// call ReadEvents() again with begin = end to continue reading events.
 //
-// If begin >= end there are no subsequent historical events to be loaded.
-// Otherwise, ReadEvents() should be called again with begin set to end to
-// continue reading events.
-//
-// The number of revisions (and hence events) returned by a single call to
-// ReadEvents() is implementation defined.
-//
-// It may return an error if begin refers to an archived revision.
+// The behavior is undefined if begin is lower than the begin revision returned
+// by ReadBounds(). Implementations should return an error in this case.
 func (s *AggregateEventStore) ReadEvents(
 	ctx context.Context,
 	hk, id string,
@@ -72,27 +64,24 @@ func (s *AggregateEventStore) ReadEvents(
 	defer s.m.RUnlock()
 
 	k := instanceKey{hk, id}
-	r := s.revisions[k]
+	i := s.instances[k]
 
-	if begin < r.Begin {
+	if begin < i.Begin {
 		return nil, 0, fmt.Errorf("revision %d is archived", begin)
 	}
 
-	if begin >= r.End {
-		return nil, r.End, nil
-	}
+	for begin < i.End {
+		index := begin - i.Begin
+		envelopes := i.Revisions[index]
+		begin++
 
-	for _, data := range r.Revisions[begin-r.Begin] {
-		env := &envelopespec.Envelope{}
-
-		if err := proto.Unmarshal(data, env); err != nil {
-			return nil, 0, err
+		if len(envelopes) > 0 {
+			events, err := unmarshalEnvelopes(envelopes)
+			return events, begin, err
 		}
-
-		events = append(events, env)
 	}
 
-	return events, begin + 1, nil
+	return nil, begin, nil
 }
 
 // WriteEvents writes events that were recorded by an aggregate instance.
@@ -100,61 +89,88 @@ func (s *AggregateEventStore) ReadEvents(
 // hk is the identity key of the aggregate message handler. id is the aggregate
 // instance ID.
 //
-// end must be the revision after the most recent revision of the instance;
-// otherwise an "optimistic concurrency control" error occurs and no changes are
-// persisted.
+// begin sets the first revision for the instance such that in the future only
+// events from revisions in the half-open range [begin, end + 1) are applied
+// when loading the aggregate root. Any revisions before begin may be archived.
 //
-// If archive is true, all historical events, including those written by this
-// call are archived. Archived events are typically still made available to
-// external event consumers, but will no longer be needed for loading aggregate
-// roots.
+// Events within archived revisions are still made available to external event
+// consumers, but will no longer be needed for loading aggregate roots.
 //
-// The events slice may be empty, which allows archiving all existing events
-// without adding any new events.
+// end must be the current end revision, that is, the revision after the most
+// recent revision of the instance. Otherwise, an "optimistic concurrency
+// control" error occurs and no changes are persisted.
+//
+// The events slice may be empty, which allows modifying the begin revision
+// without recording any new events.
 func (s *AggregateEventStore) WriteEvents(
 	ctx context.Context,
 	hk, id string,
-	end uint64,
+	begin, end uint64,
 	events []*envelopespec.Envelope,
-	archive bool,
 ) error {
-	var envelopes [][]byte
-
-	if !archive {
-		for _, env := range events {
-			data, err := proto.Marshal(env)
-			if err != nil {
-				return err
-			}
-
-			envelopes = append(envelopes, data)
-		}
-	}
-
 	s.m.Lock()
 	defer s.m.Unlock()
 
 	k := instanceKey{hk, id}
-	r := s.revisions[k]
+	r := s.instances[k]
 
 	if end != r.End {
 		return fmt.Errorf("optimistic concurrency conflict, %d is not the next revision", end)
 	}
 
+	envelopes, err := marshalEnvelopes(events)
+	if err != nil {
+		return err
+	}
+
+	r.Revisions = append(r.Revisions, envelopes)
+
+	if begin > r.Begin {
+		r.Revisions = r.Revisions[begin-r.Begin:]
+		r.Begin = begin
+	}
+
 	r.End++
 
-	if archive {
-		r.Begin = r.End
-		r.Revisions = nil
-	} else {
-		r.Revisions = append(r.Revisions, envelopes)
+	if s.instances == nil {
+		s.instances = map[instanceKey]aggregateInstance{}
 	}
 
-	if s.revisions == nil {
-		s.revisions = map[instanceKey]instanceRevisions{}
-	}
-
-	s.revisions[k] = r
+	s.instances[k] = r
 
 	return nil
+}
+
+// marshalEnvelopes marshals a slice of envelopes to their binary
+// representation.
+func marshalEnvelopes(envelopes []*envelopespec.Envelope) ([][]byte, error) {
+	result := make([][]byte, 0, len(envelopes))
+
+	for _, env := range envelopes {
+		data, err := proto.Marshal(env)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, data)
+	}
+
+	return result, nil
+}
+
+// unmarshalEnvelopes unmarshals a slice of envelopes from their binary
+// representation.
+func unmarshalEnvelopes(envelopes [][]byte) ([]*envelopespec.Envelope, error) {
+	result := make([]*envelopespec.Envelope, 0, len(envelopes))
+
+	for _, data := range envelopes {
+		env := &envelopespec.Envelope{}
+		if err := proto.Unmarshal(data, env); err != nil {
+			return nil, err
+		}
+
+		result = append(result, env)
+	}
+
+	return result, nil
 }

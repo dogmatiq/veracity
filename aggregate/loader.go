@@ -77,8 +77,8 @@ type Loader struct {
 // Load never returns an error as a result of reading or writing snapshots; it
 // will always fall-back to using the historical events.
 //
-// end is latest (exclusive) revision of the instance. Because it is exclusive
-// it is equivalent to the next revision of this instance.
+// The half-open range [begin, end) is the range of unarchived revisions that
+// wre used to populate r.
 //
 // snapshotAge is the number of revisions that have been made since the last
 // snapshot was taken.
@@ -87,7 +87,7 @@ func (l *Loader) Load(
 	h configkit.Identity,
 	id string,
 	r dogma.AggregateRoot,
-) (end, snapshotAge uint64, _ error) {
+) (begin, end, snapshotAge uint64, _ error) {
 	// First read the bounds that we are interested in. This helps us optimize
 	// the reads we perform by ignoring any snapshots and events that are no
 	// longer relevant.
@@ -97,7 +97,7 @@ func (l *Loader) Load(
 		id,
 	)
 	if err != nil {
-		return 0, 0, fmt.Errorf(
+		return 0, 0, 0, fmt.Errorf(
 			"aggregate root %s[%s] cannot be loaded: unable to read event revision bounds: %w",
 			h.Name,
 			id,
@@ -114,7 +114,7 @@ func (l *Loader) Load(
 			id,
 		)
 
-		return 0, 0, nil
+		return 0, 0, 0, nil
 	}
 
 	// If begin and end are the same then the instance was destroyed at the same
@@ -129,7 +129,7 @@ func (l *Loader) Load(
 			begin-1,
 		)
 
-		return end, 0, nil
+		return begin, end, 0, nil
 	}
 
 	// Attempt to read a snapshot that is newer than begin so that we
@@ -142,7 +142,7 @@ func (l *Loader) Load(
 		begin, // ignore any snapshots that were taken before the first relevant revision
 	)
 	if err != nil {
-		return 0, 0, fmt.Errorf(
+		return 0, 0, 0, fmt.Errorf(
 			"aggregate root %s[%s] cannot be loaded: unable to read snapshot: %w",
 			h.Name,
 			id,
@@ -150,15 +150,17 @@ func (l *Loader) Load(
 		)
 	}
 
+	readFrom := begin
+
 	if hasSnapshot {
 		// We found a snapshot, so the first event we want to read is the one
 		// from the revision after that snapshot was taken.
-		begin = snapshotRev + 1
+		readFrom = snapshotRev + 1
 
 		// If the revision after the snapshot is the same as the end then no
 		// revisions have been made since the snapshot was taken, and therefore
 		// there's nothing more to load.
-		if begin == end {
+		if readFrom == end {
 			logging.Log(
 				l.Logger,
 				"aggregate root %s[%s] loaded from up-to-date snapshot taken at revision %d",
@@ -167,7 +169,7 @@ func (l *Loader) Load(
 				snapshotRev,
 			)
 
-			return end, 0, nil
+			return begin, end, 0, nil
 		}
 	}
 
@@ -178,11 +180,11 @@ func (l *Loader) Load(
 		ctx,
 		h,
 		id,
+		readFrom,
 		r,
-		begin,
 	)
 	if err != nil {
-		if end > begin {
+		if end > readFrom {
 			// We managed to read _some_ events before this error occurred,
 			// so we write a new snapshot so that we can "pick up where we
 			// left off" next time we attempt to load this instance.
@@ -194,7 +196,7 @@ func (l *Loader) Load(
 			)
 		}
 
-		return 0, 0, fmt.Errorf(
+		return 0, 0, 0, fmt.Errorf(
 			"aggregate root %s[%s] cannot be loaded: unable to read events: %w",
 			h.Name,
 			id,
@@ -202,7 +204,7 @@ func (l *Loader) Load(
 		)
 	}
 
-	snapshotAge = end - begin
+	snapshotAge = end - readFrom
 
 	// Log about how the aggregate root was loaded.
 	if hasSnapshot {
@@ -224,7 +226,7 @@ func (l *Loader) Load(
 		)
 	}
 
-	return end, snapshotAge, nil
+	return begin, end, snapshotAge, nil
 }
 
 // readSnapshot updates the contents of r to match the most recent snapshot that
@@ -335,40 +337,36 @@ func (l *Loader) writeSnapshot(
 
 // readEvents loads historical events and applies them to r.
 //
-// begin is the (inclusive) revision containing the first events to read.
-//
-// end is latest (exclusive) revision of the instance. Because it is exclusive
-// it is equivalent to the next revision of this instance. It may be greater
-// than the end revision returned by the initial bounds check. end is valid even
-// even if err is non-nil.
+// It reads events in the half-open range [begin, end). end is valid even even
+// if err is non-nil.
 func (l *Loader) readEvents(
 	ctx context.Context,
 	h configkit.Identity,
 	id string,
-	r dogma.AggregateRoot,
 	begin uint64,
+	r dogma.AggregateRoot,
 ) (end uint64, err error) {
 	var events []dogma.Message
 
 	for {
 		events = events[:0]
 
-		envelopes, end, err := l.EventReader.ReadEvents(
+		envelopes, unappliedEnd, err := l.EventReader.ReadEvents(
 			ctx,
 			h.Key,
 			id,
 			begin,
 		)
 		if err != nil {
-			return begin, err
+			return end, err
 		}
 
-		// Unmarshal the envelopes first before applying them to guarantee that
-		// we can apply them all.
+		// Unmarshal all of the envelopes before applying them to guarantee that
+		// we can apply all events from the revision.
 		for _, env := range envelopes {
 			ev, err := marshalkit.UnmarshalMessageFromEnvelope(l.Marshaler, env)
 			if err != nil {
-				return begin, err
+				return end, err
 			}
 
 			events = append(events, ev)
@@ -378,7 +376,9 @@ func (l *Loader) readEvents(
 			r.ApplyEvent(ev)
 		}
 
-		if begin >= end {
+		end = unappliedEnd
+
+		if begin == end {
 			return end, nil
 		}
 
