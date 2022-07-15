@@ -2,7 +2,9 @@ package dynamodb
 
 import (
 	"context"
+	"encoding/base64"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -12,123 +14,152 @@ import (
 	"github.com/dogmatiq/veracity/persistence/aws/internal/awsx"
 )
 
-type TableRegistry struct {
-	// DecorateCreateTable is an optional function that is called before each
-	// DynamoDB "CreateTable" request.
-	//
-	// It may modify the API input in-place. It returns options that will be
-	// applied to the request.
-	DecorateCreateTable func(*dynamodb.CreateTableInput) []request.Option
-
-	// DecorateDescribeTable is an optional function that is called before each
-	// DynamoDB "DescribeTable" request.
-	//
-	// It may modify the API input in-place. It returns options that will be
-	// applied to the request.
-	DecorateDescribeTable func(*dynamodb.DescribeTableInput) []request.Option
-
-	tables sync.Map
+// tableRegistry is a collection of information about DynamoDB tables.
+//
+// It is used to determine if a table already exists, and create it if not.
+type tableRegistry struct {
+	tables sync.Map // map[string]*tableEntry
 }
 
+// tableEntry stores information about a single DynamoDB table.
 type tableEntry struct {
-	Name     string
-	Token    chan struct{}
-	IsActive bool
+	// IsActive is non-zero if the table is active.
+	//
+	// If it is zero the table is ACTIVE. Otherwise, IsActiveSem must be used to
+	// wait for the table to become active.
+	IsActive uint32 // atomic
+
+	// IsActiveSem is a semaphore used to prevent multiple goroutines from
+	// creating the table at the same time and to signal when the table is
+	// confirmed to have an ACTIVE status.
+	//
+	// A successful read from the channel gives the calling goroutine permission
+	// to proceed.
+	//
+	// If the read succeeds because the channel is closed, the table is ACTIVE.
+	// Otherwise, the the table is not yet active and it is the channel reader's
+	// responsibility to wait until it is before closing the channel.
+	IsActiveSem chan struct{}
+
+	// Name is the table name.
+	Name string
 }
 
-func (r *TableRegistry) Create(
+// Create creates a DynamoDB table for some arbitrary key.
+//
+// If the table does not exist, def() is called to obtain the table definition.
+//
+// It blocks until the table status is ACTIVE.
+func (r *tableRegistry) Create(
 	ctx context.Context,
 	db *dynamodb.DynamoDB,
 	key string,
-	def func() *dynamodb.CreateTableInput,
-) (string, error) {
+	def func() (*dynamodb.CreateTableInput, []request.Option),
+) (_ *string, err error) {
 	e := r.entry(key)
+
+	if atomic.LoadUint32(&e.IsActive) != 0 {
+		return &e.Name, nil
+	}
 
 	select {
 	case <-ctx.Done():
-		return "", ctx.Err()
-	case <-e.Token:
-	}
-
-	if e.IsActive {
-		return e.Name, nil
+		return nil, ctx.Err()
+	case _, pending := <-e.IsActiveSem:
+		if !pending {
+			return &e.Name, nil
+		}
 	}
 
 	defer func() {
-		if e.IsActive {
-			close(e.Token)
+		if err == nil {
+			atomic.StoreUint32(&e.IsActive, 1)
+			close(e.IsActiveSem)
 		} else {
-			e.Token <- struct{}{}
+			e.IsActiveSem <- struct{}{}
 		}
 	}()
 
-	if e.Name == "" {
-		in := def()
+	in, options := def()
+	e.Name = aws.StringValue(in.TableName)
 
-		out, err := awsx.Do(
-			ctx,
-			db.CreateTableWithContext,
-			r.DecorateCreateTable,
-			in,
-		)
-		if err != nil {
-			if !awsx.IsErrorCode(err, dynamodb.ErrCodeResourceInUseException) {
-				return "", err
-			}
-		}
-
-		e.Name = aws.StringValue(in.TableName)
-
-		if out.TableDescription != nil && aws.StringValue(out.TableDescription.TableStatus) == "ACTIVE" {
-			e.IsActive = true
-			return e.Name, nil
+	out, err := db.CreateTableWithContext(ctx, in, options...)
+	if err != nil {
+		if awsx.IsErrorCode(err, dynamodb.ErrCodeResourceInUseException) {
+			return r.waitForActiveStatus(ctx, db, e)
 		}
 	}
 
-	return r.poll(ctx, db, e)
+	if aws.StringValue(out.TableDescription.TableStatus) == "ACTIVE" {
+		return &e.Name, nil
+	}
+
+	return r.waitForActiveStatus(ctx, db, e)
 }
 
-func (r *TableRegistry) entry(key string) *tableEntry {
+// entry returns the table entry for a specific key, creating an entry if
+// necessary.
+func (r *tableRegistry) entry(key string) *tableEntry {
 	if v, ok := r.tables.Load(key); ok {
 		return v.(*tableEntry)
 	}
 
 	e := &tableEntry{
-		Token: make(chan struct{}, 1),
+		IsActiveSem: make(chan struct{}, 1),
 	}
-	e.Token <- struct{}{}
 
-	v, _ := r.tables.LoadOrStore(key, e)
+	v, loaded := r.tables.LoadOrStore(key, e)
+	if !loaded {
+		e.IsActiveSem <- struct{}{}
+	}
+
 	return v.(*tableEntry)
 }
 
-func (r *TableRegistry) poll(
+// waitForActiveStatus polls the database until the table is active.
+func (r *tableRegistry) waitForActiveStatus(
 	ctx context.Context,
 	db *dynamodb.DynamoDB,
 	e *tableEntry,
-) (string, error) {
+) (*string, error) {
+	// CODE COVERAGE: This function tends to remain totally uncovered, as the
+	// DynamoDB local image is fast enough so as to appear immediately
+	// consistent.
 	for {
-		out, err := awsx.Do(
+		if err := linger.Sleep(ctx, 100*time.Millisecond); err != nil {
+			return nil, err
+		}
+
+		out, err := db.DescribeTableWithContext(
 			ctx,
-			db.DescribeTableWithContext,
-			r.DecorateDescribeTable,
 			&dynamodb.DescribeTableInput{
 				TableName: &e.Name,
 			},
 		)
 		if err != nil {
-			if !awsx.IsErrorCode(err, dynamodb.ErrCodeResourceNotFoundException) {
-				return "", err
+			if awsx.IsErrorCode(err, dynamodb.ErrCodeResourceNotFoundException) {
+				continue
 			}
+
+			return nil, err
 		}
 
-		if out.Table != nil && aws.StringValue(out.Table.TableStatus) == "ACTIVE" {
-			e.IsActive = true
-			return e.Name, nil
-		}
-
-		if err := linger.Sleep(ctx, 50*time.Millisecond); err != nil {
-			return "", err
+		if aws.StringValue(out.Table.TableStatus) == "ACTIVE" {
+			return &e.Name, nil
 		}
 	}
+}
+
+// tableName returns the table name to use for a specific handler key.
+//
+// Handler keys (which may consist of any printable unicode characters) are
+// encoded using the base76 URL alphabet, which is compatiable with DynamoDBs
+// table naming restrictions.
+func tableName(prefix, hk string) *string {
+	if prefix == "" {
+		prefix = DefaultAggregateEventTablePrefix
+	}
+
+	suffix := base64.RawURLEncoding.EncodeToString([]byte(hk))
+	return aws.String(prefix + suffix)
 }

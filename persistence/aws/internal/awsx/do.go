@@ -8,7 +8,11 @@ import (
 
 // Do executes an AWS API request.
 //
-// dec is a decorator function that mutates the request before it is sent.
+// fn is a function that is called to execute the request, typically a method on
+// a *dynamodb.DynamoDB client.
+//
+// dec is a decorator function that mutates the input value before it is sent
+// and returns any options that should be used when sending the request.
 func Do[In, Out any](
 	ctx context.Context,
 	fn func(context.Context, *In, ...request.Option) (Out, error),
@@ -16,9 +20,19 @@ func Do[In, Out any](
 	in *In,
 	options ...request.Option,
 ) (out Out, err error) {
+	options = append(options, Decorate(in, dec)...)
+	return fn(ctx, in, options...)
+}
+
+// Decorate mutates an input value in-place and returns any options that should
+// be used when sending the request.
+func Decorate[In any](
+	in *In,
+	dec func(*In) []request.Option,
+) []request.Option {
 	if dec != nil {
-		options = append(options, dec(in)...)
+		return dec(in)
 	}
 
-	return fn(ctx, in, options...)
+	return nil
 }

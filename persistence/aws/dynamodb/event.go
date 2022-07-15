@@ -2,7 +2,6 @@ package dynamodb
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"strconv"
@@ -23,7 +22,12 @@ const DefaultAggregateEventTablePrefix = "AggregateEvent."
 //
 // It implements aggregate.EventReader.
 type AggregateEventReader struct {
-	DB          *dynamodb.DynamoDB
+	// DB is the DynamoDB client to use.
+	DB *dynamodb.DynamoDB
+
+	// TablePrefix is a prefix to use on all DynamoDB table names.
+	//
+	// If it is empty, DefaultAggregateEventTablePrefix is used instead.
 	TablePrefix string
 
 	// DecorateQuery is an optional function that is called before each DynamoDB
@@ -164,9 +168,20 @@ func (e *AggregateEventReader) ReadEvents(
 //
 // It implements aggregate.EventWriter.
 type AggregateEventWriter struct {
-	DB            *dynamodb.DynamoDB
-	TablePrefix   string
-	TableRegistry TableRegistry
+	// DB is the DynamoDB client to use.
+	DB *dynamodb.DynamoDB
+
+	// TablePrefix is a prefix to use on all DynamoDB table names.
+	//
+	// If it is empty, DefaultAggregateEventTablePrefix is used instead.
+	TablePrefix string
+
+	// DecorateCreateTable is an optional function that is called before each
+	// DynamoDB "CreateTable" request.
+	//
+	// It may modify the API input in-place. It returns options that will be
+	// applied to the request.
+	DecorateCreateTable func(*dynamodb.CreateTableInput) []request.Option
 
 	// DecorateGetItem is an optional function that is called before each
 	// DynamoDB "GetItem" request.
@@ -181,6 +196,8 @@ type AggregateEventWriter struct {
 	// It may modify the API input in-place. It returns options that will be
 	// applied to the request.
 	DecoratePutItem func(*dynamodb.PutItemInput) []request.Option
+
+	tables tableRegistry
 }
 
 // WriteEvents writes events that were recorded by an aggregate instance.
@@ -215,12 +232,55 @@ func (e *AggregateEventWriter) WriteEvents(
 		return err
 	}
 
-	table, err := e.TableRegistry.Create(
+	table, err := e.createTable(ctx, hk)
+	if err != nil {
+		return err
+	}
+
+	item := map[string]*dynamodb.AttributeValue{
+		"InstanceID":    {S: aws.String(id)},
+		"Revision":      marshalRevision(end),
+		"BeginRevision": marshalRevision(begin),
+	}
+
+	if len(envelopes) > 0 {
+		item["EventEnvelopes"] = &dynamodb.AttributeValue{L: envelopes}
+	}
+
+	_, err = awsx.Do(
+		ctx,
+		e.DB.PutItemWithContext,
+		e.DecoratePutItem,
+		&dynamodb.PutItemInput{
+			TableName: table,
+			ConditionExpression: aws.String(
+				`attribute_not_exists(InstanceID)`,
+			),
+			Item: item,
+		},
+	)
+	if err != nil {
+		if awsx.IsErrorCode(err, dynamodb.ErrCodeConditionalCheckFailedException) {
+			return fmt.Errorf(
+				"optimistic concurrency conflict, %d is not the next revision",
+				end,
+			)
+		}
+
+		return err
+	}
+
+	return nil
+}
+
+// createTable creates the DynamoDB table for the aggregate with the given key.
+func (e *AggregateEventWriter) createTable(ctx context.Context, hk string) (*string, error) {
+	return e.tables.Create(
 		ctx,
 		e.DB,
 		hk,
-		func() *dynamodb.CreateTableInput {
-			return &dynamodb.CreateTableInput{
+		func() (*dynamodb.CreateTableInput, []request.Option) {
+			in := &dynamodb.CreateTableInput{
 				TableName: tableName(e.TablePrefix, hk),
 				AttributeDefinitions: []*dynamodb.AttributeDefinition{
 					{
@@ -250,57 +310,10 @@ func (e *AggregateEventWriter) WriteEvents(
 					},
 				},
 			}
+
+			return in, awsx.Decorate(in, e.DecorateCreateTable)
 		},
 	)
-
-	item := map[string]*dynamodb.AttributeValue{
-		"InstanceID":    {S: aws.String(id)},
-		"Revision":      marshalRevision(end),
-		"BeginRevision": marshalRevision(begin),
-	}
-
-	if len(envelopes) > 0 {
-		item["EventEnvelopes"] = &dynamodb.AttributeValue{L: envelopes}
-	}
-
-	_, err = awsx.Do(
-		ctx,
-		e.DB.PutItemWithContext,
-		e.DecoratePutItem,
-		&dynamodb.PutItemInput{
-			TableName: &table,
-			ConditionExpression: aws.String(
-				`attribute_not_exists(InstanceID)`,
-			),
-			Item: item,
-		},
-	)
-	if err != nil {
-		if awsx.IsErrorCode(err, dynamodb.ErrCodeConditionalCheckFailedException) {
-			return fmt.Errorf(
-				"optimistic concurrency conflict, %d is not the next revision",
-				end,
-			)
-		}
-
-		return err
-	}
-
-	return nil
-}
-
-// tableName returns the table name to use for a specific handler key.
-//
-// Handler keys (which may consist of any printable unicode characters) are
-// encoded using the base76 URL alphabet, which is compatiable with DynamoDBs
-// table naming restrictions.
-func tableName(prefix, hk string) *string {
-	if prefix == "" {
-		prefix = DefaultAggregateEventTablePrefix
-	}
-
-	suffix := base64.RawURLEncoding.EncodeToString([]byte(hk))
-	return aws.String(prefix + suffix)
 }
 
 // marshalRevision marshals a revision to a DynamoDB number.
