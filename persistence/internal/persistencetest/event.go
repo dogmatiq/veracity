@@ -28,9 +28,9 @@ func DeclareAggregateEventTests(
 	new func() AggregateEventContext,
 ) {
 	var (
-		tc                                                   AggregateEventContext
-		ctx                                                  context.Context
-		eventA, eventB, xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx []*envelopespec.Envelope
+		tc             AggregateEventContext
+		ctx            context.Context
+		eventA, eventB []*envelopespec.Envelope
 	)
 
 	ginkgo.BeforeEach(func() {
@@ -38,16 +38,13 @@ func DeclareAggregateEventTests(
 		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
 		ginkgo.DeferCleanup(cancel)
 
-		xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx = []*envelopespec.Envelope{
+		eventA = []*envelopespec.Envelope{
 			veracityfixtures.NewEnvelope("<event-0>", dogmafixtures.MessageA1),
-			veracityfixtures.NewEnvelope("<event-1>", dogmafixtures.MessageB1),
-			veracityfixtures.NewEnvelope("<event-2>", dogmafixtures.MessageC1),
-			veracityfixtures.NewEnvelope("<event-4>", dogmafixtures.MessageD1),
-			veracityfixtures.NewEnvelope("<event-5>", dogmafixtures.MessageE1),
 		}
 
-		eventA = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx[:1]
-		eventB = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx[1:2]
+		eventB = []*envelopespec.Envelope{
+			veracityfixtures.NewEnvelope("<event-1>", dogmafixtures.MessageB1),
+		}
 
 		tc = new()
 		if tc.AfterEach != nil {
