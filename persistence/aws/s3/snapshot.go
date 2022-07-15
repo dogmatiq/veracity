@@ -30,12 +30,12 @@ type AggregateSnapshotReader struct {
 	// Marshaler is used to unmarshal S3 objects into aggregate root instances.
 	Marshaler marshalkit.ValueMarshaler
 
-	// DecorateGet is an optional function that is called before each S3
+	// DecorateGetObject is an optional function that is called before each S3
 	// "GetObject" request.
 	//
 	// It may modify the API input in-place. It returns options that will be
 	// applied to the request.
-	DecorateGet func(*s3.GetObjectInput) []request.Option
+	DecorateGetObject func(*s3.GetObjectInput) []request.Option
 }
 
 // ReadSnapshot updates the contents of r to match the most recent snapshot that
@@ -59,7 +59,7 @@ func (s *AggregateSnapshotReader) ReadSnapshot(
 	out, err := awsx.Do(
 		ctx,
 		s.Client.GetObjectWithContext,
-		s.DecorateGet,
+		s.DecorateGetObject,
 		&s3.GetObjectInput{
 			Bucket: &s.Bucket,
 			Key:    snapshotKey(hk, id),
@@ -139,19 +139,19 @@ type AggregateSnapshotWriter struct {
 	// Marshaler is used to marshal aggregate root instances into S3 objects.
 	Marshaler marshalkit.ValueMarshaler
 
-	// DecoratePut is an optional function that is called before each S3
+	// DecoratePutObject is an optional function that is called before each S3
 	// "PutObject" request.
 	//
 	// It may modify the API input in-place. It returns options that will be
 	// applied to the request.
-	DecoratePut func(*s3.PutObjectInput) []request.Option
+	DecoratePutObject func(*s3.PutObjectInput) []request.Option
 
-	// DecorateDelete is an optional function that is called before each S3
+	// DecorateDeleteObject is an optional function that is called before each S3
 	// "DeleteObject" request.
 	//
 	// It may modify the API input in-place. It returns options that will be
 	// applied to the request.
-	DecorateDelete func(*s3.DeleteObjectInput) []request.Option
+	DecorateDeleteObject func(*s3.DeleteObjectInput) []request.Option
 }
 
 // WriteSnapshot saves a snapshot of a specific aggregate instance.
@@ -174,7 +174,7 @@ func (s *AggregateSnapshotWriter) WriteSnapshot(
 	_, err = awsx.Do(
 		ctx,
 		s.Client.PutObjectWithContext,
-		s.DecoratePut,
+		s.DecoratePutObject,
 		&s3.PutObjectInput{
 			Bucket:      &s.Bucket,
 			Key:         snapshotKey(hk, id),
@@ -205,7 +205,7 @@ func (s *AggregateSnapshotWriter) ArchiveSnapshots(
 	_, err := awsx.Do(
 		ctx,
 		s.Client.DeleteObjectWithContext,
-		s.DecorateDelete,
+		s.DecorateDeleteObject,
 		&s3.DeleteObjectInput{
 			Bucket: &s.Bucket,
 			Key:    snapshotKey(hk, id),
