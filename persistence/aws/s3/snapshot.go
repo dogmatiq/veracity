@@ -80,15 +80,11 @@ func (s *AggregateSnapshotReader) ReadSnapshot(
 		)
 	}
 
-	revString := out.Metadata[snapshotRevisionMetaDataKey]
-	if revString == nil {
-		return 0, false, fmt.Errorf(
-			"S3 object meta-data is missing the %s key",
-			snapshotRevisionMetaDataKey,
-		)
-	}
-
-	rev, err = strconv.ParseUint(*revString, 10, 64)
+	rev, err = strconv.ParseUint(
+		aws.StringValue(out.Metadata[snapshotRevisionMetaDataKey]),
+		10,
+		64,
+	)
 	if err != nil {
 		return 0, false, fmt.Errorf(
 			"S3 object meta-data has an invalid value for %s: %w",
