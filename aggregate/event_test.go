@@ -63,25 +63,23 @@ type eventWriterStub struct {
 	WriteEventsFunc func(
 		ctx context.Context,
 		hk, id string,
-		end uint64,
+		begin, end uint64,
 		events []*envelopespec.Envelope,
-		archive bool,
 	) error
 }
 
 func (s *eventWriterStub) WriteEvents(
 	ctx context.Context,
 	hk, id string,
-	end uint64,
+	begin, end uint64,
 	events []*envelopespec.Envelope,
-	archive bool,
 ) error {
 	if s.WriteEventsFunc != nil {
-		return s.WriteEventsFunc(ctx, hk, id, end, events, archive)
+		return s.WriteEventsFunc(ctx, hk, id, begin, end, events)
 	}
 
 	if s.EventWriter != nil {
-		return s.EventWriter.WriteEvents(ctx, hk, id, end, events, archive)
+		return s.EventWriter.WriteEvents(ctx, hk, id, begin, end, events)
 	}
 
 	return nil
@@ -108,7 +106,7 @@ func expectEvents(
 
 		producedEvents = append(producedEvents, events...)
 
-		if begin >= end {
+		if begin == end {
 			break
 		}
 

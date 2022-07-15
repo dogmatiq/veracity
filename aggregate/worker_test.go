@@ -199,10 +199,10 @@ var _ = Describe("type Worker", func() {
 					"<handler-key>",
 					"<instance>",
 					0,
+					0,
 					[]*envelopespec.Envelope{
 						NewEnvelope("<existing>", MessageX1),
 					},
-					false, // archive
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
@@ -307,11 +307,11 @@ var _ = Describe("type Worker", func() {
 					ctx,
 					"<handler-key>",
 					"<instance>",
+					0,
 					1,
 					[]*envelopespec.Envelope{
 						NewEnvelope("<existing>", MessageX1),
 					},
-					false, // archive
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -422,11 +422,11 @@ var _ = Describe("type Worker", func() {
 					"<handler-key>",
 					"<instance>",
 					0,
+					0,
 					[]*envelopespec.Envelope{
 						NewEnvelope("<existing-1>", MessageX1),
 						NewEnvelope("<existing-2>", MessageX2),
 					},
-					false, // archive
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -705,9 +705,8 @@ var _ = Describe("type Worker", func() {
 			eventWriter.WriteEventsFunc = func(
 				ctx context.Context,
 				hk, id string,
-				end uint64,
+				begin, end uint64,
 				events []*envelopespec.Envelope,
-				archive bool,
 			) error {
 				return errors.New("<error>")
 			}

@@ -70,8 +70,8 @@ type Worker struct {
 	// root is the aggregate root for this instance.
 	root dogma.AggregateRoot
 
-	// endRev is latest (exclusive) revision of this instance.
-	endRev uint64
+	// [begin, end) is the range of unarchived revisions for this instance.
+	begin, end uint64
 
 	// snapshotAge is the number of revisions that have been made since the last
 	// snapshot was taken.
@@ -96,12 +96,12 @@ func (w *Worker) Run(ctx context.Context) error {
 
 // loadRoot loads the aggregate root.
 //
-// It populates w.root, w.endRev and w.snapshotAge.
+// It populates w.root, w.begin, w.end and w.snapshotAge.
 func (w *Worker) loadRoot(ctx context.Context) error {
 	var err error
 	w.root = w.Handler.New()
 
-	w.endRev, w.snapshotAge, err = w.Loader.Load(
+	w.begin, w.end, w.snapshotAge, err = w.Loader.Load(
 		ctx,
 		w.HandlerIdentity,
 		w.InstanceID,
@@ -162,35 +162,52 @@ func (w *Worker) handleCommand(
 		cmd.Parcel.Message,
 	)
 
-	if len(sc.EventEnvelopes) != 0 || sc.IsDestroyed {
-		if err := w.EventWriter.WriteEvents(
-			ctx,
-			w.HandlerIdentity.Key,
-			w.InstanceID,
-			w.endRev,
-			sc.EventEnvelopes,
-			sc.IsDestroyed, // archive events if instance is destroyed
-		); err != nil {
-			return true, fmt.Errorf(
-				"cannot write events for aggregate root %s[%s]: %w",
-				w.HandlerIdentity.Name,
-				w.InstanceID,
-				err,
-			)
+	if sc.IsDestroyed {
+		w.begin = w.end + 1
+
+		if err := w.writeEvents(ctx, sc.EventEnvelopes); err != nil {
+			return true, err
 		}
+
+		return true, w.archiveSnapshots(ctx)
+	}
+
+	if len(sc.EventEnvelopes) != 0 {
+		if err := w.writeEvents(ctx, sc.EventEnvelopes); err != nil {
+			return true, err
+		}
+
+		w.end++
+		w.snapshotAge++
 	}
 
 	// Signal to the goroutine that sent the command that it has been handled.
 	close(cmd.Result)
 
-	w.endRev++
-	w.snapshotAge++
+	return false, w.takeSnapshotIfIntervalExceeded(ctx)
+}
 
-	if sc.IsDestroyed {
-		return true, w.archiveSnapshots(ctx)
+func (w *Worker) writeEvents(
+	ctx context.Context,
+	events []*envelopespec.Envelope,
+) error {
+	if err := w.EventWriter.WriteEvents(
+		ctx,
+		w.HandlerIdentity.Key,
+		w.InstanceID,
+		w.begin,
+		w.end,
+		events,
+	); err != nil {
+		return fmt.Errorf(
+			"cannot write events for aggregate root %s[%s]: %w",
+			w.HandlerIdentity.Name,
+			w.InstanceID,
+			err,
+		)
 	}
 
-	return false, w.takeSnapshotIfIntervalExceeded(ctx)
+	return nil
 }
 
 // takeSnapshotIfIntervalExceeded takes a new snapshot of the aggregate state if
@@ -227,7 +244,7 @@ func (w *Worker) takeSnapshot(ctx context.Context) error {
 		return nil
 	}
 
-	snapshotRev := w.endRev - 1
+	snapshotRev := w.end - 1
 
 	if err := w.SnapshotWriter.WriteSnapshot(
 		ctx,
