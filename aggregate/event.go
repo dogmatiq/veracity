@@ -54,7 +54,8 @@ type EventWriter interface {
 	//
 	// begin sets the first revision for the instance such that in the future
 	// only events from revisions in the half-open range [begin, end + 1) are
-	// applied when loading the aggregate root.
+	// applied when loading the aggregate root. The behavior is undefined if
+	// begin is larger than end + 1.
 	//
 	// Events from revisions prior to begin are still made available to external
 	// event consumers, but will no longer be needed for loading aggregate roots
@@ -62,7 +63,8 @@ type EventWriter interface {
 	//
 	// end must be the current end revision, that is, the revision after the
 	// most recent revision of the instance. Otherwise, an "optimistic
-	// concurrency control" error occurs and no changes are persisted.
+	// concurrency control" error occurs and no changes are persisted. The
+	// behavior is undefined if end is greater than the actual end revision.
 	//
 	// The events slice may be empty, which allows modifying the begin revision
 	// without recording any new events.

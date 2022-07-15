@@ -371,44 +371,26 @@ func DeclareAggregateEventTests(
 	})
 
 	ginkgo.Describe("func WriteEvents()", func() {
-		ginkgo.When("there are no existing revisions", func() {
-			ginkgo.It("returns an error if end is not zero", func() {
-				err := tc.Writer.WriteEvents(
-					ctx,
-					"<handler>",
-					"<instance>",
-					0,
-					3, // incorrect end revision
-					eventA,
-				)
-				gomega.Expect(err).To(gomega.MatchError("optimistic concurrency conflict, 3 is not the next revision"))
-			})
-		})
+		ginkgo.It("returns an error if the given revision already exists", func() {
+			err := tc.Writer.WriteEvents(
+				ctx,
+				"<handler>",
+				"<instance>",
+				0,
+				0,
+				eventA,
+			)
+			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-		ginkgo.When("there are existing revisions", func() {
-			ginkgo.BeforeEach(func() {
-				err := tc.Writer.WriteEvents(
-					ctx,
-					"<handler>",
-					"<instance>",
-					0,
-					0,
-					eventA,
-				)
-				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-			})
-
-			ginkgo.It("returns an error if the given revision already exists", func() {
-				err := tc.Writer.WriteEvents(
-					ctx,
-					"<handler>",
-					"<instance>",
-					0,
-					0, // incorrect end revision
-					eventB,
-				)
-				gomega.Expect(err).To(gomega.MatchError("optimistic concurrency conflict, 0 is not the next revision"))
-			})
+			err = tc.Writer.WriteEvents(
+				ctx,
+				"<handler>",
+				"<instance>",
+				0,
+				0, // incorrect end revision
+				eventB,
+			)
+			gomega.Expect(err).To(gomega.MatchError("optimistic concurrency conflict, 0 is not the next revision"))
 		})
 
 		ginkgo.It("allows increasing begin without writing any events", func() {
