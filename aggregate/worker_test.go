@@ -327,7 +327,7 @@ var _ = Describe("type Worker", func() {
 			err := worker.Run(ctx)
 			Expect(err).To(
 				MatchError(
-					`cannot write events for aggregate root <handler-name>[<instance>]: optimistic concurrency conflict, 1 is not the next revision`,
+					"cannot write events for aggregate root <handler-name>[<instance>]: optimistic concurrency conflict, 1 is not the next revision",
 				),
 			)
 		})
@@ -696,7 +696,7 @@ var _ = Describe("type Worker", func() {
 			err := worker.Run(ctx)
 			Expect(err).To(
 				MatchError(
-					`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read event revision bounds: <error>`,
+					"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read event revision bounds: <error>",
 				),
 			)
 		})
@@ -720,7 +720,7 @@ var _ = Describe("type Worker", func() {
 			err := worker.Run(ctx)
 			Expect(err).To(
 				MatchError(
-					`cannot write events for aggregate root <handler-name>[<instance>]: <error>`,
+					"cannot write events for aggregate root <handler-name>[<instance>]: <error>",
 				),
 			)
 		})

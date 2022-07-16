@@ -341,7 +341,11 @@ func DeclareAggregateEventTests(
 				"<instance>",
 				0,
 			)
-			gomega.Expect(err).To(gomega.MatchError("revision 0 is archived"))
+			gomega.Expect(err).To(
+				gomega.MatchError(
+					"revision 0 is archived",
+				),
+			)
 		})
 
 		ginkgo.It("allows reading from the new begin revision", func() {
@@ -387,7 +391,11 @@ func DeclareAggregateEventTests(
 				0, // incorrect end revision
 				eventB,
 			)
-			gomega.Expect(err).To(gomega.MatchError("optimistic concurrency conflict, 0 is not the next revision"))
+			gomega.Expect(err).To(
+				gomega.MatchError(
+					"optimistic concurrency conflict, 0 is not the next revision",
+				),
+			)
 		})
 
 		ginkgo.It("allows increasing begin without writing any events", func() {

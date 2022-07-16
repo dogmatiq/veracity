@@ -76,7 +76,7 @@ var _ = Describe("type Loader", func() {
 			)
 			Expect(err).To(
 				MatchError(
-					`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read event revision bounds: <error>`,
+					"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read event revision bounds: <error>",
 				),
 			)
 		})
@@ -163,7 +163,7 @@ var _ = Describe("type Loader", func() {
 					)
 					Expect(err).To(
 						MatchError(
-							`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read snapshot: context canceled`,
+							"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read snapshot: context canceled",
 						),
 					)
 				})
@@ -315,7 +315,7 @@ var _ = Describe("type Loader", func() {
 						)
 						Expect(err).To(
 							MatchError(
-								`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: <error>`,
+								"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: <error>",
 							),
 						)
 
@@ -354,7 +354,7 @@ var _ = Describe("type Loader", func() {
 						)
 						Expect(err).To(
 							MatchError(
-								`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: <error>`,
+								"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: <error>",
 							),
 						)
 
@@ -399,7 +399,7 @@ var _ = Describe("type Loader", func() {
 						)
 						Expect(err).To(
 							MatchError(
-								`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: mime: no media type`,
+								"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: mime: no media type",
 							),
 						)
 
@@ -453,7 +453,7 @@ var _ = Describe("type Loader", func() {
 						)
 						Expect(err).To(
 							MatchError(
-								`aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: <causal error>`,
+								"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: <causal error>",
 							),
 						)
 					})
