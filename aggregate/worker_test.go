@@ -142,8 +142,8 @@ var _ = Describe("type Worker", func() {
 			Expect(err).To(Equal(context.Canceled))
 
 			select {
-			case <-ctx.Done():
-				Expect(ctx.Err()).ShouldNot(HaveOccurred())
+			case <-time.After(1 * time.Second):
+				Fail("timedout waiting for result")
 			case err := <-result:
 				Expect(err).ShouldNot(HaveOccurred())
 			}
