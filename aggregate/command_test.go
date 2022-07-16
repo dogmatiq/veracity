@@ -33,7 +33,7 @@ func executeCommandAsync(
 	commands chan<- Command,
 	command parcel.Parcel,
 ) <-chan error {
-	result := make(chan error)
+	result := make(chan error, 1)
 
 	cmd := Command{
 		Context: ctx,

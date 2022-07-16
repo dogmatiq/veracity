@@ -201,11 +201,15 @@ func (w *Worker) handleCommand(
 		cmd.Parcel.Message,
 	)
 
-	if err := w.saveChanges(ctx, sc); err != nil {
+	err := w.saveChanges(ctx, sc)
+	if err != nil {
+		// Signal a generic error to the caller, rather than giving them details
+		// of the persistence error.
+		cmd.Result <- errShutdown
 		return err
 	}
 
-	// Signal to the goroutine that sent the command that it has been handled.
+	// Signal a success to the caller.
 	close(cmd.Result)
 
 	if sc.IsDestroyed {

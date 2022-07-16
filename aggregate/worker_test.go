@@ -122,7 +122,7 @@ var _ = Describe("type Worker", func() {
 	})
 
 	Describe("func Run()", func() {
-		It("passes command messages to the handler", func() {
+		It("writes nil to the command's result channel on success", func() {
 			handler.HandleCommandFunc = func(
 				r dogma.AggregateRoot,
 				s dogma.AggregateCommandScope,
@@ -132,7 +132,7 @@ var _ = Describe("type Worker", func() {
 				cancel()
 			}
 
-			executeCommandAsync(
+			result := executeCommandAsync(
 				ctx,
 				commands,
 				NewParcel("<command>", MessageC1),
@@ -140,6 +140,56 @@ var _ = Describe("type Worker", func() {
 
 			err := worker.Run(ctx)
 			Expect(err).To(Equal(context.Canceled))
+
+			select {
+			case <-ctx.Done():
+				Expect(ctx.Err()).ShouldNot(HaveOccurred())
+			case err := <-result:
+				Expect(err).ShouldNot(HaveOccurred())
+			}
+		})
+
+		It("writes an error to the command's result channel if writing events fails", func() {
+			handler.HandleCommandFunc = func(
+				r dogma.AggregateRoot,
+				s dogma.AggregateCommandScope,
+				m dogma.Message,
+			) {
+				s.RecordEvent(MessageE1)
+			}
+
+			eventWriter.WriteEventsFunc = func(
+				ctx context.Context,
+				hk, id string,
+				begin, end uint64,
+				events []*envelopespec.Envelope,
+			) error {
+				return errors.New("<error>")
+			}
+
+			result := executeCommandAsync(
+				ctx,
+				commands,
+				NewParcel("<command>", MessageC1),
+			)
+
+			err := worker.Run(ctx)
+			Expect(err).To(
+				MatchError(
+					"cannot write events for aggregate root <handler-name>[<instance>]: <error>",
+				),
+			)
+
+			select {
+			case <-ctx.Done():
+				Expect(ctx.Err()).ShouldNot(HaveOccurred())
+			case err := <-result:
+				Expect(err).To(
+					MatchError(
+						"shutting down",
+					),
+				)
+			}
 		})
 
 		It("applies recorded events to the aggregate root", func() {
