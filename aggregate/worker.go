@@ -126,8 +126,8 @@ func (w *Worker) loadRoot(ctx context.Context) error {
 // It returns errWorkerShutdown if the worker should shutdown.
 func (w *Worker) handleNextCommand(ctx context.Context) error {
 	if w.begin >= w.end {
-		// If the instance has been destroyed we want to shutdown the moment the
-		// commands channel is empty.
+		// If the instance has no state (such as when it has been destroyed) we
+		// want to shutdown the moment the commands channel is empty.
 		return w.handleNextCommandOrShutdown(ctx)
 	}
 
@@ -332,6 +332,10 @@ func (w *Worker) takeSnapshot(ctx context.Context) error {
 // A failure to archive snapshots is not treated as an error; err is non-nil
 // only if ctx is canceled. A failed attempt at archiving is never retried.
 func (w *Worker) archiveSnapshots(ctx context.Context) error {
+	if w.SnapshotWriter == nil {
+		return nil
+	}
+
 	if err := w.SnapshotWriter.ArchiveSnapshots(
 		ctx,
 		w.HandlerIdentity.Key,

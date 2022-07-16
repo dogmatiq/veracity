@@ -584,6 +584,19 @@ var _ = Describe("type Worker", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 
+			It("does not return an error if the SnapshotWriter is nil", func() {
+				worker.SnapshotWriter = nil
+
+				executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
+
+				err := worker.Run(ctx)
+				Expect(err).ShouldNot(HaveOccurred())
+			})
+
 			When("events are recorded after the Destroy() is called", func() {
 				It("archives neither events nor snapshots", func() {
 					handler.HandleCommandFunc = func(
@@ -658,18 +671,57 @@ var _ = Describe("type Worker", func() {
 			})
 
 			It("does not take a snapshot if the existing snapshot is up-to-date", func() {
-				err := worker.Run(ctx)
-				Expect(err).ShouldNot(HaveOccurred())
-
-				_, ok, err := snapshotStore.ReadSnapshot(
+				err := eventStore.WriteEvents(
 					ctx,
 					"<handler-key>",
 					"<instance>",
-					&AggregateRoot{},
+					0,
+					0,
+					[]*envelopespec.Envelope{
+						NewEnvelope("<existing-1>", MessageX1),
+						NewEnvelope("<existing-2>", MessageX2),
+					},
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+
+				err = snapshotStore.WriteSnapshot(
+					context.Background(),
+					"<handler-key>",
+					"<instance>",
+					&AggregateRoot{
+						AppliedEvents: []dogma.Message{
+							"<snapshot>",
+						},
+					},
 					0,
 				)
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(ok).To(BeFalse())
+
+				handler.HandleCommandFunc = func(
+					r dogma.AggregateRoot,
+					s dogma.AggregateCommandScope,
+					m dogma.Message,
+				) {
+					// Don't record an event
+				}
+
+				snapshotWriter.WriteSnapshotFunc = func(
+					ctx context.Context,
+					hk, id string,
+					r dogma.AggregateRoot,
+					rev uint64,
+				) error {
+					panic("unexpected call")
+				}
+
+				executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
+
+				err = worker.Run(ctx)
+				Expect(err).ShouldNot(HaveOccurred())
 			})
 
 			It("returns nil", func() {
