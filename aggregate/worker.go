@@ -79,8 +79,8 @@ type Worker struct {
 	snapshotAge uint64
 }
 
-// errWorkerShutdown is an error that indicates a worker is shutting down.
-var errWorkerShutdown = errors.New("worker is shutting down")
+// errShutdown is an error that indicates a worker is shutting down.
+var errShutdown = errors.New("shutting down")
 
 // Run handles messages that are written to the worker's Commands channel.
 //
@@ -93,13 +93,27 @@ func (w *Worker) Run(ctx context.Context) error {
 		return err
 	}
 
+	// Always wait for a command when first starting. The worker wouldn't have
+	// been started if there wasn't a command about to be sent.
+	handle := w.waitForCommandOrIdleTimeout
+
 	for {
-		if err := w.handleNextCommand(ctx); err != nil {
-			if err == errWorkerShutdown {
+		if err := handle(ctx); err != nil {
+			if err == errShutdown {
 				return nil
 			}
 
 			return err
+		}
+
+		if w.begin >= w.end {
+			// If the instance has no state (such as when it has been destroyed)
+			// we want to shutdown the moment the commands channel is empty.
+			handle = w.handleNextCommandOrShutdown
+		} else {
+			// Otherwise, we wait for a command to be written to the channel or
+			// an idle timeout to occur.
+			handle = w.waitForCommandOrIdleTimeout
 		}
 	}
 }
@@ -121,25 +135,10 @@ func (w *Worker) loadRoot(ctx context.Context) error {
 	return err
 }
 
-// handleNextCommand reads the next command from w.Commands and handles it.
-//
-// It returns errWorkerShutdown if the worker should shutdown.
-func (w *Worker) handleNextCommand(ctx context.Context) error {
-	if w.begin >= w.end {
-		// If the instance has no state (such as when it has been destroyed) we
-		// want to shutdown the moment the commands channel is empty.
-		return w.handleNextCommandOrShutdown(ctx)
-	}
-
-	// Otherwise, we wait for a command to be written to the channel or an idle
-	// timeout to occur.
-	return w.waitForCommandOrIdleTimeout(ctx)
-}
-
 // waitForCommandOrIdleTimeout blocks until a command is available for handling,
 // or the idle timeout is exceeded.
 //
-// It returns errWorkerShutdown if the idle timeout is exceeded.
+// It returns errShutdown if the idle timeout is exceeded.
 func (w *Worker) waitForCommandOrIdleTimeout(ctx context.Context) error {
 	idle := time.NewTimer(
 		linger.MustCoalesce(
@@ -158,12 +157,12 @@ func (w *Worker) waitForCommandOrIdleTimeout(ctx context.Context) error {
 		if err := w.takeSnapshot(ctx); err != nil {
 			return err
 		}
-		return errWorkerShutdown
+		return errShutdown
 	}
 }
 
 // handleNextCommandOrShutdown handles the next command if one is available,
-// otherwise it returns errWorkerShutdown.
+// otherwise it returns errShutdown.
 func (w *Worker) handleNextCommandOrShutdown(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
@@ -171,7 +170,7 @@ func (w *Worker) handleNextCommandOrShutdown(ctx context.Context) error {
 	case cmd := <-w.Commands:
 		return w.handleCommand(ctx, cmd)
 	default:
-		return errWorkerShutdown
+		return errShutdown
 	}
 }
 
