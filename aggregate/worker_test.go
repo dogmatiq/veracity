@@ -44,7 +44,7 @@ var _ = Describe("type Worker", func() {
 	)
 
 	BeforeEach(func() {
-		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 		DeferCleanup(cancel)
 
 		eventStore = &memory.AggregateEventStore{}
@@ -232,22 +232,24 @@ var _ = Describe("type Worker", func() {
 		})
 
 		It("persists recorded events", func() {
+			executeCommandAsync(
+				ctx,
+				commands,
+				NewParcel("<command-1>", MessageC1),
+			)
+
+			result := executeCommandAsync(
+				ctx,
+				commands,
+				NewParcel("<command-2>", MessageC2),
+			)
+
 			go func() {
-				defer GinkgoRecover()
-
-				executeCommandSync(
-					ctx,
-					commands,
-					NewParcel("<command-1>", MessageC1),
-				)
-
-				executeCommandSync(
-					ctx,
-					commands,
-					NewParcel("<command-2>", MessageC2),
-				)
-
-				cancel()
+				select {
+				case <-ctx.Done():
+				case <-result:
+					cancel()
+				}
 			}()
 
 			err := worker.Run(ctx)
@@ -290,16 +292,22 @@ var _ = Describe("type Worker", func() {
 		})
 
 		It("returns an error when there is an OCC failure", func() {
+			By("executing a command to ensure the worker is running")
+
+			result := executeCommandAsync(
+				ctx,
+				commands,
+				NewParcel("<command-1>", MessageC1),
+			)
+
 			go func() {
 				defer GinkgoRecover()
 
-				By("executing a command to ensure the worker is running")
-
-				executeCommandSync(
-					ctx,
-					commands,
-					NewParcel("<command-1>", MessageC1),
-				)
+				select {
+				case <-ctx.Done():
+					return
+				case <-result:
+				}
 
 				By("writing an event to the event store that the worker doesn't know about")
 
@@ -335,16 +343,22 @@ var _ = Describe("type Worker", func() {
 		It("writes a snapshot when the snapshot interval is exceeded", func() {
 			worker.SnapshotInterval = 2
 
+			By("sending a command")
+
+			result := executeCommandAsync(
+				ctx,
+				commands,
+				NewParcel("<command-1>", MessageC1),
+			)
+
 			go func() {
 				defer GinkgoRecover()
 
-				By("sending a command")
-
-				executeCommandSync(
-					ctx,
-					commands,
-					NewParcel("<command-1>", MessageC1),
-				)
+				select {
+				case <-ctx.Done():
+					return
+				case <-result:
+				}
 
 				By("ensuring no snapshot has been taken")
 
@@ -414,6 +428,7 @@ var _ = Describe("type Worker", func() {
 					s dogma.AggregateCommandScope,
 					m dogma.Message,
 				) {
+					s.RecordEvent(MessageE1)
 					s.Destroy()
 				}
 
@@ -471,6 +486,37 @@ var _ = Describe("type Worker", func() {
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(ok).To(BeFalse())
+			})
+
+			It("does not return if there are commands waiting to be handled", func() {
+				handler.HandleCommandFunc = func(
+					r dogma.AggregateRoot,
+					s dogma.AggregateCommandScope,
+					m dogma.Message,
+				) {
+					if m == MessageC1 {
+						s.Destroy()
+						return
+					}
+
+					Expect(m).To(Equal(MessageC2))
+					cancel()
+				}
+
+				executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
+
+				executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC2),
+				)
+
+				err := worker.Run(ctx)
+				Expect(err).To(Equal(context.Canceled))
 			})
 
 			It("archives newly recorded events", func() {

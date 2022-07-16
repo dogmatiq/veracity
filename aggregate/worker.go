@@ -2,6 +2,7 @@ package aggregate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -78,8 +79,13 @@ type Worker struct {
 	snapshotAge uint64
 }
 
-// Run starts the worker until ctx is canceled or the worker exits due to an
-// idle timeout.
+// errWorkerShutdown is an error that indicates a worker is shutting down.
+var errWorkerShutdown = errors.New("worker is shutting down")
+
+// Run handles messages that are written to the worker's Commands channel.
+//
+// It returns when ctx is canceled, an error occurs, the idle timeout occurs, or
+// the aggregate instance is destroyed.
 func (w *Worker) Run(ctx context.Context) error {
 	w.envHandlerIdentity = marshalkit.MustMarshalEnvelopeIdentity(w.HandlerIdentity)
 
@@ -88,7 +94,11 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 
 	for {
-		if done, err := w.handleNextCommand(ctx); done || err != nil {
+		if err := w.handleNextCommand(ctx); err != nil {
+			if err == errWorkerShutdown {
+				return nil
+			}
+
 			return err
 		}
 	}
@@ -111,8 +121,26 @@ func (w *Worker) loadRoot(ctx context.Context) error {
 	return err
 }
 
-// handleNextCommand waits for the next incoming command, then handles it.
-func (w *Worker) handleNextCommand(ctx context.Context) (done bool, _ error) {
+// handleNextCommand reads the next command from w.Commands and handles it.
+//
+// It returns errWorkerShutdown if the worker should shutdown.
+func (w *Worker) handleNextCommand(ctx context.Context) error {
+	if w.begin >= w.end {
+		// If the instance has been destroyed we want to shutdown the moment the
+		// commands channel is empty.
+		return w.handleNextCommandOrShutdown(ctx)
+	}
+
+	// Otherwise, we wait for a command to be written to the channel or an idle
+	// timeout to occur.
+	return w.waitForCommandOrIdleTimeout(ctx)
+}
+
+// waitForCommandOrIdleTimeout blocks until a command is available for handling,
+// or the idle timeout is exceeded.
+//
+// It returns errWorkerShutdown if the idle timeout is exceeded.
+func (w *Worker) waitForCommandOrIdleTimeout(ctx context.Context) error {
 	idle := time.NewTimer(
 		linger.MustCoalesce(
 			w.IdleTimeout,
@@ -123,31 +151,43 @@ func (w *Worker) handleNextCommand(ctx context.Context) (done bool, _ error) {
 
 	select {
 	case <-ctx.Done():
-		return true, ctx.Err()
-
+		return ctx.Err()
 	case cmd := <-w.Commands:
 		return w.handleCommand(ctx, cmd)
-
 	case <-idle.C:
-		// We've been idle for a while without receiving a command.
-		//
-		// We always take a snapshot before shutting down to mininize the time
-		// it takes to reload this aggregate in the future.
-		return true, w.takeSnapshot(ctx)
+		if err := w.takeSnapshot(ctx); err != nil {
+			return err
+		}
+		return errWorkerShutdown
 	}
 }
 
-// handleCommand handles a single command.
+// handleNextCommandOrShutdown handles the next command if one is available,
+// otherwise it returns errWorkerShutdown.
+func (w *Worker) handleNextCommandOrShutdown(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case cmd := <-w.Commands:
+		return w.handleCommand(ctx, cmd)
+	default:
+		return errWorkerShutdown
+	}
+}
+
+// handleCommand calls the user-defined message handler for a single command,
+// then persists the changes it makes.
 func (w *Worker) handleCommand(
 	ctx context.Context,
 	cmd Command,
-) (done bool, _ error) {
+) error {
 	sc := &scope{
 		Command:         cmd.Parcel,
 		HandlerIdentity: w.envHandlerIdentity,
 		ID:              w.InstanceID,
 		Root:            w.root,
 		Packer:          w.Packer,
+		IsDestroyed:     w.begin >= w.end,
 		Logger: logging.Prefix(
 			w.Logger,
 			"aggregate %s[%s]: ",
@@ -162,42 +202,41 @@ func (w *Worker) handleCommand(
 		cmd.Parcel.Message,
 	)
 
-	if sc.IsDestroyed {
-		w.begin = w.end + 1
-
-		if err := w.writeEvents(ctx, sc.EventEnvelopes); err != nil {
-			return true, err
-		}
-
-		return true, w.archiveSnapshots(ctx)
-	}
-
-	if len(sc.EventEnvelopes) != 0 {
-		if err := w.writeEvents(ctx, sc.EventEnvelopes); err != nil {
-			return true, err
-		}
-
-		w.end++
-		w.snapshotAge++
+	if err := w.saveChanges(ctx, sc); err != nil {
+		return err
 	}
 
 	// Signal to the goroutine that sent the command that it has been handled.
 	close(cmd.Result)
 
-	return false, w.takeSnapshotIfIntervalExceeded(ctx)
+	if sc.IsDestroyed {
+		return w.archiveSnapshots(ctx)
+	}
+
+	return w.takeSnapshotIfIntervalExceeded(ctx)
 }
 
-func (w *Worker) writeEvents(
+// saveChanges persists changes made as a result of handling a single command.
+func (w *Worker) saveChanges(
 	ctx context.Context,
-	events []*envelopespec.Envelope,
+	sc *scope,
 ) error {
+	if !sc.HasChanges {
+		return nil
+	}
+
+	begin := w.begin
+	if sc.IsDestroyed {
+		begin = w.end + 1
+	}
+
 	if err := w.EventWriter.WriteEvents(
 		ctx,
 		w.HandlerIdentity.Key,
 		w.InstanceID,
-		w.begin,
+		begin,
 		w.end,
-		events,
+		sc.EventEnvelopes,
 	); err != nil {
 		return fmt.Errorf(
 			"cannot write events for aggregate root %s[%s]: %w",
@@ -206,6 +245,10 @@ func (w *Worker) writeEvents(
 			err,
 		)
 	}
+
+	w.begin = begin
+	w.end++
+	w.snapshotAge++
 
 	return nil
 }
@@ -307,6 +350,8 @@ func (w *Worker) archiveSnapshots(ctx context.Context) error {
 			w.InstanceID,
 		)
 	}
+
+	w.snapshotAge = 0
 
 	return nil
 }
