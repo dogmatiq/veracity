@@ -251,7 +251,56 @@ var _ = Describe("type Supervisor", func() {
 				Expect(cmd.Err()).To(Equal(context.Canceled))
 			})
 
-			XIt("returns an error if a worker fails", func() {
+			It("returns an error if a worker fails", func() {
+				barrier := make(chan struct{})
+
+				eventReader.ReadBoundsFunc = func(
+					ctx context.Context,
+					hk, id string,
+				) (uint64, uint64, error) {
+					barrier <- struct{}{}
+					return 0, 0, errors.New("<error>")
+				}
+
+				var cmd *Command
+				go func() {
+					defer GinkgoRecover()
+
+					// Fill up the worker's command buffer (size == 1).
+					executeCommandAsync(
+						ctx,
+						commands,
+						NewParcel("<command>", MessageC1),
+					)
+
+					// Cause the supervisor to block waiting for the worker's
+					// command channel to become unblocked.
+					cmd = executeCommandAsync(
+						ctx,
+						commands,
+						NewParcel("<command>", MessageC2),
+					)
+
+					<-barrier
+				}()
+
+				err := supervisor.Run(ctx)
+				Expect(err).To(
+					MatchError(
+						"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read event revision bounds: <error>",
+					),
+				)
+
+				select {
+				case <-time.After(1 * time.Second):
+					Fail("timed-out waiting for result")
+				case <-cmd.Done():
+					Expect(cmd.Err()).To(
+						MatchError(
+							"shutting down",
+						),
+					)
+				}
 			})
 
 			XIt("does not shutdown the destination worker if it becomes idle", func() {

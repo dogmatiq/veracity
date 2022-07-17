@@ -125,7 +125,9 @@ func (s *Supervisor) stateDispatchCommand(cmd *Command) supervisorState {
 			err := s.handleShutdown(res)
 			if err != nil {
 				cmd.Nack(errShutdown)
+				return nil, err
 			}
+
 			return s.currentState, err
 
 		case <-ctx.Done():
