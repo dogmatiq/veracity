@@ -156,31 +156,24 @@ var _ = Describe("type Supervisor", func() {
 
 		When("waiting for a worker to accept a command", func() {
 			It("returns an error if the context is canceled", func() {
-				handler.HandleCommandFunc = func(
-					r dogma.AggregateRoot,
-					s dogma.AggregateCommandScope,
-					m dogma.Message,
-				) {
+				eventReader.ReadBoundsFunc = func(
+					ctx context.Context,
+					hk, id string,
+				) (uint64, uint64, error) {
+					// Prevent the worker from reading from its command channel.
 					<-ctx.Done()
+					return 0, 0, ctx.Err()
 				}
 
 				var cmd *Command
 				go func() {
 					defer GinkgoRecover()
 
-					// Execute the command that causes the worker to block
-					// waiting for the context.
-					executeCommandAsync(
-						ctx,
-						commands,
-						NewParcel("<command>", MessageC1),
-					)
-
 					// Fill up the worker's command buffer (size == 1).
 					executeCommandAsync(
 						ctx,
 						commands,
-						NewParcel("<command>", MessageC2),
+						NewParcel("<command>", MessageC1),
 					)
 
 					// Cause the supervisor to block waiting for the worker's
@@ -192,7 +185,7 @@ var _ = Describe("type Supervisor", func() {
 					cmd = executeCommandAsync(
 						context.Background(),
 						commands,
-						NewParcel("<command>", MessageC3),
+						NewParcel("<command>", MessageC2),
 					)
 
 					cancel()
@@ -213,7 +206,49 @@ var _ = Describe("type Supervisor", func() {
 				}
 			})
 
-			XIt("returns an error if the command's context is canceled", func() {
+			It("returns an error if the command's context is canceled", func() {
+				eventReader.ReadBoundsFunc = func(
+					ctx context.Context,
+					hk, id string,
+				) (uint64, uint64, error) {
+					// Prevent the worker from reading from its command channel.
+					<-ctx.Done()
+					return 0, 0, ctx.Err()
+				}
+
+				var cmd *Command
+				go func() {
+					defer GinkgoRecover()
+
+					// Fill up the worker's command buffer (size == 1).
+					executeCommandAsync(
+						ctx,
+						commands,
+						NewParcel("<command>", MessageC1),
+					)
+
+					// Cause the supervisor to block waiting for the worker's
+					// command channel to become unblocked.
+					cmdCtx, cmdCancel := context.WithCancel(ctx)
+					cmd = executeCommandAsync(
+						cmdCtx,
+						commands,
+						NewParcel("<command>", MessageC2),
+					)
+
+					cmdCancel()
+
+					select {
+					case <-time.After(1 * time.Second):
+						Fail("timed-out waiting for result")
+					case <-cmd.Done():
+						cancel()
+					}
+				}()
+
+				err := supervisor.Run(ctx)
+				Expect(err).To(Equal(context.Canceled))
+				Expect(cmd.Err()).To(Equal(context.Canceled))
 			})
 
 			XIt("returns an error if a worker fails", func() {
