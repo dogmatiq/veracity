@@ -113,21 +113,12 @@ func (s *Supervisor) stateDispatchCommand(cmd *Command) supervisorState {
 		case commands <- cmd:
 			return s.stateWaitForCommand, nil
 
-		case id := <-s.workerIdle:
-			if id != instanceID {
-				// Only shut the worker down if it's NOT the one we're trying to
-				// send a command to.
-				s.shutdownWorker(id)
-			}
-			return s.currentState, nil
-
 		case res := <-s.workerShutdown:
 			err := s.handleShutdown(res)
 			if err != nil {
 				cmd.Nack(errShutdown)
 				return nil, err
 			}
-
 			return s.currentState, err
 
 		case <-ctx.Done():

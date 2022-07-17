@@ -303,7 +303,58 @@ var _ = Describe("type Supervisor", func() {
 				}
 			})
 
-			XIt("does not shutdown the destination worker if it becomes idle", func() {
+			It("does not shutdown the destination worker if it becomes idle", func() {
+				barrier := make(chan struct{})
+
+				eventReader.ReadBoundsFunc = func(
+					ctx context.Context,
+					hk, id string,
+				) (uint64, uint64, error) {
+					barrier <- struct{}{}
+					return eventStore.ReadBounds(ctx, hk, id)
+				}
+
+				handler.HandleCommandFunc = func(
+					r dogma.AggregateRoot,
+					s dogma.AggregateCommandScope,
+					m dogma.Message,
+				) {
+					s.RecordEvent(MessageE1)
+					s.Destroy()
+				}
+
+				var cmd *Command
+				go func() {
+					defer GinkgoRecover()
+
+					// Fill up the worker's command buffer (size == 1).
+					executeCommandAsync(
+						ctx,
+						commands,
+						NewParcel("<command>", MessageC2),
+					)
+
+					// Cause the supervisor to block waiting for the worker's
+					// command channel to become unblocked.
+					cmd = executeCommandAsync(
+						ctx,
+						commands,
+						NewParcel("<command>", MessageC3),
+					)
+
+					<-barrier
+
+					select {
+					case <-time.After(1 * time.Second):
+						Fail("timed-out waiting for result")
+					case <-cmd.Done():
+						cancel()
+					}
+				}()
+
+				err := supervisor.Run(ctx)
+				Expect(err).To(Equal(context.Canceled))
+				Expect(cmd.Err()).ShouldNot(HaveOccurred())
 			})
 
 			XIt("restarts the destination worker if it shuts down", func() {
