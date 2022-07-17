@@ -11,6 +11,7 @@ import (
 	"github.com/dogmatiq/dodeca/logging"
 	"github.com/dogmatiq/dogma"
 	. "github.com/dogmatiq/dogma/fixtures"
+	"github.com/dogmatiq/interopspec/envelopespec"
 	. "github.com/dogmatiq/marshalkit/fixtures"
 	. "github.com/dogmatiq/veracity/aggregate"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
@@ -258,7 +259,11 @@ var _ = Describe("type Supervisor", func() {
 					ctx context.Context,
 					hk, id string,
 				) (uint64, uint64, error) {
-					barrier <- struct{}{}
+					select {
+					case barrier <- struct{}{}:
+					case <-ctx.Done():
+						Expect(ctx.Err()).ShouldNot(HaveOccurred())
+					}
 					return 0, 0, errors.New("<error>")
 				}
 
@@ -281,7 +286,11 @@ var _ = Describe("type Supervisor", func() {
 						NewParcel("<command>", MessageC2),
 					)
 
-					<-barrier
+					select {
+					case <-barrier:
+					case <-ctx.Done():
+						Expect(ctx.Err()).ShouldNot(HaveOccurred())
+					}
 				}()
 
 				err := supervisor.Run(ctx)
@@ -306,14 +315,6 @@ var _ = Describe("type Supervisor", func() {
 			It("does not shutdown the destination worker if it becomes idle", func() {
 				barrier := make(chan struct{})
 
-				eventReader.ReadBoundsFunc = func(
-					ctx context.Context,
-					hk, id string,
-				) (uint64, uint64, error) {
-					barrier <- struct{}{}
-					return eventStore.ReadBounds(ctx, hk, id)
-				}
-
 				handler.HandleCommandFunc = func(
 					r dogma.AggregateRoot,
 					s dogma.AggregateCommandScope,
@@ -323,9 +324,31 @@ var _ = Describe("type Supervisor", func() {
 					s.Destroy()
 				}
 
+				eventWriter.WriteEventsFunc = func(
+					ctx context.Context,
+					hk, id string,
+					begin, end uint64,
+					events []*envelopespec.Envelope,
+				) error {
+					select {
+					case barrier <- struct{}{}:
+					case <-ctx.Done():
+						Expect(ctx.Err()).ShouldNot(HaveOccurred())
+					}
+
+					eventWriter.WriteEventsFunc = nil
+					return eventStore.WriteEvents(ctx, hk, id, begin, end, events)
+				}
+
 				var cmd *Command
 				go func() {
 					defer GinkgoRecover()
+
+					executeCommandAsync(
+						ctx,
+						commands,
+						NewParcel("<command>", MessageC1),
+					)
 
 					// Fill up the worker's command buffer (size == 1).
 					executeCommandAsync(
@@ -342,7 +365,11 @@ var _ = Describe("type Supervisor", func() {
 						NewParcel("<command>", MessageC3),
 					)
 
-					<-barrier
+					select {
+					case <-barrier:
+					case <-ctx.Done():
+						Expect(ctx.Err()).ShouldNot(HaveOccurred())
+					}
 
 					select {
 					case <-time.After(1 * time.Second):
@@ -357,11 +384,77 @@ var _ = Describe("type Supervisor", func() {
 				Expect(cmd.Err()).ShouldNot(HaveOccurred())
 			})
 
-			XIt("restarts the destination worker if it shuts down", func() {
+			XIt("shuts down the other workers if they become idle", func() {
+
+			})
+
+			It("restarts the destination worker if it shuts down", func() {
+				barrier := make(chan struct{})
+
+				handler.HandleCommandFunc = func(
+					r dogma.AggregateRoot,
+					s dogma.AggregateCommandScope,
+					m dogma.Message,
+				) {
+					s.RecordEvent(MessageE1)
+					s.Destroy()
+				}
+
+				supervisor.SetIdleTestHook(
+					func() {
+						select {
+						case barrier <- struct{}{}:
+						case <-ctx.Done():
+							Expect(ctx.Err()).ShouldNot(HaveOccurred())
+						}
+						supervisor.SetIdleTestHook(nil)
+					},
+				)
+
+				var cmd *Command
+				go func() {
+					defer GinkgoRecover()
+
+					executeCommandSync(
+						ctx,
+						commands,
+						NewParcel("<command>", MessageC1),
+					)
+
+					select {
+					case <-barrier:
+					case <-ctx.Done():
+						Expect(ctx.Err()).ShouldNot(HaveOccurred())
+					}
+
+					executeCommandAsync(
+						ctx,
+						commands,
+						NewParcel("<command>", MessageC2),
+					)
+
+					cmd = executeCommandAsync(
+						ctx,
+						commands,
+						NewParcel("<command>", MessageC3),
+					)
+
+					select {
+					case <-time.After(1 * time.Second):
+						Fail("timed-out waiting for result")
+					case <-cmd.Done():
+						cancel()
+					}
+				}()
+
+				err := supervisor.Run(ctx)
+				Expect(err).To(Equal(context.Canceled))
+				Expect(cmd.Err()).ShouldNot(HaveOccurred())
 			})
 		})
 
 		XIt("waits for all workers to finish when the context is canceled", func() {
+
 		})
 
 		XIt("uses the a single worker for a given aggregate instance", func() {

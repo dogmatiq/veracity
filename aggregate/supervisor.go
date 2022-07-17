@@ -41,6 +41,8 @@ type Supervisor struct {
 
 	// currentState is the current state of the worker.
 	currentState supervisorState
+
+	idleTestHook func()
 }
 
 // workerResult is the result of a worker exiting.
@@ -89,6 +91,10 @@ func (s *Supervisor) stateWaitForCommand(ctx context.Context) (supervisorState, 
 		return s.stateDispatchCommand(cmd), nil
 
 	case id := <-s.workerIdle:
+		if s.idleTestHook != nil {
+			s.idleTestHook()
+		}
+
 		s.shutdownWorker(id)
 		return s.currentState, nil
 
@@ -112,6 +118,18 @@ func (s *Supervisor) stateDispatchCommand(cmd *Command) supervisorState {
 		select {
 		case commands <- cmd:
 			return s.stateWaitForCommand, nil
+
+		case id := <-s.workerIdle:
+			if s.idleTestHook != nil {
+				s.idleTestHook()
+			}
+
+			if id != instanceID {
+				// Only shut the worker down if it's NOT the one we're trying to
+				// send a command to.
+				s.shutdownWorker(id)
+			}
+			return s.currentState, nil
 
 		case res := <-s.workerShutdown:
 			err := s.handleShutdown(res)
