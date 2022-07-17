@@ -37,7 +37,8 @@ var _ = Describe("type Worker", func() {
 
 		packer   *parcel.Packer
 		loader   *Loader
-		commands chan Command
+		commands chan *Command
+		idle     chan string
 		handler  *AggregateMessageHandler
 		logger   *logging.BufferedLogger
 		worker   *Worker
@@ -75,7 +76,8 @@ var _ = Describe("type Worker", func() {
 			Marshaler:      Marshaler,
 		}
 
-		commands = make(chan Command, DefaultCommandBuffer)
+		commands = make(chan *Command, DefaultCommandBuffer)
+		idle = make(chan string)
 
 		handler = &AggregateMessageHandler{
 			ConfigureFunc: func(c dogma.AggregateConfigurer) {
@@ -118,11 +120,24 @@ var _ = Describe("type Worker", func() {
 			},
 			InstanceID: "<instance>",
 			Commands:   commands,
+			Idle:       idle,
 		}
 	})
 
+	// shutdownWorkerWhenIdle simulates the supervisor shutting down the worker
+	// when it enters the idle state.
+	shutdownWorkerWhenIdle := func() {
+		go func() {
+			select {
+			case <-ctx.Done():
+			case <-idle:
+				close(commands)
+			}
+		}()
+	}
+
 	Describe("func Run()", func() {
-		It("writes nil to the command's result channel on success", func() {
+		It("ACKs the command if it is handled successfully", func() {
 			handler.HandleCommandFunc = func(
 				r dogma.AggregateRoot,
 				s dogma.AggregateCommandScope,
@@ -132,7 +147,7 @@ var _ = Describe("type Worker", func() {
 				cancel()
 			}
 
-			result := executeCommandAsync(
+			cmd := executeCommandAsync(
 				ctx,
 				commands,
 				NewParcel("<command>", MessageC1),
@@ -143,13 +158,13 @@ var _ = Describe("type Worker", func() {
 
 			select {
 			case <-time.After(1 * time.Second):
-				Fail("timedout waiting for result")
-			case err := <-result:
-				Expect(err).ShouldNot(HaveOccurred())
+				Fail("timed-out waiting for result")
+			case <-cmd.Done():
+				Expect(cmd.Err()).ShouldNot(HaveOccurred())
 			}
 		})
 
-		It("writes an error to the command's result channel if writing events fails", func() {
+		It("NACKs the command if writing events fails", func() {
 			handler.HandleCommandFunc = func(
 				r dogma.AggregateRoot,
 				s dogma.AggregateCommandScope,
@@ -167,7 +182,7 @@ var _ = Describe("type Worker", func() {
 				return errors.New("<error>")
 			}
 
-			result := executeCommandAsync(
+			cmd := executeCommandAsync(
 				ctx,
 				commands,
 				NewParcel("<command>", MessageC1),
@@ -183,8 +198,8 @@ var _ = Describe("type Worker", func() {
 			select {
 			case <-ctx.Done():
 				Expect(ctx.Err()).ShouldNot(HaveOccurred())
-			case err := <-result:
-				Expect(err).To(
+			case <-cmd.Done():
+				Expect(cmd.Err()).To(
 					MatchError(
 						"shutting down",
 					),
@@ -219,7 +234,7 @@ var _ = Describe("type Worker", func() {
 		})
 
 		When("the instance has no historical events", func() {
-			It("passes the handler an zero-valued aggregate root", func() {
+			It("passes the handler a new aggregate root", func() {
 				expect := handler.New()
 
 				handler.HandleCommandFunc = func(
@@ -288,7 +303,7 @@ var _ = Describe("type Worker", func() {
 				NewParcel("<command-1>", MessageC1),
 			)
 
-			result := executeCommandAsync(
+			cmd := executeCommandAsync(
 				ctx,
 				commands,
 				NewParcel("<command-2>", MessageC2),
@@ -297,7 +312,7 @@ var _ = Describe("type Worker", func() {
 			go func() {
 				select {
 				case <-ctx.Done():
-				case <-result:
+				case <-cmd.Done():
 					cancel()
 				}
 			}()
@@ -344,7 +359,7 @@ var _ = Describe("type Worker", func() {
 		It("returns an error when there is an OCC failure", func() {
 			By("executing a command to ensure the worker is running")
 
-			result := executeCommandAsync(
+			cmd := executeCommandAsync(
 				ctx,
 				commands,
 				NewParcel("<command-1>", MessageC1),
@@ -356,7 +371,7 @@ var _ = Describe("type Worker", func() {
 				select {
 				case <-ctx.Done():
 					return
-				case <-result:
+				case <-cmd.Done():
 				}
 
 				By("writing an event to the event store that the worker doesn't know about")
@@ -395,7 +410,7 @@ var _ = Describe("type Worker", func() {
 
 			By("sending a command")
 
-			result := executeCommandAsync(
+			cmd := executeCommandAsync(
 				ctx,
 				commands,
 				NewParcel("<command-1>", MessageC1),
@@ -407,7 +422,7 @@ var _ = Describe("type Worker", func() {
 				select {
 				case <-ctx.Done():
 					return
-				case <-result:
+				case <-cmd.Done():
 				}
 
 				By("ensuring no snapshot has been taken")
@@ -509,12 +524,14 @@ var _ = Describe("type Worker", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 
-			It("archives historical events and snapshots, and returns nil", func() {
+			It("archives historical events and snapshots, and signals the idle state", func() {
 				executeCommandAsync(
 					ctx,
 					commands,
 					NewParcel("<command>", MessageC1),
 				)
+
+				go shutdownWorkerWhenIdle()
 
 				err := worker.Run(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
@@ -585,6 +602,8 @@ var _ = Describe("type Worker", func() {
 					NewParcel("<command>", MessageC1),
 				)
 
+				go shutdownWorkerWhenIdle()
+
 				err := worker.Run(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -630,6 +649,8 @@ var _ = Describe("type Worker", func() {
 					NewParcel("<command>", MessageC1),
 				)
 
+				go shutdownWorkerWhenIdle()
+
 				err := worker.Run(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
@@ -642,6 +663,8 @@ var _ = Describe("type Worker", func() {
 					commands,
 					NewParcel("<command>", MessageC1),
 				)
+
+				go shutdownWorkerWhenIdle()
 
 				err := worker.Run(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
@@ -659,6 +682,8 @@ var _ = Describe("type Worker", func() {
 					}
 
 					go func() {
+						defer GinkgoRecover()
+
 						executeCommandSync(
 							ctx,
 							commands,
@@ -704,6 +729,8 @@ var _ = Describe("type Worker", func() {
 					commands,
 					NewParcel("<command>", MessageC1),
 				)
+
+				go shutdownWorkerWhenIdle()
 
 				err := worker.Run(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
@@ -770,11 +797,13 @@ var _ = Describe("type Worker", func() {
 					NewParcel("<command>", MessageC1),
 				)
 
+				go shutdownWorkerWhenIdle()
+
 				err = worker.Run(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 
-			It("returns nil", func() {
+			XIt("returns nil", func() {
 				err := worker.Run(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
@@ -801,6 +830,8 @@ var _ = Describe("type Worker", func() {
 				commands,
 				NewParcel("<command>", MessageC1),
 			)
+
+			go shutdownWorkerWhenIdle()
 
 			err := worker.Run(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -829,6 +860,8 @@ var _ = Describe("type Worker", func() {
 				NewParcel("<command>", MessageC1),
 			)
 
+			go shutdownWorkerWhenIdle()
+
 			err := worker.Run(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
 		})
@@ -845,30 +878,6 @@ var _ = Describe("type Worker", func() {
 			Expect(err).To(
 				MatchError(
 					"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read event revision bounds: <error>",
-				),
-			)
-		})
-
-		It("returns an error if events cannot be written", func() {
-			eventWriter.WriteEventsFunc = func(
-				ctx context.Context,
-				hk, id string,
-				begin, end uint64,
-				events []*envelopespec.Envelope,
-			) error {
-				return errors.New("<error>")
-			}
-
-			executeCommandAsync(
-				ctx,
-				commands,
-				NewParcel("<command>", MessageC1),
-			)
-
-			err := worker.Run(ctx)
-			Expect(err).To(
-				MatchError(
-					"cannot write events for aggregate root <handler-name>[<instance>]: <error>",
 				),
 			)
 		})

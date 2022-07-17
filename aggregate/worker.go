@@ -62,7 +62,15 @@ type Worker struct {
 	InstanceID string
 
 	// Commands is a channel that receives commands to be executed.
-	Commands <-chan Command
+	Commands <-chan *Command
+
+	// Idle is used to signal that the worker has become idle by writing the
+	// worker's instance ID to the channel.
+	//
+	// The supervisor may stop the worker by closing the commands channel or
+	// canceling the context passed to Run(), or it may choose to ignore the
+	// idle signal and keep sending commands.
+	Idle chan<- string
 
 	// envHandlerIdentity is the identity of the handler in the representation
 	// used within envelopes.
@@ -77,51 +85,43 @@ type Worker struct {
 	// snapshotAge is the number of revisions that have been made since the last
 	// snapshot was taken.
 	snapshotAge uint64
+
+	// currentState is the current state of the worker.
+	currentState workerState
 }
 
 // errShutdown is an error that indicates a worker is shutting down.
 var errShutdown = errors.New("shutting down")
 
-// Run handles messages that are written to the worker's Commands channel.
+// workerState is a function that provides worker logic for a specific state.
 //
-// It returns when ctx is canceled, an error occurs, the idle timeout occurs, or
-// the aggregate instance is destroyed.
+// It returns the next state that the worker should transition to, or nil to
+// indicate that the worker is done.
+type workerState func(ctx context.Context) (workerState, error)
+
+// Run handles messages that are written to the worker's commands channel.
+//
+// It returns when ctx is canceled, an error occurs, or the commands channel is
+// closed.
 func (w *Worker) Run(ctx context.Context) error {
 	w.envHandlerIdentity = marshalkit.MustMarshalEnvelopeIdentity(w.HandlerIdentity)
+	w.currentState = w.stateLoadRoot
 
-	if err := w.loadRoot(ctx); err != nil {
-		return err
-	}
-
-	// Always wait for a command when first starting. The worker wouldn't have
-	// been started if there wasn't a command about to be sent.
-	handle := w.waitForCommandOrIdleTimeout
-
-	for {
-		if err := handle(ctx); err != nil {
-			if err == errShutdown {
-				return nil
-			}
-
+	for w.currentState != nil {
+		var err error
+		w.currentState, err = w.currentState(ctx)
+		if err != nil {
 			return err
 		}
-
-		if w.begin >= w.end {
-			// If the instance has no state (such as when it has been destroyed)
-			// we want to shutdown the moment the commands channel is empty.
-			handle = w.handleNextCommandOrShutdown
-		} else {
-			// Otherwise, we wait for a command to be written to the channel or
-			// an idle timeout to occur.
-			handle = w.waitForCommandOrIdleTimeout
-		}
 	}
+
+	return nil
 }
 
-// loadRoot loads the aggregate root.
+// stateLoadRoot loads the aggregate root.
 //
 // It populates w.root, w.begin, w.end and w.snapshotAge.
-func (w *Worker) loadRoot(ctx context.Context) error {
+func (w *Worker) stateLoadRoot(ctx context.Context) (workerState, error) {
 	var err error
 	w.root = w.Handler.New()
 
@@ -132,14 +132,12 @@ func (w *Worker) loadRoot(ctx context.Context) error {
 		w.root,
 	)
 
-	return err
+	return w.stateWaitForCommand, err
 }
 
-// waitForCommandOrIdleTimeout blocks until a command is available for handling,
-// or the idle timeout is exceeded.
-//
-// It returns errShutdown if the idle timeout is exceeded.
-func (w *Worker) waitForCommandOrIdleTimeout(ctx context.Context) error {
+// stateWaitForCommand blocks until a command is available for handling, or the
+// idle timeout is exceeded.
+func (w *Worker) stateWaitForCommand(ctx context.Context) (workerState, error) {
 	idle := time.NewTimer(
 		linger.MustCoalesce(
 			w.IdleTimeout,
@@ -149,81 +147,82 @@ func (w *Worker) waitForCommandOrIdleTimeout(ctx context.Context) error {
 	defer idle.Stop()
 
 	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case cmd := <-w.Commands:
-		return w.handleCommand(ctx, cmd)
+	case cmd, ok := <-w.Commands:
+		return w.stateHandleCommand(cmd, ok), nil
+
 	case <-idle.C:
-		if err := w.takeSnapshot(ctx); err != nil {
-			return err
-		}
-		return errShutdown
-	}
-}
+		return w.stateRequestShutdown, w.takeSnapshot(ctx)
 
-// handleNextCommandOrShutdown handles the next command if one is available,
-// otherwise it returns errShutdown.
-func (w *Worker) handleNextCommandOrShutdown(ctx context.Context) error {
-	select {
 	case <-ctx.Done():
-		return ctx.Err()
-	case cmd := <-w.Commands:
-		return w.handleCommand(ctx, cmd)
-	default:
-		return errShutdown
+		return nil, ctx.Err()
 	}
 }
 
-// handleCommand calls the user-defined message handler for a single command,
-// then persists the changes it makes.
-func (w *Worker) handleCommand(
-	ctx context.Context,
-	cmd Command,
-) error {
-	sc := &scope{
-		Command:         cmd.Parcel,
-		HandlerIdentity: w.envHandlerIdentity,
-		ID:              w.InstanceID,
-		Root:            w.root,
-		Packer:          w.Packer,
-		IsDestroyed:     w.begin >= w.end,
-		Logger: logging.Prefix(
-			w.Logger,
-			"aggregate %s[%s]: ",
-			w.HandlerIdentity.Name,
-			w.InstanceID,
-		),
+// stateHandleCommand calls the user-defined message handler for a single
+// command, then persists the changes it makes.
+func (w *Worker) stateHandleCommand(cmd *Command, ok bool) workerState {
+	if !ok {
+		return nil
 	}
 
-	w.Handler.HandleCommand(
-		w.root,
-		sc,
-		cmd.Parcel.Message,
-	)
+	return func(ctx context.Context) (workerState, error) {
+		sc := &scope{
+			Command:         cmd.Parcel,
+			HandlerIdentity: w.envHandlerIdentity,
+			ID:              w.InstanceID,
+			Root:            w.root,
+			Packer:          w.Packer,
+			IsDestroyed:     w.begin >= w.end,
+			Logger: logging.Prefix(
+				w.Logger,
+				"aggregate %s[%s]: ",
+				w.HandlerIdentity.Name,
+				w.InstanceID,
+			),
+		}
 
-	err := w.saveChanges(ctx, sc)
-	if err != nil {
-		// Signal a generic error to the caller, rather than giving them details
-		// of the persistence error.
-		cmd.Result <- errShutdown
-		return err
+		w.Handler.HandleCommand(
+			w.root,
+			sc,
+			cmd.Parcel.Message,
+		)
+
+		err := w.saveChanges(ctx, sc)
+		if err != nil {
+			cmd.Nack(errShutdown)
+			return nil, err
+		}
+
+		cmd.Ack()
+
+		if sc.IsDestroyed {
+			return w.stateRequestShutdown, w.archiveSnapshots(ctx)
+		}
+
+		return w.stateWaitForCommand, w.takeSnapshotIfIntervalExceeded(ctx)
 	}
+}
 
-	// Signal a success to the caller.
-	close(cmd.Result)
+// stateRequestShutdown signals that the worker is is idle and would like to
+// shutdown.
+//
+// It blocks until the supervisor receives the shutdown request or a command is
+// received.
+func (w *Worker) stateRequestShutdown(ctx context.Context) (workerState, error) {
+	select {
+	case cmd, ok := <-w.Commands:
+		return w.stateHandleCommand(cmd, ok), nil
 
-	if sc.IsDestroyed {
-		return w.archiveSnapshots(ctx)
+	case w.Idle <- w.InstanceID:
+		return w.stateWaitForCommand, nil
+
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
-
-	return w.takeSnapshotIfIntervalExceeded(ctx)
 }
 
 // saveChanges persists changes made as a result of handling a single command.
-func (w *Worker) saveChanges(
-	ctx context.Context,
-	sc *scope,
-) error {
+func (w *Worker) saveChanges(ctx context.Context, sc *scope) error {
 	if !sc.HasChanges {
 		return nil
 	}
