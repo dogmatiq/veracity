@@ -81,9 +81,11 @@ func (e *AggregateEventReader) ReadBounds(
 
 	item := out.Items[0]
 
-	begin, err = unmarshalRevision(item["BeginRevision"])
-	if err != nil {
-		return 0, 0, err
+	if attr, ok := item["BeginRevision"]; ok {
+		begin, err = unmarshalRevision(attr)
+		if err != nil {
+			return 0, 0, err
+		}
 	}
 
 	end, err = unmarshalRevision(item["Revision"])
@@ -238,9 +240,12 @@ func (e *AggregateEventWriter) WriteEvents(
 	}
 
 	item := map[string]*dynamodb.AttributeValue{
-		"InstanceID":    {S: aws.String(id)},
-		"Revision":      marshalRevision(end),
-		"BeginRevision": marshalRevision(begin),
+		"InstanceID": {S: aws.String(id)},
+		"Revision":   marshalRevision(end),
+	}
+
+	if begin > 0 {
+		item["BeginRevision"] = marshalRevision(begin)
 	}
 
 	if len(envelopes) > 0 {
