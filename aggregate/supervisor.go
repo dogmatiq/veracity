@@ -42,7 +42,8 @@ type Supervisor struct {
 	// currentState is the current state of the worker.
 	currentState supervisorState
 
-	idleTestHook func()
+	idleTestHook     func(id string)
+	shutdownTestHook func(id string, err error)
 }
 
 // workerResult is the result of a worker exiting.
@@ -62,26 +63,23 @@ type supervisorState func(context.Context) (supervisorState, error)
 func (s *Supervisor) Run(ctx context.Context) error {
 	defer s.waitForAllWorkers()
 
-	s.workerCommands = map[string]chan *Command{}
-	s.workerIdle = make(chan string)
-	s.workerShutdown = make(chan workerResult)
-
 	// Setup a context that is always canceled when the supervisor stops, so
 	// that workers are also stopped.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	s.workerCommands = map[string]chan *Command{}
+	s.workerIdle = make(chan string)
+	s.workerShutdown = make(chan workerResult)
 	s.currentState = s.stateWaitForCommand
 
-	for s.currentState != nil {
+	for {
 		var err error
 		s.currentState, err = s.currentState(ctx)
 		if err != nil {
 			return err
 		}
 	}
-
-	return nil
 }
 
 // stateWaitForCommand blocks until a command is available for dispatching.
@@ -92,9 +90,8 @@ func (s *Supervisor) stateWaitForCommand(ctx context.Context) (supervisorState, 
 
 	case id := <-s.workerIdle:
 		if s.idleTestHook != nil {
-			s.idleTestHook()
+			s.idleTestHook(id)
 		}
-
 		s.shutdownWorker(id)
 		return s.currentState, nil
 
@@ -121,9 +118,8 @@ func (s *Supervisor) stateDispatchCommand(cmd *Command) supervisorState {
 
 		case id := <-s.workerIdle:
 			if s.idleTestHook != nil {
-				s.idleTestHook()
+				s.idleTestHook(id)
 			}
-
 			if id != instanceID {
 				// Only shut the worker down if it's NOT the one we're trying to
 				// send a command to.
@@ -188,8 +184,7 @@ func (s *Supervisor) startWorkerIfNotRunning(
 // waitForAllWorkers blocks until all workers have stopped running.
 func (s *Supervisor) waitForAllWorkers() {
 	for len(s.workerCommands) != 0 {
-		res := <-s.workerShutdown
-		delete(s.workerCommands, res.InstanceID)
+		s.handleShutdown(<-s.workerShutdown)
 	}
 }
 
@@ -209,6 +204,11 @@ func (s *Supervisor) shutdownWorker(id string) {
 
 // handleShutdown handles a result from a worker's Run() method.
 func (s *Supervisor) handleShutdown(res workerResult) error {
+	if s.shutdownTestHook != nil {
+		s.shutdownTestHook(res.InstanceID, res.Err)
+	}
+
 	delete(s.workerCommands, res.InstanceID)
+
 	return res.Err
 }
