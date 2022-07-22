@@ -156,23 +156,11 @@ var _ = Describe("type Worker", func() {
 			err := worker.Run(ctx)
 			Expect(err).To(Equal(context.Canceled))
 
-			select {
-			case <-time.After(1 * time.Second):
-				Fail("timed-out waiting for result")
-			case <-cmd.Done():
-				Expect(cmd.Err()).ShouldNot(HaveOccurred())
-			}
+			Eventually(cmd.Done()).Should(BeClosed())
+			Expect(cmd.Err()).ShouldNot(HaveOccurred())
 		})
 
 		It("NACKs the command if writing events fails", func() {
-			handler.HandleCommandFunc = func(
-				r dogma.AggregateRoot,
-				s dogma.AggregateCommandScope,
-				m dogma.Message,
-			) {
-				s.RecordEvent(MessageE1)
-			}
-
 			eventWriter.WriteEventsFunc = func(
 				ctx context.Context,
 				hk, id string,
@@ -195,16 +183,8 @@ var _ = Describe("type Worker", func() {
 				),
 			)
 
-			select {
-			case <-ctx.Done():
-				Expect(ctx.Err()).ShouldNot(HaveOccurred())
-			case <-cmd.Done():
-				Expect(cmd.Err()).To(
-					MatchError(
-						"shutting down",
-					),
-				)
-			}
+			Eventually(cmd.Done()).Should(BeClosed())
+			Expect(cmd.Err()).To(MatchError("shutting down"))
 		})
 
 		It("applies recorded events to the aggregate root", func() {
@@ -310,6 +290,7 @@ var _ = Describe("type Worker", func() {
 			)
 
 			go func() {
+				// Shutdown the worker when the command has been ACKd.
 				select {
 				case <-ctx.Done():
 				case <-cmd.Done():
@@ -368,11 +349,7 @@ var _ = Describe("type Worker", func() {
 			go func() {
 				defer GinkgoRecover()
 
-				select {
-				case <-ctx.Done():
-					return
-				case <-cmd.Done():
-				}
+				Eventually(cmd.Done()).Should(BeClosed())
 
 				By("writing an event to the event store that the worker doesn't know about")
 
@@ -419,11 +396,7 @@ var _ = Describe("type Worker", func() {
 			go func() {
 				defer GinkgoRecover()
 
-				select {
-				case <-ctx.Done():
-					return
-				case <-cmd.Done():
-				}
+				Eventually(cmd.Done()).Should(BeClosed())
 
 				By("ensuring no snapshot has been taken")
 
@@ -800,11 +773,6 @@ var _ = Describe("type Worker", func() {
 				go shutdownWorkerWhenIdle()
 
 				err = worker.Run(ctx)
-				Expect(err).ShouldNot(HaveOccurred())
-			})
-
-			XIt("returns nil", func() {
-				err := worker.Run(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 		})
