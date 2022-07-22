@@ -338,8 +338,8 @@ var _ = Describe("type Worker", func() {
 		})
 
 		It("returns an error when there is an OCC failure", func() {
-			By("executing a command to ensure the worker is running")
-
+			// Send a command that we can wait on to ensure that the worker has
+			// loaded the aggregate state.
 			cmd := executeCommandAsync(
 				ctx,
 				commands,
@@ -351,8 +351,9 @@ var _ = Describe("type Worker", func() {
 
 				Eventually(cmd.Done()).Should(BeClosed())
 
-				By("writing an event to the event store that the worker doesn't know about")
-
+				// Write an extra event to the store that the worker doesn't
+				// know about, making the worker's in-memory knowledge of the
+				// current revision out-of-date.
 				err := eventStore.WriteEvents(
 					ctx,
 					"<handler-key>",
@@ -365,8 +366,7 @@ var _ = Describe("type Worker", func() {
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 
-				By("sending a second command")
-
+				// Send a second command to trigger the OCC failure.
 				executeCommandAsync(
 					ctx,
 					commands,
@@ -383,10 +383,10 @@ var _ = Describe("type Worker", func() {
 		})
 
 		It("writes a snapshot when the snapshot interval is exceeded", func() {
+			// Take a snapshot after every other revision.
 			worker.SnapshotInterval = 2
 
-			By("sending a command")
-
+			// Make the first revision.
 			cmd := executeCommandAsync(
 				ctx,
 				commands,
@@ -398,8 +398,7 @@ var _ = Describe("type Worker", func() {
 
 				Eventually(cmd.Done()).Should(BeClosed())
 
-				By("ensuring no snapshot has been taken")
-
+				// Ensure no snapshot has been taken.
 				_, ok, err := snapshotStore.ReadSnapshot(
 					ctx,
 					"<handler-key>",
@@ -410,16 +409,14 @@ var _ = Describe("type Worker", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(ok).To(BeFalse())
 
-				By("sending a second command")
-
+				// Make the second revision.
 				executeCommandSync(
 					ctx,
 					commands,
 					NewParcel("<command-2>", MessageC2),
 				)
 
-				By("ensuring that a snapshot has been written")
-
+				// Ensure the snapshot HAS been taken.
 				snapshotRev, ok, err := snapshotStore.ReadSnapshot(
 					ctx,
 					"<handler-key>",
@@ -431,16 +428,15 @@ var _ = Describe("type Worker", func() {
 				Expect(ok).To(BeTrue())
 				Expect(snapshotRev).To(BeNumerically("==", 1))
 
-				By("sending a third command")
-
+				// Make a third revision.
 				executeCommandSync(
 					ctx,
 					commands,
 					NewParcel("<command-2>", MessageC2),
 				)
 
-				By("ensuring that no newer snapshot has been taken")
-
+				// Ensure that the snapshot is still the one taken at the second
+				// revision.
 				snapshotRev, ok, err = snapshotStore.ReadSnapshot(
 					ctx,
 					"<handler-key>",
