@@ -40,7 +40,6 @@ var _ = Describe("type Worker", func() {
 		commands chan *Command
 		idle     chan string
 		handler  *AggregateMessageHandler
-		observer *observerStub
 		logger   *logging.BufferedLogger
 		worker   *Worker
 	)
@@ -107,7 +106,6 @@ var _ = Describe("type Worker", func() {
 			},
 		)
 
-		observer = &observerStub{}
 		logger = &logging.BufferedLogger{}
 
 		worker = &Worker{
@@ -118,7 +116,6 @@ var _ = Describe("type Worker", func() {
 				Loader:          loader,
 				EventWriter:     eventWriter,
 				SnapshotWriter:  snapshotWriter,
-				Observer:        observer,
 				Logger:          logger,
 			},
 			InstanceID: "<instance>",

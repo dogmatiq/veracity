@@ -50,9 +50,6 @@ type WorkerConfig struct {
 	// If it is 0, DefaultSnapshotInterval is used.
 	SnapshotInterval uint64
 
-	// Observer is notified of the lifecycle events of the aggregate system.
-	Observer Observer
-
 	// Logger is the target for log messages about the aggregate instance.
 	Logger logging.Logger
 }
@@ -137,13 +134,6 @@ func (w *Worker) stateLoadRoot(ctx context.Context) (workerState, error) {
 
 	if err != nil {
 		return nil, err
-	}
-
-	if w.Observer != nil {
-		w.Observer.OnWorkerLoaded(
-			w.HandlerIdentity,
-			w.InstanceID,
-		)
 	}
 
 	return w.stateWaitForCommand, nil

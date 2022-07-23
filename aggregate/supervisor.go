@@ -3,8 +3,10 @@ package aggregate
 import (
 	"context"
 
+	"github.com/dogmatiq/configkit"
 	"github.com/dogmatiq/configkit/message"
 	"github.com/dogmatiq/dodeca/logging"
+	"github.com/dogmatiq/dogma"
 )
 
 // DefaultCommandBuffer is the default number of commands to buffer in memory
@@ -13,9 +15,19 @@ const DefaultCommandBuffer = 100
 
 // Supervisor manages the lifecycle of all workers for a specific aggregate.
 type Supervisor struct {
-	// WorkerConfig is the configuration used for each worker started by the
-	// supervisor.
-	WorkerConfig
+	// Handler is the message handler that is managed by this supervisor.
+	Handler dogma.AggregateMessageHandler
+
+	// HandlerIdentity is the identity of the handler.
+	HandlerIdentity configkit.Identity
+
+	// StartWorker starts a worker for a specific instance.
+	StartWorker func(
+		ctx context.Context,
+		id string,
+		idle chan<- string,
+		done func(error),
+	) chan<- *Command
 
 	// Commands is the channel on which commands are received before being
 	// dispatched to instance-specific workers.
@@ -24,15 +36,12 @@ type Supervisor struct {
 	// shuts down due to an error.
 	Commands <-chan *Command
 
-	// CommandBuffer is the number of commands to buffer in-memory per aggregate
-	// instance.
-	//
-	// If it is non-positive, DefaultCommandBuffer is used instead.
-	CommandBuffer int
+	// Logger is the target for log messages about the aggregate instance.
+	Logger logging.Logger
 
 	// workerCommands is a map of aggregate instance IDs to channels on which
 	// commands can be sent to the worker for that instance.
-	workerCommands map[string]chan *Command
+	workerCommands map[string]chan<- *Command
 
 	// workerIdle is a channel that receives requests from workers to shut down
 	// when they have entered an idle state.
@@ -68,7 +77,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	s.workerCommands = map[string]chan *Command{}
+	s.workerCommands = map[string]chan<- *Command{}
 	s.workerIdle = make(chan string)
 	s.workerShutdown = make(chan workerResult)
 	s.currentState = s.stateWaitForCommand
@@ -88,14 +97,6 @@ func (s *Supervisor) stateWaitForCommand(ctx context.Context) (supervisorState, 
 	case cmd := <-s.Commands:
 		id := s.Handler.RouteCommandToInstance(cmd.Parcel.Message)
 
-		if s.Observer != nil {
-			s.Observer.OnCommandReceived(
-				s.HandlerIdentity,
-				id,
-				cmd,
-			)
-		}
-
 		logging.Log(
 			s.Logger,
 			"command %s[%s] received for aggregate %s[%s]",
@@ -108,15 +109,7 @@ func (s *Supervisor) stateWaitForCommand(ctx context.Context) (supervisorState, 
 		return s.stateDispatchCommand(id, cmd), nil
 
 	case id := <-s.workerIdle:
-		if s.Observer != nil {
-			s.Observer.OnWorkerIdle(
-				s.HandlerIdentity,
-				id,
-			)
-		}
-
 		s.acknowledgeIdle(id)
-
 		return s.currentState, nil
 
 	case res := <-s.workerShutdown:
@@ -137,14 +130,6 @@ func (s *Supervisor) stateDispatchCommand(id string, cmd *Command) supervisorSta
 
 		select {
 		case commands <- cmd:
-			if s.Observer != nil {
-				s.Observer.OnCommandDispatched(
-					s.HandlerIdentity,
-					id,
-					cmd,
-				)
-			}
-
 			logging.Log(
 				s.Logger,
 				"command %s[%s] enqueued for aggregate %s[%s] worker",
@@ -157,13 +142,6 @@ func (s *Supervisor) stateDispatchCommand(id string, cmd *Command) supervisorSta
 			return s.stateWaitForCommand, nil
 
 		case idleID := <-s.workerIdle:
-			if s.Observer != nil {
-				s.Observer.OnWorkerIdle(
-					s.HandlerIdentity,
-					idleID,
-				)
-			}
-
 			// Only shut the worker down if it's NOT the one we're trying to
 			// send a command to.
 			if idleID == id {
@@ -182,19 +160,18 @@ func (s *Supervisor) stateDispatchCommand(id string, cmd *Command) supervisorSta
 		case res := <-s.workerShutdown:
 			err := s.handleShutdown(res)
 			if err != nil {
-				s.nackCommand(id, cmd, errShutdown, err)
+				cmd.Nack(errShutdown)
 				return nil, err
 			}
 
 			return s.currentState, err
 
 		case <-ctx.Done():
-			s.nackCommand(id, cmd, errShutdown, ctx.Err())
+			cmd.Nack(errShutdown)
 			return nil, ctx.Err()
 
 		case <-cmd.Context.Done():
-			err := cmd.Context.Err()
-			s.nackCommand(id, cmd, err, err)
+			cmd.Nack(cmd.Context.Err())
 			return s.stateWaitForCommand, nil
 		}
 	}
@@ -207,44 +184,27 @@ func (s *Supervisor) stateDispatchCommand(id string, cmd *Command) supervisorSta
 func (s *Supervisor) startWorkerIfNotRunning(
 	ctx context.Context,
 	id string,
-) chan *Command {
+) chan<- *Command {
 	if commands, ok := s.workerCommands[id]; ok {
 		return commands
 	}
 
-	buffer := s.CommandBuffer
-	if buffer <= 0 {
-		buffer = DefaultCommandBuffer
-	}
-
-	commands := make(chan *Command, buffer)
+	commands := s.StartWorker(
+		ctx,
+		id,
+		s.workerIdle,
+		func(err error) {
+			s.workerShutdown <- workerResult{id, err}
+		},
+	)
 	s.workerCommands[id] = commands
 
-	go func() {
-		w := &Worker{
-			WorkerConfig: s.WorkerConfig,
-			InstanceID:   id,
-			Commands:     commands,
-			Idle:         s.workerIdle,
-		}
-
-		if s.Observer != nil {
-			s.Observer.OnWorkerStart(
-				s.HandlerIdentity,
-				id,
-			)
-		}
-
-		logging.Log(
-			s.Logger,
-			"aggregate %s[%s] worker has started",
-			s.HandlerIdentity.Name,
-			id,
-		)
-
-		err := w.Run(ctx)
-		s.workerShutdown <- workerResult{id, err}
-	}()
+	logging.Log(
+		s.Logger,
+		"aggregate %s[%s] worker has started",
+		s.HandlerIdentity.Name,
+		id,
+	)
 
 	return commands
 }
@@ -272,13 +232,6 @@ func (s *Supervisor) acknowledgeIdle(id string) {
 		id,
 	)
 
-	if s.Observer != nil {
-		s.Observer.OnWorkerIdleAck(
-			s.HandlerIdentity,
-			id,
-		)
-	}
-
 	// Close the channel to signal to the worker that it should shut down.
 	close(commands)
 
@@ -292,14 +245,6 @@ func (s *Supervisor) acknowledgeIdle(id string) {
 
 // handleShutdown handles a result from a worker's Run() method.
 func (s *Supervisor) handleShutdown(res workerResult) error {
-	if s.Observer != nil {
-		s.Observer.OnWorkerShutdown(
-			s.HandlerIdentity,
-			res.InstanceID,
-			res.Err,
-		)
-	}
-
 	if res.Err == nil {
 		logging.Log(
 			s.Logger,
@@ -320,23 +265,4 @@ func (s *Supervisor) handleShutdown(res workerResult) error {
 	delete(s.workerCommands, res.InstanceID)
 
 	return res.Err
-}
-
-// nackCommand sends a NACK to the given command.
-func (s *Supervisor) nackCommand(
-	id string,
-	cmd *Command,
-	reported, cause error,
-) {
-	if s.Observer != nil {
-		s.Observer.OnCommandNack(
-			s.HandlerIdentity,
-			id,
-			cmd,
-			reported,
-			cause,
-		)
-	}
-
-	cmd.Nack(reported)
 }
