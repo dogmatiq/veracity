@@ -11,20 +11,15 @@ import (
 // executeCommandSync executes a command by sending it to a command channel and
 // waiting for it to complete.
 func executeCommandSync(
-	testCtx, cmdCtx context.Context,
+	ctx context.Context,
 	commands chan<- *Command,
 	command parcel.Parcel,
 ) {
-	cmd := executeCommandAsync(
-		testCtx,
-		cmdCtx,
-		commands,
-		command,
-	)
+	cmd := executeCommandAsync(ctx, commands, command)
 
 	select {
-	case <-testCtx.Done():
-		ExpectWithOffset(1, testCtx.Err()).ShouldNot(HaveOccurred())
+	case <-ctx.Done():
+		ExpectWithOffset(1, ctx.Err()).ShouldNot(HaveOccurred())
 	case <-cmd.Done():
 		ExpectWithOffset(1, cmd.Err()).ShouldNot(HaveOccurred())
 	}
@@ -32,18 +27,18 @@ func executeCommandSync(
 
 // executeCommandAsync executes a command by sending it to a command channel.
 func executeCommandAsync(
-	testCtx, cmdCtx context.Context,
+	ctx context.Context,
 	commands chan<- *Command,
 	command parcel.Parcel,
 ) *Command {
 	cmd := &Command{
-		Context: cmdCtx,
+		Context: ctx,
 		Parcel:  command,
 	}
 
 	select {
-	case <-testCtx.Done():
-		ExpectWithOffset(1, testCtx.Err()).ShouldNot(HaveOccurred())
+	case <-ctx.Done():
+		ExpectWithOffset(1, ctx.Err()).ShouldNot(HaveOccurred())
 	case commands <- cmd:
 	}
 

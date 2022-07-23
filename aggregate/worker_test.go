@@ -149,7 +149,6 @@ var _ = Describe("type Worker", func() {
 
 			cmd := executeCommandAsync(
 				ctx,
-				ctx,
 				commands,
 				NewParcel("<command>", MessageC1),
 			)
@@ -172,7 +171,6 @@ var _ = Describe("type Worker", func() {
 			}
 
 			cmd := executeCommandAsync(
-				ctx,
 				ctx,
 				commands,
 				NewParcel("<command>", MessageC1),
@@ -207,7 +205,6 @@ var _ = Describe("type Worker", func() {
 
 			executeCommandAsync(
 				ctx,
-				ctx,
 				commands,
 				NewParcel("<command>", MessageC1),
 			)
@@ -230,7 +227,6 @@ var _ = Describe("type Worker", func() {
 				}
 
 				executeCommandAsync(
-					ctx,
 					ctx,
 					commands,
 					NewParcel("<command>", MessageC1),
@@ -271,7 +267,6 @@ var _ = Describe("type Worker", func() {
 
 				executeCommandAsync(
 					ctx,
-					ctx,
 					commands,
 					NewParcel("<command>", MessageC1),
 				)
@@ -284,13 +279,11 @@ var _ = Describe("type Worker", func() {
 		It("persists recorded events", func() {
 			executeCommandAsync(
 				ctx,
-				ctx,
 				commands,
 				NewParcel("<command-1>", MessageC1),
 			)
 
 			cmd := executeCommandAsync(
-				ctx,
 				ctx,
 				commands,
 				NewParcel("<command-2>", MessageC2),
@@ -349,7 +342,6 @@ var _ = Describe("type Worker", func() {
 			// loaded the aggregate state.
 			cmd := executeCommandAsync(
 				ctx,
-				ctx,
 				commands,
 				NewParcel("<command-1>", MessageC1),
 			)
@@ -377,7 +369,6 @@ var _ = Describe("type Worker", func() {
 				// Send a second command to trigger the OCC failure.
 				executeCommandAsync(
 					ctx,
-					ctx,
 					commands,
 					NewParcel("<command-2>", MessageC1),
 				)
@@ -397,7 +388,6 @@ var _ = Describe("type Worker", func() {
 
 			// Make revision 0.
 			cmd := executeCommandAsync(
-				ctx,
 				ctx,
 				commands,
 				NewParcel("<command-1>", MessageC1),
@@ -423,14 +413,12 @@ var _ = Describe("type Worker", func() {
 				// Make revision 1.
 				executeCommandSync(
 					ctx,
-					ctx,
 					commands,
 					NewParcel("<command-2>", MessageC1),
 				)
 
 				// Make revision 2.
 				executeCommandSync(
-					ctx,
 					ctx,
 					commands,
 					NewParcel("<command-2>", MessageC1),
@@ -496,7 +484,6 @@ var _ = Describe("type Worker", func() {
 			It("archives historical events and snapshots, and signals the idle state", func() {
 				executeCommandAsync(
 					ctx,
-					ctx,
 					commands,
 					NewParcel("<command>", MessageC1),
 				)
@@ -542,13 +529,11 @@ var _ = Describe("type Worker", func() {
 
 				executeCommandAsync(
 					ctx,
-					ctx,
 					commands,
 					NewParcel("<command>", MessageC1),
 				)
 
 				executeCommandAsync(
-					ctx,
 					ctx,
 					commands,
 					NewParcel("<command>", MessageC2),
@@ -569,7 +554,6 @@ var _ = Describe("type Worker", func() {
 				}
 
 				executeCommandAsync(
-					ctx,
 					ctx,
 					commands,
 					NewParcel("<command>", MessageC1),
@@ -600,7 +584,6 @@ var _ = Describe("type Worker", func() {
 
 				executeCommandAsync(
 					ctx,
-					ctx,
 					commands,
 					NewParcel("<command>", MessageC1),
 				)
@@ -619,7 +602,6 @@ var _ = Describe("type Worker", func() {
 
 				executeCommandAsync(
 					ctx,
-					ctx,
 					commands,
 					NewParcel("<command>", MessageC1),
 				)
@@ -634,7 +616,6 @@ var _ = Describe("type Worker", func() {
 				worker.SnapshotWriter = nil
 
 				executeCommandAsync(
-					ctx,
 					ctx,
 					commands,
 					NewParcel("<command>", MessageC1),
@@ -661,7 +642,6 @@ var _ = Describe("type Worker", func() {
 						defer GinkgoRecover()
 
 						executeCommandSync(
-							ctx,
 							ctx,
 							commands,
 							NewParcel("<command>", MessageC1),
@@ -702,7 +682,6 @@ var _ = Describe("type Worker", func() {
 
 			It("takes a snapshot if the existing snapshot is out-of-date", func() {
 				executeCommandAsync(
-					ctx,
 					ctx,
 					commands,
 					NewParcel("<command>", MessageC1),
@@ -771,7 +750,6 @@ var _ = Describe("type Worker", func() {
 
 				executeCommandAsync(
 					ctx,
-					ctx,
 					commands,
 					NewParcel("<command>", MessageC1),
 				)
@@ -801,7 +779,6 @@ var _ = Describe("type Worker", func() {
 
 			executeCommandAsync(
 				ctx,
-				ctx,
 				commands,
 				NewParcel("<command>", MessageC1),
 			)
@@ -830,7 +807,6 @@ var _ = Describe("type Worker", func() {
 			}
 
 			executeCommandAsync(
-				ctx,
 				ctx,
 				commands,
 				NewParcel("<command>", MessageC1),
@@ -883,7 +859,6 @@ var _ = Describe("type Worker", func() {
 
 			executeCommandAsync(
 				ctx,
-				ctx,
 				commands,
 				NewParcel("<command>", MessageC1),
 			)
@@ -904,7 +879,6 @@ var _ = Describe("type Worker", func() {
 
 			executeCommandAsync(
 				ctx,
-				ctx,
 				commands,
 				NewParcel("<command>", MessageC1),
 			)
@@ -924,7 +898,6 @@ var _ = Describe("type Worker", func() {
 			}
 
 			executeCommandAsync(
-				ctx,
 				ctx,
 				commands,
 				NewParcel("<command>", MessageC1),

@@ -104,7 +104,6 @@ var _ = Describe("type Supervisor", func() {
 
 					executeCommandAsync(
 						ctx,
-						ctx,
 						commands,
 						NewParcel("<command>", MessageC1),
 					)
@@ -173,7 +172,6 @@ var _ = Describe("type Supervisor", func() {
 
 					executeCommandAsync(
 						ctx,
-						ctx,
 						commands,
 						NewParcel("<command>", MessageC1),
 					)
@@ -205,7 +203,6 @@ var _ = Describe("type Supervisor", func() {
 					defer GinkgoRecover()
 
 					executeCommandAsync(
-						ctx,
 						ctx,
 						commands,
 						NewParcel("<command>", MessageC1),
@@ -240,7 +237,6 @@ var _ = Describe("type Supervisor", func() {
 
 					executeCommandAsync(
 						ctx,
-						ctx,
 						commands,
 						NewParcel("<command>", MessageC1),
 					)
@@ -250,7 +246,7 @@ var _ = Describe("type Supervisor", func() {
 				Expect(err).To(Equal(context.Canceled))
 			})
 
-			It("does return if the command's context is canceled", func() {
+			It("does not return if the command's context is canceled", func() {
 				startWorker = func(
 					ctx context.Context,
 					id string,
@@ -269,14 +265,14 @@ var _ = Describe("type Supervisor", func() {
 					defer GinkgoRecover()
 
 					cmdCtx, cancelCommand := context.WithCancel(context.Background())
-					cancelCommand()
 
 					cmd := executeCommandAsync(
-						ctx,
 						cmdCtx,
 						commands,
 						NewParcel("<command>", MessageC1),
 					)
+
+					cancelCommand()
 
 					Eventually(cmd.Done()).Should(BeClosed())
 					Expect(cmd.Err()).To(Equal(context.Canceled))
@@ -304,7 +300,6 @@ var _ = Describe("type Supervisor", func() {
 					defer GinkgoRecover()
 
 					cmd := executeCommandAsync(
-						ctx,
 						ctx,
 						commands,
 						NewParcel("<command>", MessageC1),
@@ -362,7 +357,6 @@ var _ = Describe("type Supervisor", func() {
 
 							executeCommandSync(
 								ctx,
-								ctx,
 								commands,
 								NewParcel("<command>", MessageC1),
 							)
@@ -404,7 +398,6 @@ var _ = Describe("type Supervisor", func() {
 							defer GinkgoRecover()
 
 							executeCommandAsync(
-								ctx,
 								ctx,
 								commands,
 								NewParcel("<command>", MessageC1),
@@ -496,13 +489,11 @@ var _ = Describe("type Supervisor", func() {
 							// complete, then start the worker for <instance-1>.
 							executeCommandSync(
 								ctx,
-								ctx,
 								commands,
 								NewParcel("<command-2>", MessageC2),
 							)
 
 							executeCommandAsync(
-								ctx,
 								ctx,
 								commands,
 								NewParcel("<command-1>", MessageC1),
