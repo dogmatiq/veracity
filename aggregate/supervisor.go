@@ -2,6 +2,9 @@ package aggregate
 
 import (
 	"context"
+
+	"github.com/dogmatiq/configkit/message"
+	"github.com/dogmatiq/dodeca/logging"
 )
 
 // DefaultCommandBuffer is the default number of commands to buffer in memory
@@ -12,7 +15,7 @@ const DefaultCommandBuffer = 100
 type Supervisor struct {
 	// WorkerConfig is the configuration used for each worker started by the
 	// supervisor.
-	WorkerConfig WorkerConfig
+	WorkerConfig
 
 	// Commands is the channel on which commands are received before being
 	// dispatched to instance-specific workers.
@@ -41,9 +44,6 @@ type Supervisor struct {
 
 	// currentState is the current state of the worker.
 	currentState supervisorState
-
-	idleTestHook     func(id string)
-	shutdownTestHook func(id string, err error)
 }
 
 // workerResult is the result of a worker exiting.
@@ -86,13 +86,37 @@ func (s *Supervisor) Run(ctx context.Context) error {
 func (s *Supervisor) stateWaitForCommand(ctx context.Context) (supervisorState, error) {
 	select {
 	case cmd := <-s.Commands:
-		return s.stateDispatchCommand(cmd), nil
+		id := s.Handler.RouteCommandToInstance(cmd.Parcel.Message)
+
+		if s.Observer != nil {
+			s.Observer.OnCommandReceived(
+				s.HandlerIdentity,
+				id,
+				cmd,
+			)
+		}
+
+		logging.Log(
+			s.Logger,
+			"command %s[%s] received for aggregate %s[%s]",
+			message.TypeOf(cmd.Parcel.Message),
+			cmd.Parcel.Envelope.GetMessageId(),
+			s.HandlerIdentity.Name,
+			id,
+		)
+
+		return s.stateDispatchCommand(id, cmd), nil
 
 	case id := <-s.workerIdle:
-		if s.idleTestHook != nil {
-			s.idleTestHook(id)
+		if s.Observer != nil {
+			s.Observer.OnWorkerIdle(
+				s.HandlerIdentity,
+				id,
+			)
 		}
-		s.shutdownWorker(id)
+
+		s.acknowledgeIdle(id)
+
 		return s.currentState, nil
 
 	case res := <-s.workerShutdown:
@@ -107,40 +131,70 @@ func (s *Supervisor) stateWaitForCommand(ctx context.Context) (supervisorState, 
 // aggregate instance ID.
 //
 // If the worker is not already running it is started.
-func (s *Supervisor) stateDispatchCommand(cmd *Command) supervisorState {
+func (s *Supervisor) stateDispatchCommand(id string, cmd *Command) supervisorState {
 	return func(ctx context.Context) (supervisorState, error) {
-		instanceID := s.WorkerConfig.Handler.RouteCommandToInstance(cmd.Parcel.Message)
-		commands := s.startWorkerIfNotRunning(ctx, instanceID)
+		commands := s.startWorkerIfNotRunning(ctx, id)
 
 		select {
 		case commands <- cmd:
+			if s.Observer != nil {
+				s.Observer.OnCommandDispatched(
+					s.HandlerIdentity,
+					id,
+					cmd,
+				)
+			}
+
+			logging.Log(
+				s.Logger,
+				"command %s[%s] enqueued for aggregate %s[%s] worker",
+				message.TypeOf(cmd.Parcel.Message),
+				cmd.Parcel.Envelope.GetMessageId(),
+				s.HandlerIdentity.Name,
+				id,
+			)
+
 			return s.stateWaitForCommand, nil
 
-		case id := <-s.workerIdle:
-			if s.idleTestHook != nil {
-				s.idleTestHook(id)
+		case idleID := <-s.workerIdle:
+			if s.Observer != nil {
+				s.Observer.OnWorkerIdle(
+					s.HandlerIdentity,
+					idleID,
+				)
 			}
-			if id != instanceID {
-				// Only shut the worker down if it's NOT the one we're trying to
-				// send a command to.
-				s.shutdownWorker(id)
+
+			// Only shut the worker down if it's NOT the one we're trying to
+			// send a command to.
+			if idleID == id {
+				logging.Log(
+					s.Logger,
+					"aggregate %s[%s] worker is idle but is about to be sent another command",
+					s.HandlerIdentity.Name,
+					id,
+				)
+			} else {
+				s.acknowledgeIdle(idleID)
 			}
+
 			return s.currentState, nil
 
 		case res := <-s.workerShutdown:
 			err := s.handleShutdown(res)
 			if err != nil {
-				cmd.Nack(errShutdown)
+				s.nackCommand(id, cmd, errShutdown, err)
 				return nil, err
 			}
+
 			return s.currentState, err
 
 		case <-ctx.Done():
-			cmd.Nack(errShutdown)
+			s.nackCommand(id, cmd, errShutdown, ctx.Err())
 			return nil, ctx.Err()
 
 		case <-cmd.Context.Done():
-			cmd.Nack(cmd.Context.Err())
+			err := cmd.Context.Err()
+			s.nackCommand(id, cmd, err, err)
 			return s.stateWaitForCommand, nil
 		}
 	}
@@ -174,6 +228,20 @@ func (s *Supervisor) startWorkerIfNotRunning(
 			Idle:         s.workerIdle,
 		}
 
+		if s.Observer != nil {
+			s.Observer.OnWorkerStart(
+				s.HandlerIdentity,
+				id,
+			)
+		}
+
+		logging.Log(
+			s.Logger,
+			"aggregate %s[%s] worker has started",
+			s.HandlerIdentity.Name,
+			id,
+		)
+
 		err := w.Run(ctx)
 		s.workerShutdown <- workerResult{id, err}
 	}()
@@ -188,10 +256,30 @@ func (s *Supervisor) waitForAllWorkers() {
 	}
 }
 
-// shutdownWorker signals to a worker that it should shut down by closing the
+// acknowledgeIdle signals to a worker that it should shut down by closing the
 // worker's command channel.
-func (s *Supervisor) shutdownWorker(id string) {
+func (s *Supervisor) acknowledgeIdle(id string) {
 	commands := s.workerCommands[id]
+	if commands == nil {
+		// The worker has already been instructed to shutdown.
+		return
+	}
+
+	logging.Log(
+		s.Logger,
+		"aggregate %s[%s] worker is idle and will be shutdown",
+		s.HandlerIdentity.Name,
+		id,
+	)
+
+	if s.Observer != nil {
+		s.Observer.OnWorkerIdleAck(
+			s.HandlerIdentity,
+			id,
+		)
+	}
+
+	// Close the channel to signal to the worker that it should shut down.
 	close(commands)
 
 	// Don't remove the worker from the map yet, because it has not exited.
@@ -204,11 +292,51 @@ func (s *Supervisor) shutdownWorker(id string) {
 
 // handleShutdown handles a result from a worker's Run() method.
 func (s *Supervisor) handleShutdown(res workerResult) error {
-	if s.shutdownTestHook != nil {
-		s.shutdownTestHook(res.InstanceID, res.Err)
+	if s.Observer != nil {
+		s.Observer.OnWorkerShutdown(
+			s.HandlerIdentity,
+			res.InstanceID,
+			res.Err,
+		)
+	}
+
+	if res.Err == nil {
+		logging.Log(
+			s.Logger,
+			"aggregate %s[%s] worker has shutdown",
+			s.HandlerIdentity.Name,
+			res.InstanceID,
+		)
+	} else {
+		logging.Log(
+			s.Logger,
+			"aggregate %s[%s] worker has shutdown: %s",
+			s.HandlerIdentity.Name,
+			res.InstanceID,
+			res.Err,
+		)
 	}
 
 	delete(s.workerCommands, res.InstanceID)
 
 	return res.Err
+}
+
+// nackCommand sends a NACK to the given command.
+func (s *Supervisor) nackCommand(
+	id string,
+	cmd *Command,
+	reported, cause error,
+) {
+	if s.Observer != nil {
+		s.Observer.OnCommandNack(
+			s.HandlerIdentity,
+			id,
+			cmd,
+			reported,
+			cause,
+		)
+	}
+
+	cmd.Nack(reported)
 }

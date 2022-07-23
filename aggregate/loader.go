@@ -269,7 +269,7 @@ func (l *Loader) readSnapshot(
 		// entire event history.
 		logging.Log(
 			l.Logger,
-			"snapshot of aggregate root %s[%s] cannot be read: %w",
+			"snapshot of aggregate root %s[%s] cannot be read: %s",
 			h.Name,
 			id,
 			err,
