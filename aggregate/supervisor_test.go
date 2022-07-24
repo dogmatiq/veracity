@@ -5,18 +5,10 @@ import (
 	"errors"
 	"time"
 
-	"github.com/dogmatiq/configkit"
-	. "github.com/dogmatiq/configkit/fixtures"
-	"github.com/dogmatiq/configkit/message"
-	"github.com/dogmatiq/dodeca/logging"
 	"github.com/dogmatiq/dogma"
 	. "github.com/dogmatiq/dogma/fixtures"
-	"github.com/dogmatiq/interopspec/envelopespec"
-	. "github.com/dogmatiq/marshalkit/fixtures"
 	. "github.com/dogmatiq/veracity/aggregate"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
-	"github.com/dogmatiq/veracity/parcel"
-	"github.com/dogmatiq/veracity/persistence/memory"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -26,36 +18,20 @@ var _ = Describe("type Supervisor", func() {
 		ctx    context.Context
 		cancel context.CancelFunc
 
-		eventStore  *memory.AggregateEventStore
-		eventReader *eventReaderStub
-		eventWriter *eventWriterStub
-
-		packer     *parcel.Packer
-		loader     *Loader
-		commands   chan *Command
-		handler    *AggregateMessageHandler
-		logger     *logging.BufferedLogger
-		supervisor *Supervisor
+		commands    chan *Command
+		handler     *AggregateMessageHandler
+		supervisor  *Supervisor
+		startWorker func(
+			ctx context.Context,
+			id string,
+			idle chan<- string,
+			done func(error),
+		) chan<- *Command
 	)
 
 	BeforeEach(func() {
-		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+		ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 		DeferCleanup(cancel)
-
-		eventStore = &memory.AggregateEventStore{}
-
-		eventReader = &eventReaderStub{
-			EventReader: eventStore,
-		}
-
-		eventWriter = &eventWriterStub{
-			EventWriter: eventStore,
-		}
-
-		loader = &Loader{
-			EventReader: eventReader,
-			Marshaler:   Marshaler,
-		}
 
 		commands = make(chan *Command)
 
@@ -66,30 +42,39 @@ var _ = Describe("type Supervisor", func() {
 				c.ProducesEventType(MessageE{})
 			},
 			RouteCommandToInstanceFunc: func(m dogma.Message) string {
-				return "<instance>"
+				switch m {
+				case MessageC1:
+					return "<instance-1>"
+				case MessageC2:
+					return "<instance-2>"
+				case MessageC3:
+					return "<instance-3>"
+				default:
+					panic("unexpected message")
+				}
 			},
 		}
 
-		packer = NewPacker(
-			message.TypeRoles{
-				MessageCType: message.CommandRole,
-				MessageEType: message.EventRole,
-			},
-		)
-
-		logger = &logging.BufferedLogger{}
+		startWorker = func(
+			ctx context.Context,
+			id string,
+			idle chan<- string,
+			done func(error),
+		) chan<- *Command {
+			panic("not implemented")
+		}
 
 		supervisor = &Supervisor{
-			WorkerConfig: WorkerConfig{
-				Handler:         handler,
-				HandlerIdentity: configkit.MustNewIdentity("<handler-name>", "<handler-key>"),
-				Packer:          packer,
-				Loader:          loader,
-				EventWriter:     eventWriter,
-				Logger:          logger,
+			Handler:  handler,
+			Commands: commands,
+			StartWorker: func(
+				ctx context.Context,
+				id string,
+				idle chan<- string,
+				done func(error),
+			) chan<- *Command {
+				return startWorker(ctx, id, idle, done)
 			},
-			Commands:      commands,
-			CommandBuffer: 1,
 		}
 	})
 
@@ -101,12 +86,15 @@ var _ = Describe("type Supervisor", func() {
 				Expect(err).To(Equal(context.Canceled))
 			})
 
-			It("returns an error if a worker returns an error", func() {
-				eventReader.ReadBoundsFunc = func(
+			It("returns an error if a worker fails", func() {
+				startWorker = func(
 					ctx context.Context,
-					hk, id string,
-				) (uint64, uint64, error) {
-					return 0, 0, errors.New("<error>")
+					id string,
+					idle chan<- string,
+					done func(error),
+				) chan<- *Command {
+					go done(errors.New("<error>"))
+					return nil
 				}
 
 				go func() {
@@ -120,344 +108,405 @@ var _ = Describe("type Supervisor", func() {
 				}()
 
 				err := supervisor.Run(ctx)
-				Expect(err).To(
-					MatchError(
-						"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read event revision bounds: <error>",
-					),
-				)
+				Expect(err).To(MatchError("<error>"))
 			})
 
-			It("restarts a worker that has shutdown if another command is routed to the same instance", func() {
-				supervisor.WorkerConfig.IdleTimeout = 10 * time.Millisecond
+			It("shuts down idle workers", func() {
+				startWorker = func(
+					ctx context.Context,
+					id string,
+					idle chan<- string,
+					done func(error),
+				) chan<- *Command {
+					commands := make(chan *Command)
+
+					go func() {
+						// Handle the command that caused this worker to start.
+						select {
+						case <-ctx.Done():
+							done(ctx.Err())
+						case cmd, ok := <-commands:
+							if ok {
+								cmd.Ack()
+							}
+						}
+
+						// Wait for supervisor to receive the worker's idle
+						// notification.
+						select {
+						case <-ctx.Done():
+							done(ctx.Err())
+						case idle <- id:
+						}
+
+						// Wait for permission to shutdown.
+						select {
+						case <-ctx.Done():
+							done(ctx.Err())
+						case _, ok := <-commands:
+							if ok {
+								done(errors.New("unexpected command"))
+								return
+							}
+						}
+
+						// Confirm that the supervisor accepts another idle
+						// notification, even if it's already closed the command
+						// channel.
+						select {
+						case <-ctx.Done():
+							done(ctx.Err())
+						case idle <- id:
+							cancel()
+							done(nil)
+						}
+					}()
+
+					return commands
+				}
 
 				go func() {
 					defer GinkgoRecover()
 
-					executeCommandSync(
+					executeCommandAsync(
 						ctx,
 						commands,
 						NewParcel("<command>", MessageC1),
 					)
-
-					time.Sleep(20 * time.Millisecond)
-
-					executeCommandSync(
-						ctx,
-						commands,
-						NewParcel("<command>", MessageC1),
-					)
-
-					cancel()
 				}()
 
 				err := supervisor.Run(ctx)
 				Expect(err).To(Equal(context.Canceled))
+			})
+
+			It("restarts a worker that has shutdown if another command is routed to the same instance", func() {
+				restarting := false
+				startWorker = func(
+					ctx context.Context,
+					id string,
+					idle chan<- string,
+					done func(error),
+				) chan<- *Command {
+					if restarting {
+						go done(errors.New("<error-on-restart>"))
+					}
+
+					go done(nil)
+					restarting = true
+
+					return nil
+				}
+
+				go func() {
+					defer GinkgoRecover()
+
+					executeCommandAsync(
+						ctx,
+						commands,
+						NewParcel("<command>", MessageC1),
+					)
+				}()
+
+				err := supervisor.Run(ctx)
+				Expect(err).To(MatchError("<error-on-restart>"))
 			})
 		})
 
 		When("waiting for a worker to accept a command", func() {
 			It("returns an error if the context is canceled", func() {
-				eventReader.ReadBoundsFunc = func(
+				startWorker = func(
 					ctx context.Context,
-					hk, id string,
-				) (uint64, uint64, error) {
-					// Prevent the worker from reading from its command channel.
-					<-ctx.Done()
-					return 0, 0, ctx.Err()
-				}
-
-				var cmd *Command
-				go func() {
-					defer GinkgoRecover()
-
-					// Fill up the worker's command buffer (size == 1).
-					executeCommandAsync(
-						ctx,
-						commands,
-						NewParcel("<command>", MessageC1),
-					)
-
-					// Cause the supervisor to block waiting for the worker's
-					// command channel to become unblocked.
-					//
-					// Note that we don't use ctx, otherwise it will report the
-					// context cancelation error instead of the supervisor
-					// shutdown error.
-					cmd = executeCommandAsync(
-						context.Background(),
-						commands,
-						NewParcel("<command>", MessageC2),
-					)
+					id string,
+					idle chan<- string,
+					done func(error),
+				) chan<- *Command {
+					go func() {
+						<-ctx.Done()
+						done(nil)
+					}()
 
 					cancel()
-				}()
 
-				err := supervisor.Run(ctx)
-				Expect(err).To(Equal(context.Canceled))
-
-				select {
-				case <-time.After(1 * time.Second):
-					Fail("timed-out waiting for result")
-				case <-cmd.Done():
-					Expect(cmd.Err()).To(
-						MatchError(
-							"shutting down",
-						),
-					)
-				}
-			})
-
-			It("returns an error if the command's context is canceled", func() {
-				eventReader.ReadBoundsFunc = func(
-					ctx context.Context,
-					hk, id string,
-				) (uint64, uint64, error) {
-					// Prevent the worker from reading from its command channel.
-					<-ctx.Done()
-					return 0, 0, ctx.Err()
+					return make(chan<- *Command)
 				}
 
-				var cmd *Command
 				go func() {
 					defer GinkgoRecover()
 
-					// Fill up the worker's command buffer (size == 1).
 					executeCommandAsync(
 						ctx,
 						commands,
 						NewParcel("<command>", MessageC1),
 					)
+				}()
 
-					// Cause the supervisor to block waiting for the worker's
-					// command channel to become unblocked.
-					cmdCtx, cmdCancel := context.WithCancel(ctx)
-					cmd = executeCommandAsync(
+				err := supervisor.Run(ctx)
+				Expect(err).To(Equal(context.Canceled))
+			})
+
+			It("does not return if the command's context is canceled", func() {
+				startWorker = func(
+					ctx context.Context,
+					id string,
+					idle chan<- string,
+					done func(error),
+				) chan<- *Command {
+					go func() {
+						<-ctx.Done()
+						done(nil)
+					}()
+
+					return make(chan<- *Command)
+				}
+
+				go func() {
+					defer GinkgoRecover()
+
+					cmdCtx, cancelCommand := context.WithCancel(context.Background())
+
+					cmd := executeCommandAsync(
 						cmdCtx,
 						commands,
-						NewParcel("<command>", MessageC2),
+						NewParcel("<command>", MessageC1),
 					)
 
-					cmdCancel()
+					cancelCommand()
 
-					select {
-					case <-time.After(1 * time.Second):
-						Fail("timed-out waiting for result")
-					case <-cmd.Done():
-						cancel()
-					}
+					Eventually(cmd.Done()).Should(BeClosed())
+					Expect(cmd.Err()).To(Equal(context.Canceled))
 				}()
 
+				// Wait for test timeout to prove that the supervisor
+				// is not shutting down as a result of the command's
+				// context being canceled.
 				err := supervisor.Run(ctx)
-				Expect(err).To(Equal(context.Canceled))
-				Expect(cmd.Err()).To(Equal(context.Canceled))
+				Expect(err).To(Equal(context.DeadlineExceeded))
 			})
 
-			It("returns an error if a worker fails", func() {
-				barrier := make(chan struct{})
-
-				eventReader.ReadBoundsFunc = func(
+			It("returns an error if the worker fails", func() {
+				startWorker = func(
 					ctx context.Context,
-					hk, id string,
-				) (uint64, uint64, error) {
-					select {
-					case barrier <- struct{}{}:
-					case <-ctx.Done():
-						Expect(ctx.Err()).ShouldNot(HaveOccurred())
-					}
-					return 0, 0, errors.New("<error>")
+					id string,
+					idle chan<- string,
+					done func(error),
+				) chan<- *Command {
+					go done(errors.New("<error>"))
+					return make(chan<- *Command)
 				}
 
-				var cmd *Command
 				go func() {
 					defer GinkgoRecover()
 
-					// Fill up the worker's command buffer (size == 1).
-					executeCommandAsync(
+					cmd := executeCommandAsync(
 						ctx,
 						commands,
 						NewParcel("<command>", MessageC1),
 					)
 
-					// Cause the supervisor to block waiting for the worker's
-					// command channel to become unblocked.
-					cmd = executeCommandAsync(
-						ctx,
-						commands,
-						NewParcel("<command>", MessageC2),
-					)
-
-					select {
-					case <-barrier:
-					case <-ctx.Done():
-						Expect(ctx.Err()).ShouldNot(HaveOccurred())
-					}
+					Eventually(cmd.Done()).Should(BeClosed())
+					Expect(cmd.Err()).To(MatchError("shutting down"))
 				}()
 
 				err := supervisor.Run(ctx)
-				Expect(err).To(
-					MatchError(
-						"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read event revision bounds: <error>",
-					),
-				)
-
-				select {
-				case <-time.After(1 * time.Second):
-					Fail("timed-out waiting for result")
-				case <-cmd.Done():
-					Expect(cmd.Err()).To(
-						MatchError(
-							"shutting down",
-						),
-					)
-				}
+				Expect(err).To(MatchError("<error>"))
 			})
 
-			It("does not shutdown the destination worker if it becomes idle", func() {
-				barrier := make(chan struct{})
+			When("when a worker becomes idle", func() {
+				When("the worker belongs to the aggregate instance targetted by the command", func() {
+					It("does not shutdown the worker", func() {
+						startWorker = func(
+							ctx context.Context,
+							id string,
+							idle chan<- string,
+							done func(error),
+						) chan<- *Command {
+							commands := make(chan *Command)
 
-				handler.HandleCommandFunc = func(
-					r dogma.AggregateRoot,
-					s dogma.AggregateCommandScope,
-					m dogma.Message,
-				) {
-					s.RecordEvent(MessageE1)
-					s.Destroy()
-				}
+							go func() {
+								// Wait for supervisor to receive the worker's
+								// idle notification.
+								select {
+								case <-ctx.Done():
+									done(ctx.Err())
+								case idle <- id:
+								}
 
-				eventWriter.WriteEventsFunc = func(
-					ctx context.Context,
-					hk, id string,
-					begin, end uint64,
-					events []*envelopespec.Envelope,
-				) error {
-					select {
-					case barrier <- struct{}{}:
-					case <-ctx.Done():
-						Expect(ctx.Err()).ShouldNot(HaveOccurred())
-					}
+								// Expect commands NOT to be closed, instead we
+								// should immediately receive the that the
+								// supervisor is trying to dispatch.
+								select {
+								case <-ctx.Done():
+									done(ctx.Err())
+								case cmd, ok := <-commands:
+									if ok {
+										cmd.Ack()
+									}
+								}
 
-					eventWriter.WriteEventsFunc = nil
-					return eventStore.WriteEvents(ctx, hk, id, begin, end, events)
-				}
+								<-ctx.Done()
+								done(ctx.Err())
+							}()
 
-				var cmd *Command
-				go func() {
-					defer GinkgoRecover()
-
-					executeCommandAsync(
-						ctx,
-						commands,
-						NewParcel("<command>", MessageC1),
-					)
-
-					// Fill up the worker's command buffer (size == 1).
-					executeCommandAsync(
-						ctx,
-						commands,
-						NewParcel("<command>", MessageC2),
-					)
-
-					// Cause the supervisor to block waiting for the worker's
-					// command channel to become unblocked.
-					cmd = executeCommandAsync(
-						ctx,
-						commands,
-						NewParcel("<command>", MessageC3),
-					)
-
-					select {
-					case <-barrier:
-					case <-ctx.Done():
-						Expect(ctx.Err()).ShouldNot(HaveOccurred())
-					}
-
-					select {
-					case <-time.After(1 * time.Second):
-						Fail("timed-out waiting for result")
-					case <-cmd.Done():
-						cancel()
-					}
-				}()
-
-				err := supervisor.Run(ctx)
-				Expect(err).To(Equal(context.Canceled))
-				Expect(cmd.Err()).ShouldNot(HaveOccurred())
-			})
-
-			XIt("shuts down the other workers if they become idle", func() {
-
-			})
-
-			It("restarts the destination worker if it shuts down", func() {
-				barrier := make(chan struct{})
-
-				handler.HandleCommandFunc = func(
-					r dogma.AggregateRoot,
-					s dogma.AggregateCommandScope,
-					m dogma.Message,
-				) {
-					s.RecordEvent(MessageE1)
-					s.Destroy()
-				}
-
-				supervisor.SetIdleTestHook(
-					func() {
-						select {
-						case barrier <- struct{}{}:
-						case <-ctx.Done():
-							Expect(ctx.Err()).ShouldNot(HaveOccurred())
+							return commands
 						}
-						supervisor.SetIdleTestHook(nil)
-					},
-				)
 
-				var cmd *Command
-				go func() {
-					defer GinkgoRecover()
+						go func() {
+							defer GinkgoRecover()
 
-					executeCommandSync(
-						ctx,
-						commands,
-						NewParcel("<command>", MessageC1),
-					)
+							executeCommandSync(
+								ctx,
+								commands,
+								NewParcel("<command>", MessageC1),
+							)
 
-					select {
-					case <-barrier:
-					case <-ctx.Done():
-						Expect(ctx.Err()).ShouldNot(HaveOccurred())
-					}
+							cancel()
+						}()
 
-					executeCommandAsync(
-						ctx,
-						commands,
-						NewParcel("<command>", MessageC2),
-					)
+						err := supervisor.Run(ctx)
+						Expect(err).To(Equal(context.Canceled))
+					})
 
-					cmd = executeCommandAsync(
-						ctx,
-						commands,
-						NewParcel("<command>", MessageC3),
-					)
+					It("restarts the worker if it shuts down", func() {
+						first := true
+						startWorker = func(
+							ctx context.Context,
+							id string,
+							idle chan<- string,
+							done func(error),
+						) chan<- *Command {
+							commands := make(chan *Command)
 
-					select {
-					case <-time.After(1 * time.Second):
-						Fail("timed-out waiting for result")
-					case <-cmd.Done():
-						cancel()
-					}
-				}()
+							if first {
+								// On the first run we shutdown the worker
+								// immediately.
+								go done(nil)
+								first = false
+							} else {
+								// Otherwise we tell the supervisor to shutdown.
+								go func() {
+									cancel()
+									done(nil)
+								}()
+							}
 
-				err := supervisor.Run(ctx)
-				Expect(err).To(Equal(context.Canceled))
-				Expect(cmd.Err()).ShouldNot(HaveOccurred())
+							return commands
+						}
+
+						go func() {
+							defer GinkgoRecover()
+
+							executeCommandAsync(
+								ctx,
+								commands,
+								NewParcel("<command>", MessageC1),
+							)
+						}()
+
+						err := supervisor.Run(ctx)
+						Expect(err).To(Equal(context.Canceled))
+					})
+				})
+
+				When("the worker does NOT belong to the aggregate instance targetted by the command", func() {
+					barrier := make(chan struct{})
+
+					It("shuts the worker down", func() {
+						startWorker = func(
+							ctx context.Context,
+							id string,
+							idle chan<- string,
+							done func(error),
+						) chan<- *Command {
+							commands := make(chan *Command)
+
+							// The worker for "<instance-1>" blocks until the
+							// supervisor is shutdown. This keeps the supervisor
+							// in its "dispatch" state.
+							if id == "<instance-1>" {
+								go func() {
+									<-ctx.Done()
+									done(ctx.Err())
+								}()
+
+								// Notify the worker for "<instance-2>" that the
+								// supervisor is blocked so it may enter the
+								// idle state.
+								barrier <- struct{}{}
+
+								return commands
+							}
+
+							// The worker for "<instance-2>" handles its command
+							// then enters the idle state.
+							go func() {
+								// Handle the command that caused this worker to
+								// start.
+								select {
+								case <-ctx.Done():
+									done(ctx.Err())
+								case cmd, ok := <-commands:
+									if ok {
+										cmd.Ack()
+									}
+								}
+
+								// Wait to enter the idle state until the worker
+								// for <instance-1> has started, and therefore
+								// the supervisor is in its "dispatch" state.
+								<-barrier
+
+								// Wait for supervisor to receive the worker's
+								// idle notification.
+								select {
+								case <-ctx.Done():
+									done(ctx.Err())
+								case idle <- id:
+								}
+
+								// Wait for permission to shutdown.
+								select {
+								case <-ctx.Done():
+									done(ctx.Err())
+								case _, ok := <-commands:
+									if ok {
+										done(errors.New("unexpected command"))
+									} else {
+										cancel()
+										done(nil)
+									}
+								}
+							}()
+
+							return commands
+						}
+
+						go func() {
+							defer GinkgoRecover()
+
+							// Send a command to <instance-2>, wait for it to
+							// complete, then start the worker for <instance-1>.
+							executeCommandSync(
+								ctx,
+								commands,
+								NewParcel("<command-2>", MessageC2),
+							)
+
+							executeCommandAsync(
+								ctx,
+								commands,
+								NewParcel("<command-1>", MessageC1),
+							)
+						}()
+
+						err := supervisor.Run(ctx)
+						Expect(err).To(Equal(context.Canceled))
+					})
+				})
 			})
 		})
 
-		XIt("waits for all workers to finish when the context is canceled", func() {
+		// XIt("waits for all workers to finish when the context is canceled", func() {
 
-		})
-
-		XIt("uses the a single worker for a given aggregate instance", func() {
-		})
+		// })
 	})
 })

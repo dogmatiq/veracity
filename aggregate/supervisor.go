@@ -2,6 +2,9 @@ package aggregate
 
 import (
 	"context"
+
+	"github.com/dogmatiq/configkit"
+	"github.com/dogmatiq/dogma"
 )
 
 // DefaultCommandBuffer is the default number of commands to buffer in memory
@@ -10,9 +13,19 @@ const DefaultCommandBuffer = 100
 
 // Supervisor manages the lifecycle of all workers for a specific aggregate.
 type Supervisor struct {
-	// WorkerConfig is the configuration used for each worker started by the
-	// supervisor.
-	WorkerConfig WorkerConfig
+	// Handler is the message handler that is managed by this supervisor.
+	Handler dogma.AggregateMessageHandler
+
+	// HandlerIdentity is the identity of the handler.
+	HandlerIdentity configkit.Identity
+
+	// StartWorker starts a worker for a specific instance.
+	StartWorker func(
+		ctx context.Context,
+		id string,
+		idle chan<- string,
+		done func(error),
+	) chan<- *Command
 
 	// Commands is the channel on which commands are received before being
 	// dispatched to instance-specific workers.
@@ -21,15 +34,9 @@ type Supervisor struct {
 	// shuts down due to an error.
 	Commands <-chan *Command
 
-	// CommandBuffer is the number of commands to buffer in-memory per aggregate
-	// instance.
-	//
-	// If it is non-positive, DefaultCommandBuffer is used instead.
-	CommandBuffer int
-
 	// workerCommands is a map of aggregate instance IDs to channels on which
 	// commands can be sent to the worker for that instance.
-	workerCommands map[string]chan *Command
+	workerCommands map[string]chan<- *Command
 
 	// workerIdle is a channel that receives requests from workers to shut down
 	// when they have entered an idle state.
@@ -41,8 +48,6 @@ type Supervisor struct {
 
 	// currentState is the current state of the worker.
 	currentState supervisorState
-
-	idleTestHook func()
 }
 
 // workerResult is the result of a worker exiting.
@@ -62,26 +67,23 @@ type supervisorState func(context.Context) (supervisorState, error)
 func (s *Supervisor) Run(ctx context.Context) error {
 	defer s.waitForAllWorkers()
 
-	s.workerCommands = map[string]chan *Command{}
-	s.workerIdle = make(chan string)
-	s.workerShutdown = make(chan workerResult)
-
 	// Setup a context that is always canceled when the supervisor stops, so
 	// that workers are also stopped.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	s.workerCommands = map[string]chan<- *Command{}
+	s.workerIdle = make(chan string)
+	s.workerShutdown = make(chan workerResult)
 	s.currentState = s.stateWaitForCommand
 
-	for s.currentState != nil {
+	for {
 		var err error
 		s.currentState, err = s.currentState(ctx)
 		if err != nil {
 			return err
 		}
 	}
-
-	return nil
 }
 
 // stateWaitForCommand blocks until a command is available for dispatching.
@@ -91,10 +93,6 @@ func (s *Supervisor) stateWaitForCommand(ctx context.Context) (supervisorState, 
 		return s.stateDispatchCommand(cmd), nil
 
 	case id := <-s.workerIdle:
-		if s.idleTestHook != nil {
-			s.idleTestHook()
-		}
-
 		s.shutdownWorker(id)
 		return s.currentState, nil
 
@@ -106,28 +104,24 @@ func (s *Supervisor) stateWaitForCommand(ctx context.Context) (supervisorState, 
 	}
 }
 
-// stateDispatchCommand dispatches a command to the appropriate worker based on the
-// aggregate instance ID.
+// stateDispatchCommand dispatches a command to the appropriate worker based on
+// the aggregate instance ID.
 //
 // If the worker is not already running it is started.
 func (s *Supervisor) stateDispatchCommand(cmd *Command) supervisorState {
 	return func(ctx context.Context) (supervisorState, error) {
-		instanceID := s.WorkerConfig.Handler.RouteCommandToInstance(cmd.Parcel.Message)
-		commands := s.startWorkerIfNotRunning(ctx, instanceID)
+		id := s.Handler.RouteCommandToInstance(cmd.Parcel.Message)
+		commands := s.startWorkerIfNotRunning(ctx, id)
 
 		select {
 		case commands <- cmd:
 			return s.stateWaitForCommand, nil
 
-		case id := <-s.workerIdle:
-			if s.idleTestHook != nil {
-				s.idleTestHook()
-			}
-
-			if id != instanceID {
+		case idleID := <-s.workerIdle:
+			if idleID != id {
 				// Only shut the worker down if it's NOT the one we're trying to
 				// send a command to.
-				s.shutdownWorker(id)
+				s.shutdownWorker(idleID)
 			}
 			return s.currentState, nil
 
@@ -157,30 +151,20 @@ func (s *Supervisor) stateDispatchCommand(cmd *Command) supervisorState {
 func (s *Supervisor) startWorkerIfNotRunning(
 	ctx context.Context,
 	id string,
-) chan *Command {
+) chan<- *Command {
 	if commands, ok := s.workerCommands[id]; ok {
 		return commands
 	}
 
-	buffer := s.CommandBuffer
-	if buffer <= 0 {
-		buffer = DefaultCommandBuffer
-	}
-
-	commands := make(chan *Command, buffer)
+	commands := s.StartWorker(
+		ctx,
+		id,
+		s.workerIdle,
+		func(err error) {
+			s.workerShutdown <- workerResult{id, err}
+		},
+	)
 	s.workerCommands[id] = commands
-
-	go func() {
-		w := &Worker{
-			WorkerConfig: s.WorkerConfig,
-			InstanceID:   id,
-			Commands:     commands,
-			Idle:         s.workerIdle,
-		}
-
-		err := w.Run(ctx)
-		s.workerShutdown <- workerResult{id, err}
-	}()
 
 	return commands
 }
@@ -188,15 +172,19 @@ func (s *Supervisor) startWorkerIfNotRunning(
 // waitForAllWorkers blocks until all workers have stopped running.
 func (s *Supervisor) waitForAllWorkers() {
 	for len(s.workerCommands) != 0 {
-		res := <-s.workerShutdown
-		delete(s.workerCommands, res.InstanceID)
+		s.handleShutdown(<-s.workerShutdown)
 	}
 }
 
-// shutdownWorker signals to a worker that it should shut down by closing the
-// worker's command channel.
+// shutdownWorker signals to a worker that it should shut down.
 func (s *Supervisor) shutdownWorker(id string) {
 	commands := s.workerCommands[id]
+	if commands == nil {
+		// The worker has already been instructed to shutdown.
+		return
+	}
+
+	// Close the channel to signal to the worker that it should shut down.
 	close(commands)
 
 	// Don't remove the worker from the map yet, because it has not exited.

@@ -19,9 +19,9 @@ func executeCommandSync(
 
 	select {
 	case <-ctx.Done():
-		Expect(ctx.Err()).ShouldNot(HaveOccurred())
+		ExpectWithOffset(1, ctx.Err()).ShouldNot(HaveOccurred())
 	case <-cmd.Done():
-		Expect(cmd.Err()).ShouldNot(HaveOccurred())
+		ExpectWithOffset(1, cmd.Err()).ShouldNot(HaveOccurred())
 	}
 }
 
@@ -38,7 +38,7 @@ func executeCommandAsync(
 
 	select {
 	case <-ctx.Done():
-		Expect(ctx.Err()).ShouldNot(HaveOccurred())
+		ExpectWithOffset(1, ctx.Err()).ShouldNot(HaveOccurred())
 	case commands <- cmd:
 	}
 
