@@ -1,10 +1,10 @@
 package aggregate
 
 import (
-	"github.com/dogmatiq/dodeca/logging"
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/parcel"
+	"go.uber.org/zap"
 )
 
 // scope is an implementation of dogma.AggregateCommandScope.
@@ -37,7 +37,7 @@ type scope struct {
 	EventEnvelopes []*envelopespec.Envelope
 
 	// Logger is the target for log messages from the handler.
-	Logger logging.Logger
+	Logger *zap.SugaredLogger
 }
 
 // InstanceID returns the ID of the targeted aggregate instance.
@@ -74,5 +74,5 @@ func (s *scope) RecordEvent(m dogma.Message) {
 // Log records an informational message within the context of the message
 // that is being handled.
 func (s *scope) Log(f string, v ...interface{}) {
-	logging.Log(s.Logger, f, v...)
+	s.Logger.Infof(f, v...)
 }

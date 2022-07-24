@@ -14,6 +14,7 @@ import (
 	"github.com/dogmatiq/veracity/persistence/memory"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/zap"
 )
 
 var _ = Describe("type Loader", func() {
@@ -53,9 +54,15 @@ var _ = Describe("type Loader", func() {
 
 		root = &AggregateRoot{}
 
+		logger, err := zap.NewDevelopment(
+			zap.AddStacktrace(zap.PanicLevel + 1),
+		)
+		Expect(err).ShouldNot(HaveOccurred())
+
 		loader = &Loader{
 			EventReader: eventReader,
 			Marshaler:   Marshaler,
+			Logger:      logger,
 		}
 	})
 

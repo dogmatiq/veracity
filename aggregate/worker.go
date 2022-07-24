@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"github.com/dogmatiq/configkit"
-	"github.com/dogmatiq/dodeca/logging"
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/linger"
 	"github.com/dogmatiq/marshalkit"
 	"github.com/dogmatiq/veracity/parcel"
+	"go.uber.org/zap"
 )
 
 // DefaultIdleTimeout is the default amount of time a worker will continue
@@ -51,7 +51,7 @@ type WorkerConfig struct {
 	SnapshotInterval uint64
 
 	// Logger is the target for log messages about the aggregate instance.
-	Logger logging.Logger
+	Logger *zap.Logger
 }
 
 // Worker manages the lifecycle of a single aggregate instance.
@@ -173,12 +173,12 @@ func (w *Worker) stateHandleCommand(cmd *Command, ok bool) workerState {
 			Root:            w.root,
 			Packer:          w.Packer,
 			IsDestroyed:     w.begin >= w.end,
-			Logger: logging.Prefix(
-				w.Logger,
-				"aggregate %s[%s]: ",
-				w.HandlerIdentity.Name,
-				w.InstanceID,
-			),
+			Logger: w.Logger.With(
+				zap.String("handler_name", w.HandlerIdentity.Name),
+				zap.String("handler_key", w.HandlerIdentity.Key),
+				zap.String("instance_id", w.InstanceID),
+				zap.String("message_id", cmd.Parcel.ID()),
+			).Sugar(),
 		}
 
 		w.Handler.HandleCommand(
@@ -304,13 +304,13 @@ func (w *Worker) takeSnapshot(ctx context.Context) error {
 			return err
 		}
 
-		logging.Log(
-			w.Logger,
-			"up-to-date snapshot of aggregate root %s[%s] cannot be be written at revision %d: %w",
-			w.HandlerIdentity.Name,
-			w.InstanceID,
-			snapshotRev,
-			err,
+		w.Logger.Warn(
+			"cannot write up-to-date snapshot of aggregate root",
+			zap.String("handler_name", w.HandlerIdentity.Name),
+			zap.String("handler_key", w.HandlerIdentity.Key),
+			zap.String("instance_id", w.InstanceID),
+			zap.Uint64("revision", snapshotRev),
+			zap.Error(err),
 		)
 
 		return nil
@@ -318,12 +318,12 @@ func (w *Worker) takeSnapshot(ctx context.Context) error {
 
 	w.snapshotAge = 0
 
-	logging.Log(
-		w.Logger,
-		"up-to-date snapshot of aggregate root %s[%s] written at revision %d: %w",
-		w.HandlerIdentity.Name,
-		w.InstanceID,
-		snapshotRev,
+	w.Logger.Debug(
+		"wrote up-to-date snapshot of aggregate root",
+		zap.String("handler_name", w.HandlerIdentity.Name),
+		zap.String("handler_key", w.HandlerIdentity.Key),
+		zap.String("instance_id", w.InstanceID),
+		zap.Uint64("revision", snapshotRev),
 	)
 
 	return nil
@@ -349,11 +349,12 @@ func (w *Worker) archiveSnapshots(ctx context.Context) error {
 			return err
 		}
 
-		logging.Log(
-			w.Logger,
-			"snapshots of aggregate root %s[%s] cannot be be archived: %w",
-			w.HandlerIdentity.Name,
-			w.InstanceID,
+		w.Logger.Warn(
+			"cannot archive snapshots aggregate root",
+			zap.String("handler_name", w.HandlerIdentity.Name),
+			zap.String("handler_key", w.HandlerIdentity.Key),
+			zap.String("instance_id", w.InstanceID),
+			zap.Error(err),
 		)
 	}
 

@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/dogmatiq/configkit"
-	"github.com/dogmatiq/dodeca/logging"
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/linger"
 	"github.com/dogmatiq/marshalkit"
+	"go.uber.org/zap"
 )
 
 const (
@@ -50,7 +50,7 @@ type Loader struct {
 	SnapshotWriteTimeout time.Duration
 
 	// Logger is the target for messages about the loading process.
-	Logger logging.Logger
+	Logger *zap.Logger
 }
 
 // Load populates an aggregate root with data loaded from persistent storage.
@@ -107,11 +107,11 @@ func (l *Loader) Load(
 
 	// If the end is zero this instance has no revisions at all.
 	if end == 0 {
-		logging.Log(
-			l.Logger,
-			"aggregate root %s[%s] has no historical events",
-			h.Name,
-			id,
+		l.Logger.Debug(
+			"aggregate root has no historical events",
+			zap.String("handler_name", h.Name),
+			zap.String("handler_key", h.Key),
+			zap.String("instance_id", id),
 		)
 
 		return 0, 0, 0, nil
@@ -121,12 +121,12 @@ func (l *Loader) Load(
 	// time the most recent revision was made, and therefore no events need to
 	// be applied.
 	if begin == end {
-		logging.Log(
-			l.Logger,
-			"aggregate root %s[%s] has no historical events since being destroyed at revision %d",
-			h.Name,
-			id,
-			begin-1,
+		l.Logger.Debug(
+			"aggregate root has no historical events since it was last destroyed",
+			zap.String("handler_name", h.Name),
+			zap.String("handler_key", h.Key),
+			zap.String("instance_id", id),
+			zap.Uint64("destruction_revision", begin-1),
 		)
 
 		return begin, end, 0, nil
@@ -161,12 +161,12 @@ func (l *Loader) Load(
 		// revisions have been made since the snapshot was taken, and therefore
 		// there's nothing more to load.
 		if readFrom == end {
-			logging.Log(
-				l.Logger,
-				"aggregate root %s[%s] loaded from up-to-date snapshot taken at revision %d",
-				h.Name,
-				id,
-				snapshotRev,
+			l.Logger.Debug(
+				"aggregate root loaded from up-to-date snapshot",
+				zap.String("handler_name", h.Name),
+				zap.String("handler_key", h.Key),
+				zap.String("instance_id", id),
+				zap.Uint64("snapshot_revision", snapshotRev),
 			)
 
 			return begin, end, 0, nil
@@ -208,21 +208,21 @@ func (l *Loader) Load(
 
 	// Log about how the aggregate root was loaded.
 	if hasSnapshot {
-		logging.Log(
-			l.Logger,
-			"aggregate root %s[%s] loaded from outdated snapshot taken at revision %d and events from %d subsequent revision(s)",
-			h.Name,
-			id,
-			snapshotRev,
-			snapshotAge,
+		l.Logger.Debug(
+			"aggregate root loaded from out-of-date snapshot",
+			zap.String("handler_name", h.Name),
+			zap.String("handler_key", h.Key),
+			zap.String("instance_id", id),
+			zap.Uint64("snapshot_revision", snapshotRev),
+			zap.Uint64("snapshot_age", snapshotAge),
 		)
 	} else {
-		logging.Log(
-			l.Logger,
-			"aggregate root %s[%s] loaded from %d revision(s)",
-			h.Name,
-			id,
-			snapshotAge,
+		l.Logger.Debug(
+			"aggregate root loaded without using a snapshot",
+			zap.String("handler_name", h.Name),
+			zap.String("handler_key", h.Key),
+			zap.String("instance_id", id),
+			zap.Uint64("revisions", snapshotAge),
 		)
 	}
 
@@ -267,12 +267,12 @@ func (l *Loader) readSnapshot(
 		// Otherwise it's not a fatal error, so we log about it but don't return
 		// an error. We may still be able to load the aggregate root from its
 		// entire event history.
-		logging.Log(
-			l.Logger,
-			"snapshot of aggregate root %s[%s] cannot be read: %s",
-			h.Name,
-			id,
-			err,
+		l.Logger.Warn(
+			"cannot read snapshot of aggregate root",
+			zap.String("handler_name", h.Name),
+			zap.String("handler_key", h.Key),
+			zap.String("instance_id", id),
+			zap.Error(err),
 		)
 
 		return 0, false, nil
@@ -314,24 +314,23 @@ func (l *Loader) writeSnapshot(
 		r,
 		rev,
 	); err != nil {
-		logging.Log(
-			l.Logger,
-			"snapshot of aggregate root %s[%s] cannot be be written at revision %d (possibly outdated): %w",
-			h.Name,
-			id,
-			rev,
-			err,
+		l.Logger.Warn(
+			"cannot write (possibly outdated) snapshot of aggregate root",
+			zap.String("handler_name", h.Name),
+			zap.String("handler_key", h.Key),
+			zap.String("instance_id", id),
+			zap.Uint64("revision", rev),
+			zap.Error(err),
 		)
-
 		return
 	}
 
-	logging.Log(
-		l.Logger,
-		"snapshot of aggregate root %s[%s] written at revision %d (possibly outdated)",
-		h.Name,
-		id,
-		rev,
+	l.Logger.Debug(
+		"wrote (possibly outdated) snapshot of aggregate root",
+		zap.String("handler_name", h.Name),
+		zap.String("handler_key", h.Key),
+		zap.String("instance_id", id),
+		zap.Uint64("revision", rev),
 	)
 }
 

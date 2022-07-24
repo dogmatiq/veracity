@@ -1,6 +1,7 @@
 package aggregate_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"time"
@@ -8,7 +9,6 @@ import (
 	"github.com/dogmatiq/configkit"
 	. "github.com/dogmatiq/configkit/fixtures"
 	"github.com/dogmatiq/configkit/message"
-	"github.com/dogmatiq/dodeca/logging"
 	"github.com/dogmatiq/dogma"
 	. "github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/interopspec/envelopespec"
@@ -20,6 +20,8 @@ import (
 	"github.com/dogmatiq/veracity/persistence/memory"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var _ = Describe("type Worker", func() {
@@ -40,7 +42,6 @@ var _ = Describe("type Worker", func() {
 		commands chan *Command
 		idle     chan string
 		handler  *AggregateMessageHandler
-		logger   *logging.BufferedLogger
 		worker   *Worker
 	)
 
@@ -70,10 +71,16 @@ var _ = Describe("type Worker", func() {
 			SnapshotWriter: snapshotStore,
 		}
 
+		logger, err := zap.NewDevelopment(
+			zap.AddStacktrace(zap.PanicLevel + 1),
+		)
+		Expect(err).ShouldNot(HaveOccurred())
+
 		loader = &Loader{
 			EventReader:    eventReader,
 			SnapshotReader: snapshotReader,
 			Marshaler:      Marshaler,
+			Logger:         logger,
 		}
 
 		commands = make(chan *Command, DefaultCommandBuffer)
@@ -105,8 +112,6 @@ var _ = Describe("type Worker", func() {
 				MessageEType: message.EventRole,
 			},
 		)
-
-		logger = &logging.BufferedLogger{}
 
 		worker = &Worker{
 			WorkerConfig: WorkerConfig{
@@ -888,6 +893,20 @@ var _ = Describe("type Worker", func() {
 		})
 
 		It("allows logging via the scope", func() {
+			buffer := &bytes.Buffer{}
+
+			logger := zap.New(
+				zapcore.NewCore(
+					zapcore.NewConsoleEncoder(
+						zap.NewDevelopmentEncoderConfig(),
+					),
+					zapcore.AddSync(buffer),
+					zapcore.DebugLevel,
+				),
+			)
+
+			worker.Logger = logger
+
 			handler.HandleCommandFunc = func(
 				r dogma.AggregateRoot,
 				s dogma.AggregateCommandScope,
@@ -906,10 +925,8 @@ var _ = Describe("type Worker", func() {
 			err := worker.Run(ctx)
 			Expect(err).To(Equal(context.Canceled))
 
-			Expect(logger.Messages()).To(ContainElement(
-				logging.BufferedLogMessage{
-					Message: "aggregate <handler-name>[<instance>]: <log-message 1 2 3>",
-				},
+			Expect(buffer.String()).To(ContainSubstring(
+				"<log-message 1 2 3>",
 			))
 		})
 	})
