@@ -4,8 +4,6 @@ import (
 	"context"
 
 	"github.com/dogmatiq/configkit"
-	"github.com/dogmatiq/configkit/message"
-	"github.com/dogmatiq/dodeca/logging"
 	"github.com/dogmatiq/dogma"
 )
 
@@ -35,9 +33,6 @@ type Supervisor struct {
 	// If the channel is buffered, commands may be ignored if the supervisor
 	// shuts down due to an error.
 	Commands <-chan *Command
-
-	// Logger is the target for log messages about the aggregate instance.
-	Logger logging.Logger
 
 	// workerCommands is a map of aggregate instance IDs to channels on which
 	// commands can be sent to the worker for that instance.
@@ -95,21 +90,10 @@ func (s *Supervisor) Run(ctx context.Context) error {
 func (s *Supervisor) stateWaitForCommand(ctx context.Context) (supervisorState, error) {
 	select {
 	case cmd := <-s.Commands:
-		id := s.Handler.RouteCommandToInstance(cmd.Parcel.Message)
-
-		logging.Log(
-			s.Logger,
-			"command %s[%s] received for aggregate %s[%s]",
-			message.TypeOf(cmd.Parcel.Message),
-			cmd.Parcel.Envelope.GetMessageId(),
-			s.HandlerIdentity.Name,
-			id,
-		)
-
-		return s.stateDispatchCommand(id, cmd), nil
+		return s.stateDispatchCommand(cmd), nil
 
 	case id := <-s.workerIdle:
-		s.acknowledgeIdle(id)
+		s.shutdownWorker(id)
 		return s.currentState, nil
 
 	case res := <-s.workerShutdown:
@@ -120,41 +104,25 @@ func (s *Supervisor) stateWaitForCommand(ctx context.Context) (supervisorState, 
 	}
 }
 
-// stateDispatchCommand dispatches a command to the appropriate worker based on the
-// aggregate instance ID.
+// stateDispatchCommand dispatches a command to the appropriate worker based on
+// the aggregate instance ID.
 //
 // If the worker is not already running it is started.
-func (s *Supervisor) stateDispatchCommand(id string, cmd *Command) supervisorState {
+func (s *Supervisor) stateDispatchCommand(cmd *Command) supervisorState {
 	return func(ctx context.Context) (supervisorState, error) {
+		id := s.Handler.RouteCommandToInstance(cmd.Parcel.Message)
 		commands := s.startWorkerIfNotRunning(ctx, id)
 
 		select {
 		case commands <- cmd:
-			logging.Log(
-				s.Logger,
-				"command %s[%s] enqueued for aggregate %s[%s] worker",
-				message.TypeOf(cmd.Parcel.Message),
-				cmd.Parcel.Envelope.GetMessageId(),
-				s.HandlerIdentity.Name,
-				id,
-			)
-
 			return s.stateWaitForCommand, nil
 
 		case idleID := <-s.workerIdle:
-			// Only shut the worker down if it's NOT the one we're trying to
-			// send a command to.
-			if idleID == id {
-				logging.Log(
-					s.Logger,
-					"aggregate %s[%s] worker is idle but is about to be sent another command",
-					s.HandlerIdentity.Name,
-					id,
-				)
-			} else {
-				s.acknowledgeIdle(idleID)
+			if idleID != id {
+				// Only shut the worker down if it's NOT the one we're trying to
+				// send a command to.
+				s.shutdownWorker(idleID)
 			}
-
 			return s.currentState, nil
 
 		case res := <-s.workerShutdown:
@@ -163,7 +131,6 @@ func (s *Supervisor) stateDispatchCommand(id string, cmd *Command) supervisorSta
 				cmd.Nack(errShutdown)
 				return nil, err
 			}
-
 			return s.currentState, err
 
 		case <-ctx.Done():
@@ -199,13 +166,6 @@ func (s *Supervisor) startWorkerIfNotRunning(
 	)
 	s.workerCommands[id] = commands
 
-	logging.Log(
-		s.Logger,
-		"aggregate %s[%s] worker has started",
-		s.HandlerIdentity.Name,
-		id,
-	)
-
 	return commands
 }
 
@@ -216,21 +176,13 @@ func (s *Supervisor) waitForAllWorkers() {
 	}
 }
 
-// acknowledgeIdle signals to a worker that it should shut down by closing the
-// worker's command channel.
-func (s *Supervisor) acknowledgeIdle(id string) {
+// shutdownWorker signals to a worker that it should shut down.
+func (s *Supervisor) shutdownWorker(id string) {
 	commands := s.workerCommands[id]
 	if commands == nil {
 		// The worker has already been instructed to shutdown.
 		return
 	}
-
-	logging.Log(
-		s.Logger,
-		"aggregate %s[%s] worker is idle and will be shutdown",
-		s.HandlerIdentity.Name,
-		id,
-	)
 
 	// Close the channel to signal to the worker that it should shut down.
 	close(commands)
@@ -245,24 +197,6 @@ func (s *Supervisor) acknowledgeIdle(id string) {
 
 // handleShutdown handles a result from a worker's Run() method.
 func (s *Supervisor) handleShutdown(res workerResult) error {
-	if res.Err == nil {
-		logging.Log(
-			s.Logger,
-			"aggregate %s[%s] worker has shutdown",
-			s.HandlerIdentity.Name,
-			res.InstanceID,
-		)
-	} else {
-		logging.Log(
-			s.Logger,
-			"aggregate %s[%s] worker has shutdown: %s",
-			s.HandlerIdentity.Name,
-			res.InstanceID,
-			res.Err,
-		)
-	}
-
 	delete(s.workerCommands, res.InstanceID)
-
 	return res.Err
 }

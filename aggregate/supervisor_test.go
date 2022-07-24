@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/dogmatiq/dodeca/logging"
 	"github.com/dogmatiq/dogma"
 	. "github.com/dogmatiq/dogma/fixtures"
 	. "github.com/dogmatiq/veracity/aggregate"
@@ -76,7 +75,6 @@ var _ = Describe("type Supervisor", func() {
 			) chan<- *Command {
 				return startWorker(ctx, id, idle, done)
 			},
-			Logger: logging.DefaultLogger,
 		}
 	})
 
