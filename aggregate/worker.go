@@ -132,11 +132,7 @@ func (w *Worker) stateLoadRoot(ctx context.Context) (workerState, error) {
 		w.root,
 	)
 
-	if err != nil {
-		return nil, err
-	}
-
-	return w.stateWaitForCommand, nil
+	return w.stateWaitForCommand, err
 }
 
 // stateWaitForCommand blocks until a command is available for handling, or the
