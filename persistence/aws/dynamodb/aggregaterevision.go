@@ -127,7 +127,7 @@ func (r *AggregateRevisionReader) ReadRevisions(
 				":id":    marshalAggregateRevisionPartitionID(hk, id),
 				":begin": marshalRevision(begin),
 			},
-			ProjectionExpression: aws.String(`Revision, BeginRevision, Events`),
+			ProjectionExpression: aws.String(`Revision, BeginRevision, CommandID, Events`),
 		},
 	)
 	if err != nil {
@@ -153,6 +153,8 @@ func (r *AggregateRevisionReader) ReadRevisions(
 		if err != nil {
 			return nil, err
 		}
+
+		rev.CommandID = unmarshalString(item["CommandID"])
 
 		rev.Events, err = unmarshalEnvelopes(item["Events"])
 		if err != nil {
@@ -223,6 +225,7 @@ func (w *AggregateRevisionWriter) PrepareRevision(
 		"HandlerKeyAndInstanceID": marshalAggregateRevisionPartitionID(hk, id),
 		"Revision":                marshalRevision(rev.End),
 		"BeginRevision":           marshalRevision(rev.Begin),
+		"CommandID":               marshalString(rev.CommandID),
 		"Uncommitted":             marshalBool(true),
 	}
 
@@ -332,9 +335,7 @@ func marshalAggregateRevisionPartitionID(hk, id string) *dynamodb.AttributeValue
 	w.WriteRune(' ')
 	w.WriteString(id)
 
-	return &dynamodb.AttributeValue{
-		S: aws.String(w.String()),
-	}
+	return marshalString(w.String())
 }
 
 // CreateAggregateRevisionTable creates a DynamoDB for use with
@@ -404,6 +405,20 @@ func unmarshalRevision(attr *dynamodb.AttributeValue) (uint64, error) {
 		10,
 		64,
 	)
+}
+
+// marshalString marshals a string to a DynamoDB string.
+func marshalString(v string) *dynamodb.AttributeValue {
+	return &dynamodb.AttributeValue{S: &v}
+}
+
+// unmarshalString unmarshals a stirng from a DynamoDB string.
+func unmarshalString(attr *dynamodb.AttributeValue) string {
+	if attr != nil {
+		return aws.StringValue(attr.S)
+	}
+
+	return ""
 }
 
 // marshalBool marshals a boolean to a DynamoDB boolean.

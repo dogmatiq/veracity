@@ -18,6 +18,9 @@ type Revision struct {
 	// aggregate's history.
 	End uint64
 
+	// CommandID is the ID of the command message that caused this revision.
+	CommandID string
+
 	// Events are the events recorded within this revision.
 	Events []*envelopespec.Envelope
 }

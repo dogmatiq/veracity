@@ -249,8 +249,9 @@ var _ = Describe("type Worker", func() {
 					"<handler-key>",
 					"<instance>",
 					Revision{
-						Begin: 0,
-						End:   0,
+						Begin:     0,
+						End:       0,
+						CommandID: "<command-0>",
 						Events: []*envelopespec.Envelope{
 							NewEnvelope("<existing>", MessageX1),
 						},
@@ -286,13 +287,13 @@ var _ = Describe("type Worker", func() {
 			executeCommandAsync(
 				ctx,
 				commands,
-				NewParcel("<command-1>", MessageC1),
+				NewParcel("<command-0>", MessageC1),
 			)
 
 			cmd := executeCommandAsync(
 				ctx,
 				commands,
-				NewParcel("<command-2>", MessageC2),
+				NewParcel("<command-1>", MessageC2),
 			)
 
 			go func() {
@@ -315,12 +316,13 @@ var _ = Describe("type Worker", func() {
 				0,
 				[]Revision{
 					{
-						Begin: 0,
-						End:   0,
+						Begin:     0,
+						End:       0,
+						CommandID: "<command-0>",
 						Events: []*envelopespec.Envelope{
 							{
 								MessageId:         "0",
-								CausationId:       "<command-1>",
+								CausationId:       "<command-0>",
 								CorrelationId:     "<correlation>",
 								SourceApplication: packer.Application,
 								SourceHandler:     marshalkit.MustMarshalEnvelopeIdentity(worker.HandlerIdentity),
@@ -334,12 +336,13 @@ var _ = Describe("type Worker", func() {
 						},
 					},
 					{
-						Begin: 0,
-						End:   1,
+						Begin:     0,
+						End:       1,
+						CommandID: "<command-1>",
 						Events: []*envelopespec.Envelope{
 							{
 								MessageId:         "1",
-								CausationId:       "<command-2>",
+								CausationId:       "<command-1>",
 								CorrelationId:     "<correlation>",
 								SourceApplication: packer.Application,
 								SourceHandler:     marshalkit.MustMarshalEnvelopeIdentity(worker.HandlerIdentity),
@@ -378,8 +381,9 @@ var _ = Describe("type Worker", func() {
 					"<handler-key>",
 					"<instance>",
 					Revision{
-						Begin: 0,
-						End:   1,
+						Begin:     0,
+						End:       1,
+						CommandID: "<command-1>",
 						Events: []*envelopespec.Envelope{
 							NewEnvelope("<existing>", MessageX1),
 						},
@@ -481,8 +485,9 @@ var _ = Describe("type Worker", func() {
 					"<handler-key>",
 					"<instance>",
 					Revision{
-						Begin: 0,
-						End:   0,
+						Begin:     0,
+						End:       0,
+						CommandID: "<command-0>",
 						Events: []*envelopespec.Envelope{
 							NewEnvelope("<existing-1>", MessageX1),
 							NewEnvelope("<existing-2>", MessageX2),
@@ -752,8 +757,9 @@ var _ = Describe("type Worker", func() {
 					"<handler-key>",
 					"<instance>",
 					Revision{
-						Begin: 0,
-						End:   0,
+						Begin:     0,
+						End:       0,
+						CommandID: "<command-0>",
 						Events: []*envelopespec.Envelope{
 							NewEnvelope("<existing-1>", MessageX1),
 							NewEnvelope("<existing-2>", MessageX2),

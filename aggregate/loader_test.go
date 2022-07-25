@@ -3,6 +3,7 @@ package aggregate_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/dogmatiq/configkit"
@@ -125,8 +126,9 @@ var _ = Describe("type Loader", func() {
 					handlerID.Key,
 					"<instance>",
 					aggregate.Revision{
-						Begin: 0,
-						End:   0,
+						Begin:     0,
+						End:       0,
+						CommandID: "<command-0>",
 						Events: []*envelopespec.Envelope{
 							NewEnvelope("<event-0>", MessageA1),
 							NewEnvelope("<event-1>", MessageB1),
@@ -278,8 +280,9 @@ var _ = Describe("type Loader", func() {
 								handlerID.Key,
 								"<instance>",
 								aggregate.Revision{
-									Begin: 0,
-									End:   1,
+									Begin:     0,
+									End:       1,
+									CommandID: "<command-1>",
 									Events: []*envelopespec.Envelope{
 										NewEnvelope("<event-3>", MessageD1),
 									},
@@ -472,8 +475,9 @@ var _ = Describe("type Loader", func() {
 
 							return []Revision{
 								{
-									Begin: 0,
-									End:   begin,
+									Begin:     0,
+									End:       begin,
+									CommandID: fmt.Sprintf("<command-%d>", begin),
 									Events: []*envelopespec.Envelope{
 										{ /*empty envelope*/ },
 									},
@@ -558,8 +562,9 @@ var _ = Describe("type Loader", func() {
 						handlerID.Key,
 						"<instance>",
 						Revision{
-							Begin: 2,
-							End:   1,
+							Begin:     2,
+							End:       1,
+							CommandID: "<command-1>",
 						},
 					)
 				})
@@ -591,8 +596,9 @@ var _ = Describe("type Loader", func() {
 							handlerID.Key,
 							"<instance>",
 							Revision{
-								Begin: 2,
-								End:   2,
+								Begin:     2,
+								End:       2,
+								CommandID: "<command-2>",
 								Events: []*envelopespec.Envelope{
 									NewEnvelope("<event-3>", MessageD1),
 								},
@@ -605,8 +611,9 @@ var _ = Describe("type Loader", func() {
 							handlerID.Key,
 							"<instance>",
 							Revision{
-								Begin: 2,
-								End:   3,
+								Begin:     2,
+								End:       3,
+								CommandID: "<command-3>",
 								Events: []*envelopespec.Envelope{
 									NewEnvelope("<event-4>", MessageE1),
 								},

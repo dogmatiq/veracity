@@ -23,8 +23,9 @@ type aggregateInstance struct {
 }
 
 type aggregateRevision struct {
-	Begin  uint64
-	Events [][]byte
+	Begin     uint64
+	CommandID string
+	Events    [][]byte
 }
 
 // ReadBounds returns the revisions that are the bounds of the relevant
@@ -85,9 +86,10 @@ func (s *AggregateRevisionStore) ReadRevisions(
 
 		return []aggregate.Revision{
 			{
-				Begin:  rev.Begin,
-				End:    begin,
-				Events: events,
+				Begin:     rev.Begin,
+				End:       begin,
+				CommandID: rev.CommandID,
+				Events:    events,
 			},
 		}, nil
 	}
@@ -143,8 +145,9 @@ func (s *AggregateRevisionStore) PrepareRevision(
 	}
 
 	i.Revisions = append(i.Revisions, aggregateRevision{
-		Begin:  rev.Begin,
-		Events: events,
+		Begin:     rev.Begin,
+		CommandID: rev.CommandID,
+		Events:    events,
 	})
 
 	i.Bounds.Begin = rev.Begin

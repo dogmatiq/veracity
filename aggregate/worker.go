@@ -239,6 +239,7 @@ func (w *Worker) saveChanges(ctx context.Context, sc *scope) error {
 		Revision{
 			begin,
 			w.bounds.End,
+			sc.Command.ID(),
 			sc.EventEnvelopes,
 		},
 	); err != nil {
