@@ -124,7 +124,6 @@ func (l *Loader) Load(
 			zap.String("instance_id", id),
 			zap.Uint64("begin_revision", bounds.Begin),
 			zap.Uint64("end_revision", bounds.End),
-			zap.String("uncommitted_command_id", bounds.UncommittedCommandID),
 		)
 
 		return bounds, 0, nil
@@ -166,7 +165,6 @@ func (l *Loader) Load(
 				zap.String("instance_id", id),
 				zap.Uint64("begin_revision", bounds.Begin),
 				zap.Uint64("end_revision", bounds.End),
-				zap.String("uncommitted_command_id", bounds.UncommittedCommandID),
 				zap.Uint64("snapshot_revision", snapshotRev),
 			)
 
@@ -216,7 +214,6 @@ func (l *Loader) Load(
 			zap.String("instance_id", id),
 			zap.Uint64("begin_revision", bounds.Begin),
 			zap.Uint64("end_revision", bounds.End),
-			zap.String("uncommitted_command_id", bounds.UncommittedCommandID),
 			zap.Uint64("snapshot_revision", snapshotRev),
 		)
 	} else {
@@ -227,7 +224,6 @@ func (l *Loader) Load(
 			zap.String("instance_id", id),
 			zap.Uint64("begin_revision", bounds.Begin),
 			zap.Uint64("end_revision", bounds.End),
-			zap.String("uncommitted_command_id", bounds.UncommittedCommandID),
 		)
 	}
 

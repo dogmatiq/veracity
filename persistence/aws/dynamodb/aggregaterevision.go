@@ -91,7 +91,7 @@ func (r *AggregateRevisionReader) ReadBounds(
 	bounds.End++
 
 	if unmarshalBool(item["Uncommitted"]) {
-		bounds.UncommittedCommandID = unmarshalString(item["CommandID"])
+		bounds.UncommittedRevisionCausationID = unmarshalString(item["CommandID"])
 	}
 
 	return bounds, nil
@@ -216,9 +216,7 @@ type AggregateRevisionWriter struct {
 // control" error occurs and no changes are persisted. The behavior is undefined
 // if rev.End is greater than the actual end revision.
 //
-// The behavior is undefined if the most recent revision is uncommitted. It is
-// the caller's responsibility to commit an uncommitted revision, as indicated
-// by the result of a call to RevisionReader.ReadBounds().
+// The behavior is undefined if the most recent revision is uncommitted.
 func (w *AggregateRevisionWriter) PrepareRevision(
 	ctx context.Context,
 	hk, id string,

@@ -90,9 +90,9 @@ func DeclareAggregateRevisionTests(
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 			gomega.Expect(bounds).To(gomega.Equal(
 				aggregate.Bounds{
-					Begin:                0,
-					End:                  1,
-					UncommittedCommandID: "<command-0>",
+					Begin:                          0,
+					End:                            1,
+					UncommittedRevisionCausationID: "<command-0>",
 				},
 			))
 		})
@@ -467,9 +467,9 @@ func DeclareAggregateRevisionTests(
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 			gomega.Expect(bounds).To(gomega.Equal(
 				aggregate.Bounds{
-					Begin:                1,
-					End:                  1,
-					UncommittedCommandID: "<command-0>",
+					Begin:                          1,
+					End:                            1,
+					UncommittedRevisionCausationID: "<command-0>",
 				},
 			))
 		})

@@ -117,9 +117,7 @@ func (s *AggregateRevisionStore) ReadRevisions(
 // control" error occurs and no changes are persisted. The behavior is undefined
 // if rev.End is greater than the actual end revision.
 //
-// The behavior is undefined if the most recent revision is uncommitted. It is
-// the caller's responsibility to commit an uncommitted revision, as indicated
-// by the result of a call to RevisionReader.ReadBounds().
+// The behavior is undefined if the most recent revision is uncommitted.
 func (s *AggregateRevisionStore) PrepareRevision(
 	ctx context.Context,
 	hk, id string,
@@ -144,7 +142,7 @@ func (s *AggregateRevisionStore) PrepareRevision(
 		return fmt.Errorf("optimistic concurrency conflict, %d is not the next revision", rev.End)
 	}
 
-	if i.Bounds.UncommittedCommandID != "" {
+	if i.Bounds.UncommittedRevisionCausationID != "" {
 		panic("cannot prepare new revision when there is an uncommitted revision")
 	}
 
@@ -156,7 +154,7 @@ func (s *AggregateRevisionStore) PrepareRevision(
 
 	i.Bounds.Begin = rev.Begin
 	i.Bounds.End++
-	i.Bounds.UncommittedCommandID = rev.CommandID
+	i.Bounds.UncommittedRevisionCausationID = rev.CommandID
 
 	if s.instances == nil {
 		s.instances = map[instanceKey]aggregateInstance{}
@@ -194,8 +192,8 @@ func (s *AggregateRevisionStore) CommitRevision(
 	last := i.Bounds.End - 1
 
 	if rev == last {
-		if i.Bounds.UncommittedCommandID != "" {
-			i.Bounds.UncommittedCommandID = ""
+		if i.Bounds.UncommittedRevisionCausationID != "" {
+			i.Bounds.UncommittedRevisionCausationID = ""
 
 			r := i.Revisions[rev-i.FirstRevision]
 			i.Revisions = i.Revisions[r.Begin-i.FirstRevision:]

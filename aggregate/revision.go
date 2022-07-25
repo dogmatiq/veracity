@@ -39,11 +39,11 @@ type Bounds struct {
 	// End is the (exclusive) end revision of the aggregate instance.
 	End uint64
 
-	// UncommittedCommandID is the ID of the command that produced the most
-	// recent revision if that revision has not been committed.
+	// UncommittedRevisionCausationID is the ID of the command that produced the
+	// most recent revision if that revision has not been committed.
 	//
 	// If the most recent revision has been committed, this field is empty.
-	UncommittedCommandID string
+	UncommittedRevisionCausationID string
 }
 
 // RevisionReader is an interface for reading historical revisions recorded by
@@ -105,9 +105,7 @@ type RevisionWriter interface {
 	// concurrency control" error occurs and no changes are persisted. The
 	// behavior is undefined if rev.End is greater than the actual end revision.
 	//
-	// The behavior is undefined if the most recent revision is uncommitted. It
-	// is the caller's responsibility to commit an uncommitted revision, as
-	// indicated by the result of a call to RevisionReader.ReadBounds().
+	// The behavior is undefined if the most recent revision is uncommitted.
 	PrepareRevision(
 		ctx context.Context,
 		hk, id string,

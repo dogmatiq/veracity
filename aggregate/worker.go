@@ -139,7 +139,7 @@ func (w *Worker) stateLoadRoot(ctx context.Context) (workerState, error) {
 		return nil, err
 	}
 
-	if w.bounds.UncommittedCommandID != "" {
+	if w.bounds.UncommittedRevisionCausationID != "" {
 		return w.stateCommitLastRevision, nil
 	}
 
@@ -151,14 +151,14 @@ func (w *Worker) stateLoadRoot(ctx context.Context) (workerState, error) {
 func (w *Worker) stateCommitLastRevision(ctx context.Context) (workerState, error) {
 	if err := w.Acknowledger.CommitAck(
 		ctx,
-		w.bounds.UncommittedCommandID,
+		w.bounds.UncommittedRevisionCausationID,
 		w.HandlerIdentity.Key,
 		w.InstanceID,
 		w.bounds.End-1,
 	); err != nil {
 		return nil, fmt.Errorf(
 			"cannot commit acknowledgement of command %s for revision %d of aggregate root %s[%s]: %w",
-			w.bounds.UncommittedCommandID,
+			w.bounds.UncommittedRevisionCausationID,
 			w.bounds.End-1,
 			w.HandlerIdentity.Name,
 			w.InstanceID,
@@ -187,7 +187,7 @@ func (w *Worker) stateCommitLastRevision(ctx context.Context) (workerState, erro
 		zap.String("handler_key", w.HandlerIdentity.Key),
 		zap.String("instance_id", w.InstanceID),
 		zap.Uint64("revision", w.bounds.End-1),
-		zap.String("command_id", w.bounds.UncommittedCommandID),
+		zap.String("command_id", w.bounds.UncommittedRevisionCausationID),
 	)
 
 	return w.stateWaitForCommand, nil
@@ -226,8 +226,8 @@ func (w *Worker) stateHandleCommand(cmd *Command, ok bool) workerState {
 
 	// If the command we received was the command that was uncommitted when we
 	// first loaded, then it's already been handled.
-	if cmd.Parcel.ID() == w.bounds.UncommittedCommandID {
-		w.bounds.UncommittedCommandID = ""
+	if cmd.Parcel.ID() == w.bounds.UncommittedRevisionCausationID {
+		w.bounds.UncommittedRevisionCausationID = ""
 		cmd.Ack()
 
 		return w.stateWaitForCommand
