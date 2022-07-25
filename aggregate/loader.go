@@ -36,11 +36,11 @@ type Loader interface {
 	// r.ApplyEvent(). If no snapshot is available, r is populated by applying
 	// all of its historical events, which may take significant time.
 	//
-	// If an error occurs before all historical events can be applied to r, a
-	// new snapshot is taken as of the most recently applied event, then the
-	// error is returned. This can help prevent timeouts that occur while
-	// reading a large number of historical events by making a more up-to-date
-	// snapshot available next time the instance is loaded.
+	// If an error occurs before events from all historical revisions can be
+	// applied to r, a new snapshot is taken as of the most recently applied
+	// revision, then the error is returned. This can help prevent timeouts that
+	// occur while reading a large number of historical events by making a more
+	// up-to-date snapshot available next time the instance is loaded.
 	//
 	// Load never returns an error as a result of reading or writing snapshots;
 	// it will always fall-back to using the historical events.
@@ -108,11 +108,11 @@ type EventLoader struct {
 // snapshot is available, r is populated by applying all of its historical
 // events, which may take significant time.
 //
-// If an error occurs before all historical events can be applied to r, a new
-// snapshot is taken as of the most recently applied event, then the error is
-// returned. This can help prevent timeouts that occur while reading a large
-// number of historical events by making a more up-to-date snapshot available
-// next time the instance is loaded.
+// If an error occurs before events from all historical revisions can be applied
+// to r, a new snapshot is taken as of the most recently applied revision, then
+// the error is returned. This can help prevent timeouts that occur while
+// reading a large number of historical events by making a more up-to-date
+// snapshot available next time the instance is loaded.
 //
 // Load never returns an error as a result of reading or writing snapshots; it
 // will always fall-back to using the historical events.
