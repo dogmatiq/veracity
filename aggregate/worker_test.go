@@ -253,9 +253,9 @@ var _ = Describe("type Worker", func() {
 					"<handler-key>",
 					"<instance>",
 					Revision{
-						Begin:     0,
-						End:       0,
-						CommandID: "<command-0>",
+						Begin:       0,
+						End:         0,
+						CausationID: "<command-0>",
 						Events: []*envelopespec.Envelope{
 							NewEnvelope("<existing>", MessageX1),
 						},
@@ -320,9 +320,9 @@ var _ = Describe("type Worker", func() {
 				0,
 				[]Revision{
 					{
-						Begin:     0,
-						End:       0,
-						CommandID: "<command-0>",
+						Begin:       0,
+						End:         0,
+						CausationID: "<command-0>",
 						Events: []*envelopespec.Envelope{
 							{
 								MessageId:         "0",
@@ -340,9 +340,9 @@ var _ = Describe("type Worker", func() {
 						},
 					},
 					{
-						Begin:     0,
-						End:       1,
-						CommandID: "<command-1>",
+						Begin:       0,
+						End:         1,
+						CausationID: "<command-1>",
 						Events: []*envelopespec.Envelope{
 							{
 								MessageId:         "1",
@@ -385,9 +385,9 @@ var _ = Describe("type Worker", func() {
 					"<handler-key>",
 					"<instance>",
 					Revision{
-						Begin:     0,
-						End:       1,
-						CommandID: "<command-1>",
+						Begin:       0,
+						End:         1,
+						CausationID: "<command-1>",
 						Events: []*envelopespec.Envelope{
 							NewEnvelope("<existing>", MessageX1),
 						},
@@ -489,9 +489,9 @@ var _ = Describe("type Worker", func() {
 					"<handler-key>",
 					"<instance>",
 					Revision{
-						Begin:     0,
-						End:       0,
-						CommandID: "<command-0>",
+						Begin:       0,
+						End:         0,
+						CausationID: "<command-0>",
 						Events: []*envelopespec.Envelope{
 							NewEnvelope("<existing-1>", MessageX1),
 							NewEnvelope("<existing-2>", MessageX2),
@@ -758,9 +758,9 @@ var _ = Describe("type Worker", func() {
 					"<handler-key>",
 					"<instance>",
 					Revision{
-						Begin:     0,
-						End:       0,
-						CommandID: "<command-0>",
+						Begin:       0,
+						End:         0,
+						CausationID: "<command-0>",
 						Events: []*envelopespec.Envelope{
 							NewEnvelope("<existing-1>", MessageX1),
 							NewEnvelope("<existing-2>", MessageX2),

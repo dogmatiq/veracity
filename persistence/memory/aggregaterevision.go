@@ -23,9 +23,9 @@ type aggregateInstance struct {
 }
 
 type aggregateRevision struct {
-	Begin     uint64
-	CommandID string
-	Events    [][]byte
+	Begin       uint64
+	CausationID string
+	Events      [][]byte
 }
 
 // ReadBounds returns the revisions that are the bounds of the relevant
@@ -86,10 +86,10 @@ func (s *AggregateRevisionStore) ReadRevisions(
 
 		return []aggregate.Revision{
 			{
-				Begin:     rev.Begin,
-				End:       begin,
-				CommandID: rev.CommandID,
-				Events:    events,
+				Begin:       rev.Begin,
+				End:         begin,
+				CausationID: rev.CausationID,
+				Events:      events,
 			},
 		}, nil
 	}
@@ -123,7 +123,7 @@ func (s *AggregateRevisionStore) PrepareRevision(
 	hk, id string,
 	rev aggregate.Revision,
 ) error {
-	if rev.CommandID == "" {
+	if rev.CausationID == "" {
 		panic("command ID must not be empty")
 	}
 
@@ -147,14 +147,14 @@ func (s *AggregateRevisionStore) PrepareRevision(
 	}
 
 	i.Revisions = append(i.Revisions, aggregateRevision{
-		Begin:     rev.Begin,
-		CommandID: rev.CommandID,
-		Events:    events,
+		Begin:       rev.Begin,
+		CausationID: rev.CausationID,
+		Events:      events,
 	})
 
 	i.Bounds.Begin = rev.Begin
 	i.Bounds.End++
-	i.Bounds.UncommittedRevisionCausationID = rev.CommandID
+	i.Bounds.UncommittedRevisionCausationID = rev.CausationID
 
 	if s.instances == nil {
 		s.instances = map[instanceKey]aggregateInstance{}

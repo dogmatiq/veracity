@@ -62,7 +62,7 @@ func (r *AggregateRevisionReader) ReadBounds(
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":id": marshalAggregateRevisionPartitionID(hk, id),
 			},
-			ProjectionExpression: aws.String(`Revision, BeginRevision, CommandID, Uncommitted`),
+			ProjectionExpression: aws.String(`Revision, BeginRevision, CausationID, Uncommitted`),
 			ScanIndexForward:     aws.Bool(false),
 			Limit:                aws.Int64(1),
 		},
@@ -91,7 +91,7 @@ func (r *AggregateRevisionReader) ReadBounds(
 	bounds.End++
 
 	if unmarshalBool(item["Uncommitted"]) {
-		bounds.UncommittedRevisionCausationID = unmarshalString(item["CommandID"])
+		bounds.UncommittedRevisionCausationID = unmarshalString(item["CausationID"])
 	}
 
 	return bounds, nil
@@ -130,7 +130,7 @@ func (r *AggregateRevisionReader) ReadRevisions(
 				":id":    marshalAggregateRevisionPartitionID(hk, id),
 				":begin": marshalRevision(begin),
 			},
-			ProjectionExpression: aws.String(`Revision, BeginRevision, CommandID, Events`),
+			ProjectionExpression: aws.String(`Revision, BeginRevision, CausationID, Events`),
 		},
 	)
 	if err != nil {
@@ -157,7 +157,7 @@ func (r *AggregateRevisionReader) ReadRevisions(
 			return nil, err
 		}
 
-		rev.CommandID = unmarshalString(item["CommandID"])
+		rev.CausationID = unmarshalString(item["CausationID"])
 
 		rev.Events, err = unmarshalEnvelopes(item["Events"])
 		if err != nil {
@@ -222,7 +222,7 @@ func (w *AggregateRevisionWriter) PrepareRevision(
 	hk, id string,
 	rev aggregate.Revision,
 ) error {
-	if rev.CommandID == "" {
+	if rev.CausationID == "" {
 		panic("command ID must not be empty")
 	}
 
@@ -230,7 +230,7 @@ func (w *AggregateRevisionWriter) PrepareRevision(
 		"HandlerKeyAndInstanceID": marshalAggregateRevisionPartitionID(hk, id),
 		"Revision":                marshalRevision(rev.End),
 		"BeginRevision":           marshalRevision(rev.Begin),
-		"CommandID":               marshalString(rev.CommandID),
+		"CausationID":             marshalString(rev.CausationID),
 		"Uncommitted":             marshalBool(true),
 	}
 

@@ -74,10 +74,10 @@ func DeclareAggregateRevisionTests(
 				"<handler>",
 				"<instance>",
 				aggregate.Revision{
-					Begin:     0,
-					End:       0,
-					CommandID: "<command-0>",
-					Events:    eventA,
+					Begin:       0,
+					End:         0,
+					CausationID: "<command-0>",
+					Events:      eventA,
 				},
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
@@ -104,10 +104,10 @@ func DeclareAggregateRevisionTests(
 				"<handler>",
 				"<instance>",
 				aggregate.Revision{
-					Begin:     0,
-					End:       0,
-					CommandID: "<command-0>",
-					Events:    eventA,
+					Begin:       0,
+					End:         0,
+					CausationID: "<command-0>",
+					Events:      eventA,
 				},
 			)
 
@@ -133,10 +133,10 @@ func DeclareAggregateRevisionTests(
 					"<handler>",
 					"<instance>",
 					aggregate.Revision{
-						Begin:     next + 1,
-						End:       next,
-						CommandID: fmt.Sprintf("<command-%d>", next),
-						Events:    eventA,
+						Begin:       next + 1,
+						End:         next,
+						CausationID: fmt.Sprintf("<command-%d>", next),
+						Events:      eventA,
 					},
 				)
 
@@ -162,10 +162,10 @@ func DeclareAggregateRevisionTests(
 				"<handler>",
 				"<instance>",
 				aggregate.Revision{
-					Begin:     1,
-					End:       0,
-					CommandID: "<command-0>",
-					Events:    eventA,
+					Begin:       1,
+					End:         0,
+					CausationID: "<command-0>",
+					Events:      eventA,
 				},
 			)
 
@@ -175,10 +175,10 @@ func DeclareAggregateRevisionTests(
 				"<handler>",
 				"<instance>",
 				aggregate.Revision{
-					Begin:     1,
-					End:       1,
-					CommandID: "<command-1>",
-					Events:    eventA,
+					Begin:       1,
+					End:         1,
+					CausationID: "<command-1>",
+					Events:      eventA,
 				},
 			)
 
@@ -243,10 +243,10 @@ func DeclareAggregateRevisionTests(
 					}
 
 					rev := aggregate.Revision{
-						Begin:     0,
-						End:       next,
-						CommandID: fmt.Sprintf("<command-%d>", next),
-						Events:    events,
+						Begin:       0,
+						End:         next,
+						CausationID: fmt.Sprintf("<command-%d>", next),
+						Events:      events,
 					}
 
 					commitRevision(
@@ -303,9 +303,9 @@ func DeclareAggregateRevisionTests(
 					"<handler>",
 					"<instance>",
 					aggregate.Revision{
-						Begin:     0,
-						End:       0,
-						CommandID: "<command-0>",
+						Begin:       0,
+						End:         0,
+						CausationID: "<command-0>",
 						Events: []*envelopespec.Envelope{
 							veracityfixtures.NewEnvelope(
 								"<archived-event>",
@@ -321,10 +321,10 @@ func DeclareAggregateRevisionTests(
 					"<handler>",
 					"<instance>",
 					aggregate.Revision{
-						Begin:     1,
-						End:       1,
-						CommandID: "<command-1>",
-						Events:    eventA,
+						Begin:       1,
+						End:         1,
+						CausationID: "<command-1>",
+						Events:      eventA,
 					},
 				)
 
@@ -334,20 +334,20 @@ func DeclareAggregateRevisionTests(
 					"<handler>",
 					"<instance>",
 					aggregate.Revision{
-						Begin:     1,
-						End:       2,
-						CommandID: "<command-2>",
-						Events:    eventB,
+						Begin:       1,
+						End:         2,
+						CausationID: "<command-2>",
+						Events:      eventB,
 					},
 				)
 			})
 
 			ginkgo.It("allows reading the revision before begin if it has not been committed", func() {
 				rev := aggregate.Revision{
-					Begin:     4,
-					End:       3,
-					CommandID: "<command-3>",
-					Events:    eventA,
+					Begin:       4,
+					End:         3,
+					CausationID: "<command-3>",
+					Events:      eventA,
 				}
 
 				err := tc.Writer.PrepareRevision(
@@ -377,16 +377,16 @@ func DeclareAggregateRevisionTests(
 					1,
 					[]aggregate.Revision{
 						{
-							Begin:     1,
-							End:       1,
-							CommandID: "<command-1>",
-							Events:    eventA,
+							Begin:       1,
+							End:         1,
+							CausationID: "<command-1>",
+							Events:      eventA,
 						},
 						{
-							Begin:     1,
-							End:       2,
-							CommandID: "<command-2>",
-							Events:    eventB,
+							Begin:       1,
+							End:         2,
+							CausationID: "<command-2>",
+							Events:      eventB,
 						},
 					},
 				)
@@ -401,10 +401,10 @@ func DeclareAggregateRevisionTests(
 					2,
 					[]aggregate.Revision{
 						{
-							Begin:     1,
-							End:       2,
-							CommandID: "<command-2>",
-							Events:    eventB,
+							Begin:       1,
+							End:         2,
+							CausationID: "<command-2>",
+							Events:      eventB,
 						},
 					},
 				)
@@ -419,10 +419,10 @@ func DeclareAggregateRevisionTests(
 				"<handler>",
 				"<instance>",
 				aggregate.Revision{
-					Begin:     0,
-					End:       0,
-					CommandID: "<command-0>",
-					Events:    eventA,
+					Begin:       0,
+					End:         0,
+					CausationID: "<command-0>",
+					Events:      eventA,
 				},
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
@@ -432,10 +432,10 @@ func DeclareAggregateRevisionTests(
 				"<handler>",
 				"<instance>",
 				aggregate.Revision{
-					Begin:     0,
-					End:       0, // incorrect end revision
-					CommandID: "<command-1>",
-					Events:    eventB,
+					Begin:       0,
+					End:         0, // incorrect end revision
+					CausationID: "<command-1>",
+					Events:      eventB,
 				},
 			)
 			gomega.Expect(err).To(
@@ -451,10 +451,10 @@ func DeclareAggregateRevisionTests(
 				"<handler>",
 				"<instance>",
 				aggregate.Revision{
-					Begin:     1,
-					End:       0,
-					CommandID: "<command-0>",
-					Events:    nil,
+					Begin:       1,
+					End:         0,
+					CausationID: "<command-0>",
+					Events:      nil,
 				},
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
@@ -497,10 +497,10 @@ func DeclareAggregateRevisionTests(
 						inst.HandlerKey,
 						inst.InstanceID,
 						aggregate.Revision{
-							Begin:     0,
-							End:       next,
-							CommandID: fmt.Sprintf("<command-%d>", next),
-							Events:    eventA,
+							Begin:       0,
+							End:         next,
+							CausationID: fmt.Sprintf("<command-%d>", next),
+							Events:      eventA,
 						},
 					)
 
@@ -515,9 +515,9 @@ func DeclareAggregateRevisionTests(
 					inst.HandlerKey,
 					inst.InstanceID,
 					aggregate.Revision{
-						Begin:     begin,
-						End:       next,
-						CommandID: fmt.Sprintf("<command-%d>", next),
+						Begin:       begin,
+						End:         next,
+						CausationID: fmt.Sprintf("<command-%d>", next),
 					},
 				)
 
@@ -529,10 +529,10 @@ func DeclareAggregateRevisionTests(
 					inst.HandlerKey,
 					inst.InstanceID,
 					aggregate.Revision{
-						Begin:     begin,
-						End:       next,
-						CommandID: fmt.Sprintf("<command-%d>", next),
-						Events:    eventA,
+						Begin:       begin,
+						End:         next,
+						CausationID: fmt.Sprintf("<command-%d>", next),
+						Events:      eventA,
 					},
 				)
 			}
@@ -580,10 +580,10 @@ func DeclareAggregateRevisionTests(
 				)
 
 				rev := aggregate.Revision{
-					Begin:     0,
-					End:       0,
-					CommandID: fmt.Sprintf("<command-%d>", i),
-					Events:    []*envelopespec.Envelope{env},
+					Begin:       0,
+					End:         0,
+					CausationID: fmt.Sprintf("<command-%d>", i),
+					Events:      []*envelopespec.Envelope{env},
 				}
 
 				err := tc.Writer.PrepareRevision(
@@ -616,7 +616,7 @@ func DeclareAggregateRevisionTests(
 					"<handler>",
 					"<instance>",
 					aggregate.Revision{
-						CommandID: "",
+						CausationID: "",
 					},
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
@@ -649,10 +649,10 @@ func DeclareAggregateRevisionTests(
 				"<handler>",
 				"<instance>",
 				aggregate.Revision{
-					Begin:     0,
-					End:       0,
-					CommandID: "<command-0>",
-					Events:    eventA,
+					Begin:       0,
+					End:         0,
+					CausationID: "<command-0>",
+					Events:      eventA,
 				},
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
@@ -694,10 +694,10 @@ func DeclareAggregateRevisionTests(
 						inst.HandlerKey,
 						inst.InstanceID,
 						aggregate.Revision{
-							Begin:     0,
-							End:       next,
-							CommandID: fmt.Sprintf("<command-%d>", next),
-							Events:    eventA,
+							Begin:       0,
+							End:         next,
+							CausationID: fmt.Sprintf("<command-%d>", next),
+							Events:      eventA,
 						},
 					)
 					gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
