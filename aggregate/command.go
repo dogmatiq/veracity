@@ -10,8 +10,19 @@ import (
 // CommandAcknowledger acknowledges commands that have been handled
 // successfully.
 type CommandAcknowledger interface {
-	PrepareAck(ctx context.Context, commandID string) error
-	CommitAck(ctx context.Context, commandID string) error
+	PrepareAck(
+		ctx context.Context,
+		commandID string,
+		hk, id string,
+		rev uint64,
+	) error
+
+	CommitAck(
+		ctx context.Context,
+		commandID string,
+		hk, id string,
+		rev uint64,
+	) error
 }
 
 // Command encapsulates a command message that is to be executed by a worker.

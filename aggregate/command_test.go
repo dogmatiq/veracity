@@ -50,29 +50,50 @@ func executeCommandAsync(
 type commandAcknowledgerStub struct {
 	CommandAcknowledger
 
-	PrepareAckFunc func(ctx context.Context, commandID string) error
-	CommitAckFunc  func(ctx context.Context, commandID string) error
+	PrepareAckFunc func(
+		ctx context.Context,
+		commandID string,
+		hk, id string,
+		rev uint64,
+	) error
+
+	CommitAckFunc func(
+		ctx context.Context,
+		commandID string,
+		hk, id string,
+		rev uint64,
+	) error
 }
 
-func (s *commandAcknowledgerStub) PrepareAck(ctx context.Context, commandID string) error {
+func (s *commandAcknowledgerStub) PrepareAck(
+	ctx context.Context,
+	commandID string,
+	hk, id string,
+	rev uint64,
+) error {
 	if s.PrepareAckFunc != nil {
-		return s.PrepareAckFunc(ctx, commandID)
+		return s.PrepareAckFunc(ctx, commandID, hk, id, rev)
 	}
 
 	if s.CommandAcknowledger != nil {
-		return s.CommandAcknowledger.PrepareAck(ctx, commandID)
+		return s.CommandAcknowledger.PrepareAck(ctx, commandID, hk, id, rev)
 	}
 
 	return nil
 }
 
-func (s *commandAcknowledgerStub) CommitAck(ctx context.Context, commandID string) error {
+func (s *commandAcknowledgerStub) CommitAck(
+	ctx context.Context,
+	commandID string,
+	hk, id string,
+	rev uint64,
+) error {
 	if s.CommitAckFunc != nil {
-		return s.CommitAckFunc(ctx, commandID)
+		return s.CommitAckFunc(ctx, commandID, hk, id, rev)
 	}
 
 	if s.CommandAcknowledger != nil {
-		return s.CommandAcknowledger.CommitAck(ctx, commandID)
+		return s.CommandAcknowledger.CommitAck(ctx, commandID, hk, id, rev)
 	}
 
 	return nil

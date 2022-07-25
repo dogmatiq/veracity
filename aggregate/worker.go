@@ -149,7 +149,13 @@ func (w *Worker) stateLoadRoot(ctx context.Context) (workerState, error) {
 // stateCommitLastRevision attempts to acknowledge the command that produced the
 // most recent revision.
 func (w *Worker) stateCommitLastRevision(ctx context.Context) (workerState, error) {
-	if err := w.Acknowledger.CommitAck(ctx, w.bounds.UncommittedCommandID); err != nil {
+	if err := w.Acknowledger.CommitAck(
+		ctx,
+		w.bounds.UncommittedCommandID,
+		w.HandlerIdentity.Key,
+		w.InstanceID,
+		w.bounds.End-1,
+	); err != nil {
 		return nil, fmt.Errorf(
 			"cannot commit acknowledgement of command %s for revision %d of aggregate root %s[%s]: %w",
 			w.bounds.UncommittedCommandID,
@@ -293,7 +299,13 @@ func (w *Worker) saveChanges(ctx context.Context, sc *scope) error {
 		begin = w.bounds.End + 1
 	}
 
-	if err := w.Acknowledger.PrepareAck(ctx, commandID); err != nil {
+	if err := w.Acknowledger.PrepareAck(
+		ctx,
+		commandID,
+		w.HandlerIdentity.Key,
+		w.InstanceID,
+		w.bounds.End,
+	); err != nil {
 		return fmt.Errorf(
 			"cannot prepare acknowledgement of command %s for revision %d of aggregate root %s[%s]: %w",
 			commandID,
@@ -324,7 +336,13 @@ func (w *Worker) saveChanges(ctx context.Context, sc *scope) error {
 		)
 	}
 
-	if err := w.Acknowledger.CommitAck(ctx, commandID); err != nil {
+	if err := w.Acknowledger.CommitAck(
+		ctx,
+		commandID,
+		w.HandlerIdentity.Key,
+		w.InstanceID,
+		w.bounds.End,
+	); err != nil {
 		return fmt.Errorf(
 			"cannot commit acknowledgement of command %s for revision %d of aggregate root %s[%s]: %w",
 			commandID,
@@ -352,10 +370,7 @@ func (w *Worker) saveChanges(ctx context.Context, sc *scope) error {
 
 	w.bounds.Begin = begin
 	w.bounds.End++
-
-	if len(sc.EventEnvelopes) > 0 {
-		w.snapshotAge = w.bounds.End
-	}
+	w.snapshotAge++
 
 	return nil
 }

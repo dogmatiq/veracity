@@ -781,14 +781,6 @@ var _ = Describe("type Worker", func() {
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 
-				handler.HandleCommandFunc = func(
-					r dogma.AggregateRoot,
-					s dogma.AggregateCommandScope,
-					m dogma.Message,
-				) {
-					// Don't record an event
-				}
-
 				snapshotWriter.WriteSnapshotFunc = func(
 					ctx context.Context,
 					hk, id string,
@@ -798,11 +790,8 @@ var _ = Describe("type Worker", func() {
 					panic("unexpected call")
 				}
 
-				executeCommandAsync(
-					ctx,
-					commands,
-					NewParcel("<command>", MessageC1),
-				)
+				// Note, we never send a command, so the worker shuts down
+				// without making any revisions.
 
 				go shutdownWorkerWhenIdle()
 
