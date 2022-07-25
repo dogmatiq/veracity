@@ -243,29 +243,19 @@ var _ = Describe("type Worker", func() {
 
 		When("the instance has historical events", func() {
 			BeforeEach(func() {
-				rev := Revision{
-					Begin: 0,
-					End:   0,
-					Events: []*envelopespec.Envelope{
-						NewEnvelope("<existing>", MessageX1),
+				commitRevision(
+					ctx,
+					revisionWriter,
+					"<handler-key>",
+					"<instance>",
+					Revision{
+						Begin: 0,
+						End:   0,
+						Events: []*envelopespec.Envelope{
+							NewEnvelope("<existing>", MessageX1),
+						},
 					},
-				}
-
-				err := revisionStore.PrepareRevision(
-					ctx,
-					"<handler-key>",
-					"<instance>",
-					rev,
 				)
-				Expect(err).ShouldNot(HaveOccurred())
-
-				err = revisionStore.CommitRevision(
-					ctx,
-					"<handler-key>",
-					"<instance>",
-					rev,
-				)
-				Expect(err).ShouldNot(HaveOccurred())
 			})
 
 			It("passes the handler the the aggregate root loaded via the loader", func() {
@@ -485,32 +475,22 @@ var _ = Describe("type Worker", func() {
 					s.Destroy()
 				}
 
-				rev := Revision{
-					Begin: 0,
-					End:   0,
-					Events: []*envelopespec.Envelope{
-						NewEnvelope("<existing-1>", MessageX1),
-						NewEnvelope("<existing-2>", MessageX2),
+				commitRevision(
+					ctx,
+					revisionWriter,
+					"<handler-key>",
+					"<instance>",
+					Revision{
+						Begin: 0,
+						End:   0,
+						Events: []*envelopespec.Envelope{
+							NewEnvelope("<existing-1>", MessageX1),
+							NewEnvelope("<existing-2>", MessageX2),
+						},
 					},
-				}
-
-				err := revisionStore.PrepareRevision(
-					ctx,
-					"<handler-key>",
-					"<instance>",
-					rev,
 				)
-				Expect(err).ShouldNot(HaveOccurred())
 
-				err = revisionStore.CommitRevision(
-					ctx,
-					"<handler-key>",
-					"<instance>",
-					rev,
-				)
-				Expect(err).ShouldNot(HaveOccurred())
-
-				err = snapshotStore.WriteSnapshot(
+				err := snapshotStore.WriteSnapshot(
 					context.Background(),
 					"<handler-key>",
 					"<instance>",
@@ -544,9 +524,9 @@ var _ = Describe("type Worker", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(bounds).To(Equal(
 					Bounds{
-						Begin:     2,
-						End:       2,
-						Committed: 2,
+						Begin:       2,
+						End:         2,
+						Uncommitted: false,
 					},
 				))
 
@@ -621,9 +601,9 @@ var _ = Describe("type Worker", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(bounds).To(Equal(
 					Bounds{
-						Begin:     2,
-						End:       2,
-						Committed: 2,
+						Begin:       2,
+						End:         2,
+						Uncommitted: false,
 					},
 				))
 			})
@@ -716,9 +696,9 @@ var _ = Describe("type Worker", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(bounds).To(Equal(
 						Bounds{
-							Begin:     0,
-							End:       2,
-							Committed: 2,
+							Begin:       0,
+							End:         2,
+							Uncommitted: false,
 						},
 					))
 
@@ -766,32 +746,22 @@ var _ = Describe("type Worker", func() {
 			})
 
 			It("does not take a snapshot if the existing snapshot is up-to-date", func() {
-				rev := Revision{
-					Begin: 0,
-					End:   0,
-					Events: []*envelopespec.Envelope{
-						NewEnvelope("<existing-1>", MessageX1),
-						NewEnvelope("<existing-2>", MessageX2),
+				commitRevision(
+					ctx,
+					revisionWriter,
+					"<handler-key>",
+					"<instance>",
+					Revision{
+						Begin: 0,
+						End:   0,
+						Events: []*envelopespec.Envelope{
+							NewEnvelope("<existing-1>", MessageX1),
+							NewEnvelope("<existing-2>", MessageX2),
+						},
 					},
-				}
-
-				err := revisionStore.PrepareRevision(
-					ctx,
-					"<handler-key>",
-					"<instance>",
-					rev,
 				)
-				Expect(err).ShouldNot(HaveOccurred())
 
-				err = revisionStore.CommitRevision(
-					ctx,
-					"<handler-key>",
-					"<instance>",
-					rev,
-				)
-				Expect(err).ShouldNot(HaveOccurred())
-
-				err = snapshotStore.WriteSnapshot(
+				err := snapshotStore.WriteSnapshot(
 					context.Background(),
 					"<handler-key>",
 					"<instance>",

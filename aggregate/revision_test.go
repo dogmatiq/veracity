@@ -68,7 +68,7 @@ type revisionWriterStub struct {
 	CommitRevisionFunc func(
 		ctx context.Context,
 		hk, id string,
-		rev Revision,
+		rev uint64,
 	) error
 }
 
@@ -91,7 +91,7 @@ func (s *revisionWriterStub) PrepareRevision(
 func (s *revisionWriterStub) CommitRevision(
 	ctx context.Context,
 	hk, id string,
-	rev Revision,
+	rev uint64,
 ) error {
 	if s.CommitRevisionFunc != nil {
 		return s.CommitRevisionFunc(ctx, hk, id, rev)
@@ -149,6 +149,6 @@ func commitRevision(
 	err := writer.PrepareRevision(ctx, hk, id, rev)
 	ExpectWithOffset(1, err).ShouldNot(HaveOccurred())
 
-	err = writer.CommitRevision(ctx, hk, id, rev)
+	err = writer.CommitRevision(ctx, hk, id, rev.End)
 	ExpectWithOffset(1, err).ShouldNot(HaveOccurred())
 }

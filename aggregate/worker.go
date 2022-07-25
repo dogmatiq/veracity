@@ -232,17 +232,15 @@ func (w *Worker) saveChanges(ctx context.Context, sc *scope) error {
 		begin = w.bounds.End + 1
 	}
 
-	rev := Revision{
-		begin,
-		w.bounds.End,
-		sc.EventEnvelopes,
-	}
-
 	if err := w.RevisionWriter.PrepareRevision(
 		ctx,
 		w.HandlerIdentity.Key,
 		w.InstanceID,
-		rev,
+		Revision{
+			begin,
+			w.bounds.End,
+			sc.EventEnvelopes,
+		},
 	); err != nil {
 		return fmt.Errorf(
 			"cannot prepare revision %d of aggregate root %s[%s]: %w",
@@ -257,7 +255,7 @@ func (w *Worker) saveChanges(ctx context.Context, sc *scope) error {
 		ctx,
 		w.HandlerIdentity.Key,
 		w.InstanceID,
-		rev,
+		w.bounds.End,
 	); err != nil {
 		return fmt.Errorf(
 			"cannot commit revision %d of aggregate root %s[%s]: %w",

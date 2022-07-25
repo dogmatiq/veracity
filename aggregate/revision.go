@@ -36,11 +36,9 @@ type Bounds struct {
 	// End is the (exclusive) end revision of the aggregate instance.
 	End uint64
 
-	// Committed is the (exclusive) revision of latest comitted revision.
-	//
-	// That is, only the revisions in the half-open range [0, committed)
-	// have been committed. Committed may be less than Begin.
-	Committed uint64
+	// Uncommitted is true if the most recent revision has not yet been
+	// committed.
+	Uncommitted bool
 }
 
 // RevisionReader is an interface for reading historical revisions recorded by
@@ -101,6 +99,10 @@ type RevisionWriter interface {
 	// most recent revision of the instance. Otherwise, an "optimistic
 	// concurrency control" error occurs and no changes are persisted. The
 	// behavior is undefined if rev.End is greater than the actual end revision.
+	//
+	// The behavior is undefined if the most recent revision is uncommitted. It
+	// is the caller's responsibility to commit an uncommitted revision, as
+	// indicated by the result of a call to RevisionReader.ReadBounds().
 	PrepareRevision(
 		ctx context.Context,
 		hk, id string,
@@ -109,20 +111,17 @@ type RevisionWriter interface {
 
 	// CommitRevision commits a prepared revision.
 	//
-	// Only once a revision is committed can it be considered part of the
-	// aggregate's history.
-	//
-	// rev must exactly match the revision that was prepared. Care must be taken
-	// as his may or may not be enforced by the implementation.
+	// Committing a revision indicates that the command that produced it will
+	// not be retried.
 	//
 	// It returns an error if the revision does not exist or has already been
 	// committed.
 	//
-	// It returns an error if there are uncommitted revisions before the given
+	// The behavior is undefined if rev is greater than the most recent
 	// revision.
 	CommitRevision(
 		ctx context.Context,
 		hk, id string,
-		rev Revision,
+		rev uint64,
 	) error
 }

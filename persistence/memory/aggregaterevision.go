@@ -13,10 +13,10 @@ import (
 // It implements aggregate.RevisionReader and aggregate.RevisionWriter.
 type AggregateRevisionStore struct {
 	m         sync.RWMutex
-	instances map[instanceKey]aggregateInstanceX
+	instances map[instanceKey]aggregateInstance
 }
 
-type aggregateInstanceX struct {
+type aggregateInstance struct {
 	Bounds    aggregate.Bounds
 	Revisions []aggregateRevision
 }
@@ -114,6 +114,10 @@ func (s *AggregateRevisionStore) ReadRevisions(
 // most recent revision of the instance. Otherwise, an "optimistic concurrency
 // control" error occurs and no changes are persisted. The behavior is undefined
 // if rev.End is greater than the actual end revision.
+//
+// The behavior is undefined if the most recent revision is uncommitted. It is
+// the caller's responsibility to commit an uncommitted revision, as indicated
+// by the result of a call to RevisionReader.ReadBounds().
 func (s *AggregateRevisionStore) PrepareRevision(
 	ctx context.Context,
 	hk, id string,
@@ -146,9 +150,10 @@ func (s *AggregateRevisionStore) PrepareRevision(
 	}
 
 	i.Bounds.End++
+	i.Bounds.Uncommitted = true
 
 	if s.instances == nil {
-		s.instances = map[instanceKey]aggregateInstanceX{}
+		s.instances = map[instanceKey]aggregateInstance{}
 	}
 
 	s.instances[k] = i
@@ -158,21 +163,17 @@ func (s *AggregateRevisionStore) PrepareRevision(
 
 // CommitRevision commits a prepared revision.
 //
-// Only once a revision is committed can it be considered part of the
-// aggregate's history.
-//
-// rev must exactly match the revision that was prepared. Care must be taken as
-// his may or may not be enforced by the implementation.
+// Committing a revision indicates that the command that produced it will not be
+// retried.
 //
 // It returns an error if the revision does not exist or has already been
 // committed.
 //
-// It returns an error if there are uncommitted revisions before the given
-// revision.
+// The behavior is undefined if rev is greater than the most recent revision.
 func (s *AggregateRevisionStore) CommitRevision(
 	ctx context.Context,
 	hk, id string,
-	rev aggregate.Revision,
+	rev uint64,
 ) error {
 	s.m.Lock()
 	defer s.m.Unlock()
@@ -180,20 +181,19 @@ func (s *AggregateRevisionStore) CommitRevision(
 	k := instanceKey{hk, id}
 	i := s.instances[k]
 
-	if rev.End >= i.Bounds.End {
-		return fmt.Errorf("revision %d does not exist", rev.End)
+	if rev >= i.Bounds.End {
+		return fmt.Errorf("revision %d does not exist", rev)
 	}
 
-	if rev.End < i.Bounds.Committed {
-		return fmt.Errorf("revision %d is already committed", rev.End)
+	last := i.Bounds.End - 1
+
+	if rev == last {
+		if i.Bounds.Uncommitted {
+			i.Bounds.Uncommitted = false
+			s.instances[k] = i
+			return nil
+		}
 	}
 
-	if rev.End > i.Bounds.Committed {
-		return fmt.Errorf("cannot commit revision %d, the previous revision is not committed", rev.End)
-	}
-
-	i.Bounds.Committed++
-	s.instances[k] = i
-
-	return nil
+	return fmt.Errorf("revision %d is already committed", rev)
 }

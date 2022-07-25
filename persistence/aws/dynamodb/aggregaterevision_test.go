@@ -15,9 +15,9 @@ import (
 	"github.com/onsi/gomega"
 )
 
-var _ = Describe("type AggregateEventReader and AggregateEventWriter", func() {
-	persistencetest.DeclareAggregateEventTests(
-		func() persistencetest.AggregateEventContext {
+var _ = Describe("type AggregateRevisionReader and AggregateRevisionWriter", func() {
+	persistencetest.DeclareAggregateRevisionTests(
+		func() persistencetest.AggregateRevisionContext {
 			endpoint := os.Getenv("DOGMATIQ_TEST_DYNAMODB_ENDPOINT")
 			if endpoint == "" {
 				endpoint = "http://localhost:28000"
@@ -32,17 +32,26 @@ var _ = Describe("type AggregateEventReader and AggregateEventWriter", func() {
 
 			sess := session.New(config)
 			db := dynamodb.New(sess)
-			table := "events"
+			table := "revisions"
 
 			err := deleteAllTables(db, table)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-			return persistencetest.AggregateEventContext{
-				Reader: &AggregateEventReader{
-					DB: db,
+			err = CreateAggregateRevisionTable(
+				context.Background(),
+				db,
+				table,
+			)
+			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
+
+			return persistencetest.AggregateRevisionContext{
+				Reader: &AggregateRevisionReader{
+					DB:    db,
+					Table: table,
 				},
-				Writer: &AggregateEventWriter{
-					DB: db,
+				Writer: &AggregateRevisionWriter{
+					DB:    db,
+					Table: table,
 				},
 				CanReadRevisionsBeforeBegin: true,
 				AfterEach: func() {
