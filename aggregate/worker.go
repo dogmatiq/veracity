@@ -19,14 +19,17 @@ import (
 // running without receiving a command.
 const DefaultIdleTimeout = 5 * time.Minute
 
-// WorkerConfig encapsulates the configuration and dependencies of a worker.
-type WorkerConfig struct {
+// Worker manages the lifecycle of a single aggregate instance.
+type Worker struct {
 	// Handler is the message handler that handles command messages routed to
 	// this instance.
 	Handler dogma.AggregateMessageHandler
 
 	// HandlerIdentity is the identity of the handler.
 	HandlerIdentity configkit.Identity
+
+	// InstanceID is the instance of the aggregate managed by this worker.
+	InstanceID string
 
 	// Packer is used to create parcels containing the recorded events.
 	Packer *parcel.Packer
@@ -56,14 +59,6 @@ type WorkerConfig struct {
 
 	// Logger is the target for log messages about the aggregate instance.
 	Logger *zap.Logger
-}
-
-// Worker manages the lifecycle of a single aggregate instance.
-type Worker struct {
-	WorkerConfig
-
-	// InstanceID is the instance of the aggregate managed by this worker.
-	InstanceID string
 
 	// Commands is a channel that receives commands to be executed.
 	Commands <-chan *Command

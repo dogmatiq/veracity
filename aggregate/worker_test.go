@@ -117,19 +117,17 @@ var _ = Describe("type Worker", func() {
 		)
 
 		worker = &Worker{
-			WorkerConfig: WorkerConfig{
-				Handler:         handler,
-				HandlerIdentity: configkit.MustNewIdentity("<handler-name>", "<handler-key>"),
-				Packer:          packer,
-				Loader:          loader,
-				RevisionWriter:  revisionWriter,
-				SnapshotWriter:  snapshotWriter,
-				Acknowledger:    acknowledger,
-				Logger:          logger,
-			},
-			InstanceID: "<instance>",
-			Commands:   commands,
-			Idle:       idle,
+			Handler:         handler,
+			HandlerIdentity: configkit.MustNewIdentity("<handler-name>", "<handler-key>"),
+			InstanceID:      "<instance>",
+			Packer:          packer,
+			Loader:          loader,
+			RevisionWriter:  revisionWriter,
+			SnapshotWriter:  snapshotWriter,
+			Acknowledger:    acknowledger,
+			Logger:          logger,
+			Commands:        commands,
+			Idle:            idle,
 		}
 	})
 
