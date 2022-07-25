@@ -6,10 +6,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 )
 
-var _ = Describe("type AggregateStore", func() {
+var _ = Describe("type AggregateRevisionStore", func() {
 	persistencetest.DeclareAggregateRevisionTests(
 		func() persistencetest.AggregateRevisionContext {
-			store := &AggregateStore{}
+			store := &AggregateRevisionStore{}
 
 			return persistencetest.AggregateRevisionContext{
 				Reader: store,

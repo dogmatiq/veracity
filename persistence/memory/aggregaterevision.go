@@ -8,10 +8,10 @@ import (
 	"github.com/dogmatiq/veracity/aggregate"
 )
 
-// AggregateStore stores aggregate revisions.
+// AggregateRevisionStore stores aggregate revisions.
 //
 // It implements aggregate.RevisionReader and aggregate.RevisionWriter.
-type AggregateStore struct {
+type AggregateRevisionStore struct {
 	m         sync.RWMutex
 	instances map[instanceKey]aggregateInstanceX
 }
@@ -41,7 +41,7 @@ type aggregateRevision struct {
 // When loading the instance, only those events from revisions in the half-open
 // range [begin, committed) should be applied to the aggregate root. committed
 // may be less than begin.
-func (s *AggregateStore) ReadBounds(
+func (s *AggregateRevisionStore) ReadBounds(
 	ctx context.Context,
 	hk, id string,
 ) (begin, committed, end uint64, _ error) {
@@ -69,7 +69,7 @@ func (s *AggregateStore) ReadBounds(
 //
 // The behavior is undefined if begin is lower than the begin revision returned
 // by ReadBounds(). Implementations should return an error in this case.
-func (s *AggregateStore) ReadRevisions(
+func (s *AggregateRevisionStore) ReadRevisions(
 	ctx context.Context,
 	hk, id string,
 	begin uint64,
@@ -124,7 +124,7 @@ func (s *AggregateStore) ReadRevisions(
 // most recent revision of the instance. Otherwise, an "optimistic concurrency
 // control" error occurs and no changes are persisted. The behavior is undefined
 // if rev.End is greater than the actual end revision.
-func (s *AggregateStore) PrepareRevision(
+func (s *AggregateRevisionStore) PrepareRevision(
 	ctx context.Context,
 	hk, id string,
 	rev aggregate.Revision,
@@ -178,7 +178,7 @@ func (s *AggregateStore) PrepareRevision(
 //
 // It returns an error if there are uncommitted revisions before the given
 // revision.
-func (s *AggregateStore) CommitRevision(
+func (s *AggregateRevisionStore) CommitRevision(
 	ctx context.Context,
 	hk, id string,
 	rev aggregate.Revision,
