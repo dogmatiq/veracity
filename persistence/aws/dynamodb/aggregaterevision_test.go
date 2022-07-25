@@ -53,7 +53,6 @@ var _ = Describe("type AggregateRevisionReader and AggregateRevisionWriter", fun
 					DB:    db,
 					Table: table,
 				},
-				CanReadRevisionsBeforeBegin: true,
 				AfterEach: func() {
 					err := deleteAllTables(db, table)
 					gomega.Expect(err).ShouldNot(gomega.HaveOccurred())

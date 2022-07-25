@@ -17,8 +17,9 @@ type AggregateRevisionStore struct {
 }
 
 type aggregateInstance struct {
-	Bounds    aggregate.Bounds
-	Revisions []aggregateRevision
+	Bounds        aggregate.Bounds
+	FirstRevision uint64
+	Revisions     []aggregateRevision
 }
 
 type aggregateRevision struct {
@@ -70,13 +71,12 @@ func (s *AggregateRevisionStore) ReadRevisions(
 	k := instanceKey{hk, id}
 	i := s.instances[k]
 
-	if begin < i.Bounds.Begin /* TODO: only if committed */ {
+	if begin < i.FirstRevision {
 		return nil, fmt.Errorf("revision %d is archived", begin)
 	}
 
 	if begin < i.Bounds.End {
-		index := begin - i.Bounds.Begin
-		rev := i.Revisions[index]
+		rev := i.Revisions[begin-i.FirstRevision]
 
 		events, err := unmarshalEnvelopes(rev.Events)
 		if err != nil {
@@ -133,6 +133,10 @@ func (s *AggregateRevisionStore) PrepareRevision(
 		return fmt.Errorf("optimistic concurrency conflict, %d is not the next revision", rev.End)
 	}
 
+	if i.Bounds.Uncommitted {
+		panic("cannot prepare new revision when there is an uncommitted revision")
+	}
+
 	events, err := marshalEnvelopes(rev.Events)
 	if err != nil {
 		return err
@@ -143,12 +147,7 @@ func (s *AggregateRevisionStore) PrepareRevision(
 		Events: events,
 	})
 
-	if rev.Begin > i.Bounds.Begin {
-		index := rev.Begin - i.Bounds.Begin
-		i.Bounds.Begin = rev.Begin
-		i.Revisions = i.Revisions[index:]
-	}
-
+	i.Bounds.Begin = rev.Begin
 	i.Bounds.End++
 	i.Bounds.Uncommitted = true
 
@@ -190,7 +189,13 @@ func (s *AggregateRevisionStore) CommitRevision(
 	if rev == last {
 		if i.Bounds.Uncommitted {
 			i.Bounds.Uncommitted = false
+
+			r := i.Revisions[rev-i.FirstRevision]
+			i.Revisions = i.Revisions[r.Begin-i.FirstRevision:]
+			i.FirstRevision = r.Begin
+
 			s.instances[k] = i
+
 			return nil
 		}
 	}

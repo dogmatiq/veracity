@@ -17,10 +17,9 @@ import (
 // AggregateRevisionContext encapsulates values used during aggregate revision
 // tests.
 type AggregateRevisionContext struct {
-	Reader                      aggregate.RevisionReader
-	Writer                      aggregate.RevisionWriter
-	CanReadRevisionsBeforeBegin bool
-	AfterEach                   func()
+	Reader    aggregate.RevisionReader
+	Writer    aggregate.RevisionWriter
+	AfterEach func()
 }
 
 // DeclareAggregateRevisionTests declares a function test-suite for persistence
@@ -99,8 +98,9 @@ func DeclareAggregateRevisionTests(
 		})
 
 		ginkgo.It("returns {0, 1, false} when there is one committed revision", func() {
-			err := tc.Writer.PrepareRevision(
+			commitRevision(
 				ctx,
+				tc.Writer,
 				"<handler>",
 				"<instance>",
 				aggregate.Revision{
@@ -109,15 +109,6 @@ func DeclareAggregateRevisionTests(
 					Events: eventA,
 				},
 			)
-			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-
-			err = tc.Writer.CommitRevision(
-				ctx,
-				"<handler>",
-				"<instance>",
-				0,
-			)
-			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
 			bounds, err := tc.Reader.ReadBounds(
 				ctx,
@@ -136,8 +127,9 @@ func DeclareAggregateRevisionTests(
 
 		ginkgo.It("returns {n, n, false} when begin == end", func() {
 			for next := uint64(0); next < 3; next++ {
-				err := tc.Writer.PrepareRevision(
+				commitRevision(
 					ctx,
+					tc.Writer,
 					"<handler>",
 					"<instance>",
 					aggregate.Revision{
@@ -146,15 +138,6 @@ func DeclareAggregateRevisionTests(
 						Events: eventA,
 					},
 				)
-				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-
-				err = tc.Writer.CommitRevision(
-					ctx,
-					"<handler>",
-					"<instance>",
-					next,
-				)
-				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
 				bounds, err := tc.Reader.ReadBounds(
 					ctx,
@@ -173,8 +156,9 @@ func DeclareAggregateRevisionTests(
 		})
 
 		ginkgo.It("returns {n-1, n, true} when there is a revision written after setting begin == end", func() {
-			err := tc.Writer.PrepareRevision(
+			commitRevision(
 				ctx,
+				tc.Writer,
 				"<handler>",
 				"<instance>",
 				aggregate.Revision{
@@ -183,17 +167,8 @@ func DeclareAggregateRevisionTests(
 					Events: eventA,
 				},
 			)
-			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-			err = tc.Writer.CommitRevision(
-				ctx,
-				"<handler>",
-				"<instance>",
-				0,
-			)
-			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-
-			err = tc.Writer.PrepareRevision(
+			err := tc.Writer.PrepareRevision(
 				ctx,
 				"<handler>",
 				"<instance>",
@@ -272,13 +247,13 @@ func DeclareAggregateRevisionTests(
 						Events: events,
 					}
 
-					err := tc.Writer.PrepareRevision(
+					commitRevision(
 						ctx,
+						tc.Writer,
 						"<handler>",
 						"<instance>",
 						rev,
 					)
-					gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
 					allRevisions = append(allRevisions, rev)
 				}
@@ -320,8 +295,9 @@ func DeclareAggregateRevisionTests(
 
 		ginkgo.When("the begin revision has been advanced beyond zero", func() {
 			ginkgo.BeforeEach(func() {
-				err := tc.Writer.PrepareRevision(
+				commitRevision(
 					ctx,
+					tc.Writer,
 					"<handler>",
 					"<instance>",
 					aggregate.Revision{
@@ -335,10 +311,10 @@ func DeclareAggregateRevisionTests(
 						},
 					},
 				)
-				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-				err = tc.Writer.PrepareRevision(
+				commitRevision(
 					ctx,
+					tc.Writer,
 					"<handler>",
 					"<instance>",
 					aggregate.Revision{
@@ -347,10 +323,10 @@ func DeclareAggregateRevisionTests(
 						Events: eventA,
 					},
 				)
-				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-				err = tc.Writer.PrepareRevision(
+				commitRevision(
 					ctx,
+					tc.Writer,
 					"<handler>",
 					"<instance>",
 					aggregate.Revision{
@@ -359,24 +335,30 @@ func DeclareAggregateRevisionTests(
 						Events: eventB,
 					},
 				)
-				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 			})
 
-			ginkgo.It("returns an error when reading from before the new begin revision", func() {
-				if tc.CanReadRevisionsBeforeBegin {
-					ginkgo.Skip("this implementation allows reading revisions before the begin revision")
+			ginkgo.It("allows reading the revision before begin if it has not been committed", func() {
+				rev := aggregate.Revision{
+					Begin:  4,
+					End:    3,
+					Events: eventA,
 				}
 
-				_, err := tc.Reader.ReadRevisions(
+				err := tc.Writer.PrepareRevision(
 					ctx,
 					"<handler>",
 					"<instance>",
-					0,
+					rev,
 				)
-				gomega.Expect(err).To(
-					gomega.MatchError(
-						"revision 0 is archived",
-					),
+				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
+
+				expectRevisions(
+					ctx,
+					tc.Reader,
+					"<handler>",
+					"<instance>",
+					3,
+					[]aggregate.Revision{rev},
 				)
 			})
 
@@ -774,4 +756,18 @@ func expectRevisions(
 	}
 
 	gomega.ExpectWithOffset(1, actual).To(gomegax.EqualX(expected))
+}
+
+// commitRevision prepares and immediately commits a revision.
+func commitRevision(
+	ctx context.Context,
+	writer aggregate.RevisionWriter,
+	hk, id string,
+	rev aggregate.Revision,
+) {
+	err := writer.PrepareRevision(ctx, hk, id, rev)
+	gomega.ExpectWithOffset(1, err).ShouldNot(gomega.HaveOccurred())
+
+	err = writer.CommitRevision(ctx, hk, id, rev.End)
+	gomega.ExpectWithOffset(1, err).ShouldNot(gomega.HaveOccurred())
 }
