@@ -149,36 +149,14 @@ func (w *Worker) stateLoadRoot(ctx context.Context) (workerState, error) {
 // stateCommitLastRevision attempts to acknowledge the command that produced the
 // most recent revision.
 func (w *Worker) stateCommitLastRevision(ctx context.Context) (workerState, error) {
-	if err := w.Acknowledger.CommitAck(
+	rev := w.bounds.End - 1
+
+	if err := w.commit(
 		ctx,
 		w.bounds.UncommittedRevisionCausationID,
-		w.HandlerIdentity.Key,
-		w.InstanceID,
-		w.bounds.End-1,
+		rev,
 	); err != nil {
-		return nil, fmt.Errorf(
-			"cannot commit acknowledgement of command %s for revision %d of aggregate root %s[%s]: %w",
-			w.bounds.UncommittedRevisionCausationID,
-			w.bounds.End-1,
-			w.HandlerIdentity.Name,
-			w.InstanceID,
-			err,
-		)
-	}
-
-	if err := w.RevisionWriter.CommitRevision(
-		ctx,
-		w.HandlerIdentity.Key,
-		w.InstanceID,
-		w.bounds.End,
-	); err != nil {
-		return nil, fmt.Errorf(
-			"cannot commit revision %d of aggregate root %s[%s]: %w",
-			w.bounds.End,
-			w.HandlerIdentity.Name,
-			w.InstanceID,
-			err,
-		)
+		return nil, err
 	}
 
 	w.Logger.Warn(
@@ -299,17 +277,46 @@ func (w *Worker) saveChanges(ctx context.Context, sc *scope) error {
 		begin = w.bounds.End + 1
 	}
 
+	rev := Revision{
+		begin,
+		w.bounds.End,
+		sc.Command.ID(),
+		sc.EventEnvelopes,
+	}
+
+	if err := w.prepare(ctx, commandID, rev); err != nil {
+		return err
+	}
+
+	if err := w.commit(ctx, commandID, rev.End); err != nil {
+		return err
+	}
+
+	w.bounds.Begin = begin
+	w.bounds.End++
+	w.snapshotAge++
+
+	return nil
+}
+
+// prepare prepares the acknowledgement of the command and the aggregate
+// revision.
+func (w *Worker) prepare(
+	ctx context.Context,
+	commandID string,
+	rev Revision,
+) error {
 	if err := w.Acknowledger.PrepareAck(
 		ctx,
 		commandID,
 		w.HandlerIdentity.Key,
 		w.InstanceID,
-		w.bounds.End,
+		rev.End,
 	); err != nil {
 		return fmt.Errorf(
 			"cannot prepare acknowledgement of command %s for revision %d of aggregate root %s[%s]: %w",
 			commandID,
-			w.bounds.End,
+			rev.End,
 			w.HandlerIdentity.Name,
 			w.InstanceID,
 			err,
@@ -320,33 +327,37 @@ func (w *Worker) saveChanges(ctx context.Context, sc *scope) error {
 		ctx,
 		w.HandlerIdentity.Key,
 		w.InstanceID,
-		Revision{
-			begin,
-			w.bounds.End,
-			sc.Command.ID(),
-			sc.EventEnvelopes,
-		},
+		rev,
 	); err != nil {
 		return fmt.Errorf(
 			"cannot prepare revision %d of aggregate root %s[%s]: %w",
-			w.bounds.End,
+			rev.End,
 			w.HandlerIdentity.Name,
 			w.InstanceID,
 			err,
 		)
 	}
 
+	return nil
+}
+
+// commit commits the acknowledgement of the command and the aggregate revision.
+func (w *Worker) commit(
+	ctx context.Context,
+	commandID string,
+	rev uint64,
+) error {
 	if err := w.Acknowledger.CommitAck(
 		ctx,
 		commandID,
 		w.HandlerIdentity.Key,
 		w.InstanceID,
-		w.bounds.End,
+		rev,
 	); err != nil {
 		return fmt.Errorf(
 			"cannot commit acknowledgement of command %s for revision %d of aggregate root %s[%s]: %w",
 			commandID,
-			w.bounds.End,
+			rev,
 			w.HandlerIdentity.Name,
 			w.InstanceID,
 			err,
@@ -357,20 +368,16 @@ func (w *Worker) saveChanges(ctx context.Context, sc *scope) error {
 		ctx,
 		w.HandlerIdentity.Key,
 		w.InstanceID,
-		w.bounds.End,
+		rev,
 	); err != nil {
 		return fmt.Errorf(
 			"cannot commit revision %d of aggregate root %s[%s]: %w",
-			w.bounds.End,
+			rev,
 			w.HandlerIdentity.Name,
 			w.InstanceID,
 			err,
 		)
 	}
-
-	w.bounds.Begin = begin
-	w.bounds.End++
-	w.snapshotAge++
 
 	return nil
 }

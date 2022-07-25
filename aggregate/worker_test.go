@@ -146,17 +146,403 @@ var _ = Describe("type Worker", func() {
 	}
 
 	Describe("func Run()", func() {
-		It("ACKs the command if it is handled successfully", func() {
+		When("the command is handled successfully", func() {
+			It("acknowledges the command", func() {
+				cmd := executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
+
+				go func() {
+					// Shutdown the worker when the command has been
+					// acknowledged.
+					select {
+					case <-ctx.Done():
+					case <-cmd.Done():
+						cancel()
+					}
+				}()
+
+				err := worker.Run(ctx)
+				Expect(err).To(Equal(context.Canceled))
+
+				Eventually(cmd.Done()).Should(BeClosed())
+				Expect(cmd.Err()).ShouldNot(HaveOccurred())
+			})
+
+			It("performs the two-phase commit in the correct sequence", func() {
+				var order []string
+
+				acknowledger.PrepareAckFunc = func(
+					ctx context.Context,
+					commandID string,
+					hk, id string,
+					rev uint64,
+				) error {
+					order = append(order, "<prepare-ack>")
+					return nil
+				}
+
+				revisionWriter.PrepareRevisionFunc = func(
+					ctx context.Context,
+					hk, id string,
+					rev Revision,
+				) error {
+					order = append(order, "<prepare-revision>")
+					return nil
+				}
+
+				acknowledger.CommitAckFunc = func(
+					ctx context.Context,
+					commandID string,
+					hk, id string,
+					rev uint64,
+				) error {
+					order = append(order, "<commit-ack>")
+					return nil
+				}
+
+				revisionWriter.CommitRevisionFunc = func(
+					ctx context.Context,
+					hk, id string,
+					rev uint64,
+				) error {
+					order = append(order, "<commit-revision>")
+					return nil
+				}
+
+				cmd := executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
+
+				go func() {
+					// Shutdown the worker when the command has been
+					// acknowledged.
+					select {
+					case <-ctx.Done():
+					case <-cmd.Done():
+						cancel()
+					}
+				}()
+
+				err := worker.Run(ctx)
+				Expect(err).To(Equal(context.Canceled))
+				Expect(order).To(Equal(
+					[]string{
+						"<prepare-ack>",
+						"<prepare-revision>",
+						"<commit-ack>",
+						"<commit-revision>",
+					},
+				))
+			})
+
+			It("persists a new revision", func() {
+				executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command-0>", MessageC1),
+				)
+
+				cmd := executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command-1>", MessageC2),
+				)
+
+				go func() {
+					// Shutdown the worker when the command has been
+					// acknowledged.
+					select {
+					case <-ctx.Done():
+					case <-cmd.Done():
+						cancel()
+					}
+				}()
+
+				err := worker.Run(ctx)
+				Expect(err).To(Equal(context.Canceled))
+
+				expectRevisions(
+					ctx,
+					revisionStore,
+					"<handler-key>",
+					"<instance>",
+					0,
+					[]Revision{
+						{
+							Begin:       0,
+							End:         0,
+							CausationID: "<command-0>",
+							Events: []*envelopespec.Envelope{
+								{
+									MessageId:         "0",
+									CausationId:       "<command-0>",
+									CorrelationId:     "<correlation>",
+									SourceApplication: packer.Application,
+									SourceHandler:     marshalkit.MustMarshalEnvelopeIdentity(worker.HandlerIdentity),
+									SourceInstanceId:  "<instance>",
+									CreatedAt:         "2000-01-01T00:00:00Z",
+									Description:       "{E1}",
+									PortableName:      MessageEPortableName,
+									MediaType:         MessageE1Packet.MediaType,
+									Data:              MessageE1Packet.Data,
+								},
+							},
+						},
+						{
+							Begin:       0,
+							End:         1,
+							CausationID: "<command-1>",
+							Events: []*envelopespec.Envelope{
+								{
+									MessageId:         "1",
+									CausationId:       "<command-1>",
+									CorrelationId:     "<correlation>",
+									SourceApplication: packer.Application,
+									SourceHandler:     marshalkit.MustMarshalEnvelopeIdentity(worker.HandlerIdentity),
+									SourceInstanceId:  "<instance>",
+									CreatedAt:         "2000-01-01T00:00:01Z",
+									Description:       "{E2}",
+									PortableName:      MessageEPortableName,
+									MediaType:         MessageE2Packet.MediaType,
+									Data:              MessageE2Packet.Data,
+								},
+							},
+						},
+					},
+				)
+			})
+		})
+
+		When("the revision cannot be prepared", func() {
+			BeforeEach(func() {
+				revisionWriter.PrepareRevisionFunc = func(
+					ctx context.Context,
+					hk, id string,
+					rev Revision,
+				) error {
+					return errors.New("<error>")
+				}
+			})
+
+			It("negatively acknowledges the command and returns an error", func() {
+				cmd := executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
+
+				err := worker.Run(ctx)
+				Expect(err).To(
+					MatchError(
+						"cannot prepare revision 0 of aggregate root <handler-name>[<instance>]: <error>",
+					),
+				)
+
+				Eventually(cmd.Done()).Should(BeClosed())
+				Expect(cmd.Err()).To(MatchError("shutting down"))
+			})
+
+			It("does not commit an acknowledgement", func() {
+				acknowledger.CommitAckFunc = func(
+					ctx context.Context,
+					commandID,
+					hk, id string,
+					rev uint64,
+				) error {
+					Fail("unexpected call")
+					return nil
+				}
+
+				executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
+
+				worker.Run(ctx)
+			})
+		})
+
+		When("the revision cannot be committed", func() {
+			BeforeEach(func() {
+				revisionWriter.CommitRevisionFunc = func(
+					ctx context.Context,
+					hk, id string,
+					rev uint64,
+				) error {
+					return errors.New("<error>")
+				}
+			})
+
+			It("negatively acknowledges the command and returns an error", func() {
+				cmd := executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
+
+				err := worker.Run(ctx)
+				Expect(err).To(
+					MatchError(
+						"cannot commit revision 0 of aggregate root <handler-name>[<instance>]: <error>",
+					),
+				)
+
+				Eventually(cmd.Done()).Should(BeClosed())
+				Expect(cmd.Err()).To(MatchError("shutting down"))
+			})
+		})
+
+		When("acknowledgement of the command cannot be prepared", func() {
+			BeforeEach(func() {
+				acknowledger.PrepareAckFunc = func(
+					ctx context.Context,
+					commandID,
+					hk, id string,
+					rev uint64,
+				) error {
+					return errors.New("<error>")
+				}
+			})
+
+			It("negatively acknowledges the command and returns an error", func() {
+				cmd := executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
+
+				err := worker.Run(ctx)
+				Expect(err).To(
+					MatchError(
+						"cannot prepare acknowledgement of command <command> for revision 0 of aggregate root <handler-name>[<instance>]: <error>",
+					),
+				)
+
+				Eventually(cmd.Done()).Should(BeClosed())
+				Expect(cmd.Err()).To(MatchError("shutting down"))
+			})
+
+			It("does not prepare the revision", func() {
+				revisionWriter.PrepareRevisionFunc = func(
+					ctx context.Context,
+					hk, id string,
+					rev Revision,
+				) error {
+					Fail("unexpected call")
+					return nil
+				}
+
+				executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
+
+				worker.Run(ctx)
+			})
+		})
+
+		When("acknowledgement of the command cannot be committed", func() {
+			BeforeEach(func() {
+				acknowledger.CommitAckFunc = func(
+					ctx context.Context,
+					commandID,
+					hk, id string,
+					rev uint64,
+				) error {
+					return errors.New("<error>")
+				}
+			})
+
+			It("negatively acknowledges the command and returns an error", func() {
+				cmd := executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
+
+				err := worker.Run(ctx)
+				Expect(err).To(
+					MatchError(
+						"cannot commit acknowledgement of command <command> for revision 0 of aggregate root <handler-name>[<instance>]: <error>",
+					),
+				)
+
+				Eventually(cmd.Done()).Should(BeClosed())
+				Expect(cmd.Err()).To(MatchError("shutting down"))
+			})
+
+			It("does not commit the revision", func() {
+				revisionWriter.CommitRevisionFunc = func(
+					ctx context.Context,
+					hk, id string,
+					rev uint64,
+				) error {
+					Fail("unexpected call")
+					return nil
+				}
+
+				executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<command>", MessageC1),
+				)
+
+				worker.Run(ctx)
+			})
+		})
+
+		It("makes the instance ID available via the scope", func() {
 			handler.HandleCommandFunc = func(
 				r dogma.AggregateRoot,
 				s dogma.AggregateCommandScope,
 				m dogma.Message,
 			) {
-				Expect(m).To(Equal(MessageC1))
+				Expect(s.InstanceID()).To(Equal("<instance>"))
 				cancel()
 			}
 
-			cmd := executeCommandAsync(
+			executeCommandAsync(
+				ctx,
+				commands,
+				NewParcel("<command>", MessageC1),
+			)
+
+			err := worker.Run(ctx)
+			Expect(err).To(Equal(context.Canceled))
+		})
+
+		It("allows logging via the scope", func() {
+			buffer := &bytes.Buffer{}
+
+			logger := zap.New(
+				zapcore.NewCore(
+					zapcore.NewConsoleEncoder(
+						zap.NewDevelopmentEncoderConfig(),
+					),
+					zapcore.AddSync(buffer),
+					zapcore.DebugLevel,
+				),
+			)
+
+			worker.Logger = logger
+
+			handler.HandleCommandFunc = func(
+				r dogma.AggregateRoot,
+				s dogma.AggregateCommandScope,
+				m dogma.Message,
+			) {
+				s.Log("<log-message %d %d %d>", 1, 2, 3)
+				cancel()
+			}
+
+			executeCommandAsync(
 				ctx,
 				commands,
 				NewParcel("<command>", MessageC1),
@@ -165,34 +551,9 @@ var _ = Describe("type Worker", func() {
 			err := worker.Run(ctx)
 			Expect(err).To(Equal(context.Canceled))
 
-			Eventually(cmd.Done()).Should(BeClosed())
-			Expect(cmd.Err()).ShouldNot(HaveOccurred())
-		})
-
-		It("NACKs the command if preparing the revision fails", func() {
-			revisionWriter.PrepareRevisionFunc = func(
-				ctx context.Context,
-				hk, id string,
-				rev Revision,
-			) error {
-				return errors.New("<error>")
-			}
-
-			cmd := executeCommandAsync(
-				ctx,
-				commands,
-				NewParcel("<command>", MessageC1),
-			)
-
-			err := worker.Run(ctx)
-			Expect(err).To(
-				MatchError(
-					"cannot prepare revision 0 of aggregate root <handler-name>[<instance>]: <error>",
-				),
-			)
-
-			Eventually(cmd.Done()).Should(BeClosed())
-			Expect(cmd.Err()).To(MatchError("shutting down"))
+			Expect(buffer.String()).To(ContainSubstring(
+				"<log-message 1 2 3>",
+			))
 		})
 
 		It("applies recorded events to the aggregate root", func() {
@@ -245,6 +606,127 @@ var _ = Describe("type Worker", func() {
 			})
 		})
 
+		When("there is an uncommitted revision", func() {
+			BeforeEach(func() {
+				revisionWriter.PrepareRevision(
+					ctx,
+					"<handler-key>",
+					"<instance>",
+					Revision{
+						Begin:       0,
+						End:         0,
+						CausationID: "<unacknowledged-command>",
+					},
+				)
+			})
+
+			It("commits the acknowlegement and revision before handling any commands", func() {
+				// This test relies on the fact that the memory-based revision
+				// writer panics if a new revision is prepared before the
+				// previous one is committed.
+
+				cmd := executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<another-command>", MessageC1),
+				)
+
+				go func() {
+					// Shutdown the worker when the command has been
+					// acknowledged.
+					select {
+					case <-ctx.Done():
+					case <-cmd.Done():
+						cancel()
+					}
+				}()
+
+				err := worker.Run(ctx)
+				Expect(err).To(Equal(context.Canceled))
+			})
+
+			It("acknowledges, but does not re-handle the command", func() {
+				handler.HandleCommandFunc = func(
+					r dogma.AggregateRoot,
+					s dogma.AggregateCommandScope,
+					m dogma.Message,
+				) {
+					Fail("unexpected call")
+				}
+
+				cmd := executeCommandAsync(
+					ctx,
+					commands,
+					NewParcel("<unacknowledged-command>", MessageC1),
+				)
+
+				go func() {
+					// Shutdown the worker when the command has been
+					// acknowledged.
+					select {
+					case <-ctx.Done():
+					case <-cmd.Done():
+						cancel()
+					}
+				}()
+
+				err := worker.Run(ctx)
+				Expect(err).To(Equal(context.Canceled))
+			})
+
+			When("acknowledgement of the command cannot be committed", func() {
+				BeforeEach(func() {
+					acknowledger.CommitAckFunc = func(
+						ctx context.Context,
+						commandID,
+						hk, id string,
+						rev uint64,
+					) error {
+						return errors.New("<error>")
+					}
+				})
+
+				It("returns an error", func() {
+					err := worker.Run(ctx)
+					Expect(err).To(MatchError(
+						"cannot commit acknowledgement of command <unacknowledged-command> for revision 0 of aggregate root <handler-name>[<instance>]: <error>",
+					))
+				})
+
+				It("does not commit the revision", func() {
+					revisionWriter.CommitRevisionFunc = func(
+						ctx context.Context,
+						hk, id string,
+						rev uint64,
+					) error {
+						Fail("unexpected call")
+						return nil
+					}
+
+					worker.Run(ctx)
+				})
+			})
+
+			When("the revision cannot be committed", func() {
+				BeforeEach(func() {
+					revisionWriter.CommitRevisionFunc = func(
+						ctx context.Context,
+						hk, id string,
+						rev uint64,
+					) error {
+						return errors.New("<error>")
+					}
+				})
+
+				It("returns an error", func() {
+					err := worker.Run(ctx)
+					Expect(err).To(MatchError(
+						"cannot commit revision 0 of aggregate root <handler-name>[<instance>]: <error>",
+					))
+				})
+			})
+		})
+
 		When("the instance has historical events", func() {
 			BeforeEach(func() {
 				commitRevision(
@@ -263,7 +745,7 @@ var _ = Describe("type Worker", func() {
 				)
 			})
 
-			It("passes the handler the the aggregate root loaded via the loader", func() {
+			It("passes the handler an aggregate root with the events applied", func() {
 				expect := handler.New()
 				expect.ApplyEvent(MessageX1)
 
@@ -285,130 +767,6 @@ var _ = Describe("type Worker", func() {
 				err := worker.Run(ctx)
 				Expect(err).To(Equal(context.Canceled))
 			})
-		})
-
-		It("persists a new revision", func() {
-			executeCommandAsync(
-				ctx,
-				commands,
-				NewParcel("<command-0>", MessageC1),
-			)
-
-			cmd := executeCommandAsync(
-				ctx,
-				commands,
-				NewParcel("<command-1>", MessageC2),
-			)
-
-			go func() {
-				// Shutdown the worker when the command has been ACKd.
-				select {
-				case <-ctx.Done():
-				case <-cmd.Done():
-					cancel()
-				}
-			}()
-
-			err := worker.Run(ctx)
-			Expect(err).To(Equal(context.Canceled))
-
-			expectRevisions(
-				ctx,
-				revisionStore,
-				"<handler-key>",
-				"<instance>",
-				0,
-				[]Revision{
-					{
-						Begin:       0,
-						End:         0,
-						CausationID: "<command-0>",
-						Events: []*envelopespec.Envelope{
-							{
-								MessageId:         "0",
-								CausationId:       "<command-0>",
-								CorrelationId:     "<correlation>",
-								SourceApplication: packer.Application,
-								SourceHandler:     marshalkit.MustMarshalEnvelopeIdentity(worker.HandlerIdentity),
-								SourceInstanceId:  "<instance>",
-								CreatedAt:         "2000-01-01T00:00:00Z",
-								Description:       "{E1}",
-								PortableName:      MessageEPortableName,
-								MediaType:         MessageE1Packet.MediaType,
-								Data:              MessageE1Packet.Data,
-							},
-						},
-					},
-					{
-						Begin:       0,
-						End:         1,
-						CausationID: "<command-1>",
-						Events: []*envelopespec.Envelope{
-							{
-								MessageId:         "1",
-								CausationId:       "<command-1>",
-								CorrelationId:     "<correlation>",
-								SourceApplication: packer.Application,
-								SourceHandler:     marshalkit.MustMarshalEnvelopeIdentity(worker.HandlerIdentity),
-								SourceInstanceId:  "<instance>",
-								CreatedAt:         "2000-01-01T00:00:01Z",
-								Description:       "{E2}",
-								PortableName:      MessageEPortableName,
-								MediaType:         MessageE2Packet.MediaType,
-								Data:              MessageE2Packet.Data,
-							},
-						},
-					},
-				},
-			)
-		})
-
-		It("returns an error when there is an OCC failure", func() {
-			// Send a command that we can wait on to ensure that the worker has
-			// loaded the aggregate state.
-			cmd := executeCommandAsync(
-				ctx,
-				commands,
-				NewParcel("<command-1>", MessageC1),
-			)
-
-			go func() {
-				defer GinkgoRecover()
-
-				Eventually(cmd.Done()).Should(BeClosed())
-
-				// Write an extra revision to the store that the worker doesn't
-				// know about, making the worker's in-memory knowledge of the
-				// current revision out-of-date.
-				err := revisionStore.PrepareRevision(
-					ctx,
-					"<handler-key>",
-					"<instance>",
-					Revision{
-						Begin:       0,
-						End:         1,
-						CausationID: "<command-1>",
-						Events: []*envelopespec.Envelope{
-							NewEnvelope("<existing>", MessageX1),
-						},
-					},
-				)
-				Expect(err).ShouldNot(HaveOccurred())
-
-				// Send a second command to trigger the OCC failure.
-				executeCommandAsync(
-					ctx,
-					commands,
-					NewParcel("<command-2>", MessageC1),
-				)
-			}()
-
-			err := worker.Run(ctx)
-			Expect(err).To(
-				MatchError(
-					"cannot prepare revision 1 of aggregate root <handler-name>[<instance>]: optimistic concurrency conflict, 1 is not the next revision",
-				),
-			)
 		})
 
 		It("writes a snapshot when the snapshot interval is exceeded", func() {
@@ -906,62 +1264,5 @@ var _ = Describe("type Worker", func() {
 			Expect(err).To(Equal(context.Canceled))
 		})
 
-		It("makes the instance ID available via the scope", func() {
-			handler.HandleCommandFunc = func(
-				r dogma.AggregateRoot,
-				s dogma.AggregateCommandScope,
-				m dogma.Message,
-			) {
-				Expect(s.InstanceID()).To(Equal("<instance>"))
-				cancel()
-			}
-
-			executeCommandAsync(
-				ctx,
-				commands,
-				NewParcel("<command>", MessageC1),
-			)
-
-			err := worker.Run(ctx)
-			Expect(err).To(Equal(context.Canceled))
-		})
-
-		It("allows logging via the scope", func() {
-			buffer := &bytes.Buffer{}
-
-			logger := zap.New(
-				zapcore.NewCore(
-					zapcore.NewConsoleEncoder(
-						zap.NewDevelopmentEncoderConfig(),
-					),
-					zapcore.AddSync(buffer),
-					zapcore.DebugLevel,
-				),
-			)
-
-			worker.Logger = logger
-
-			handler.HandleCommandFunc = func(
-				r dogma.AggregateRoot,
-				s dogma.AggregateCommandScope,
-				m dogma.Message,
-			) {
-				s.Log("<log-message %d %d %d>", 1, 2, 3)
-				cancel()
-			}
-
-			executeCommandAsync(
-				ctx,
-				commands,
-				NewParcel("<command>", MessageC1),
-			)
-
-			err := worker.Run(ctx)
-			Expect(err).To(Equal(context.Canceled))
-
-			Expect(buffer.String()).To(ContainSubstring(
-				"<log-message 1 2 3>",
-			))
-		})
 	})
 })
