@@ -13,7 +13,9 @@ import (
 	. "github.com/dogmatiq/veracity/aggregate"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
 	"github.com/dogmatiq/veracity/persistence/memory"
+	"github.com/jmalloc/gomegax"
 	. "github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap"
 )
@@ -718,31 +720,86 @@ func (s *revisionReaderStub) ReadRevisions(
 	return nil, nil
 }
 
-// // eventWriterStub is a test implementation of the EventWriter interface.
-// type eventWriterStub struct {
-// 	EventWriter
+// revisionWriterStub is a test implementation of the RevisionWriter interface.
+type revisionWriterStub struct {
+	RevisionWriter
 
-// 	WriteEventsFunc func(
-// 		ctx context.Context,
-// 		hk, id string,
-// 		begin, end uint64,
-// 		events []*envelopespec.Envelope,
-// 	) error
-// }
+	PrepareRevisionFunc func(
+		ctx context.Context,
+		hk, id string,
+		rev Revision,
+	) error
 
-// func (s *eventWriterStub) WriteEvents(
-// 	ctx context.Context,
-// 	hk, id string,
-// 	begin, end uint64,
-// 	events []*envelopespec.Envelope,
-// ) error {
-// 	if s.WriteEventsFunc != nil {
-// 		return s.WriteEventsFunc(ctx, hk, id, begin, end, events)
-// 	}
+	CommitRevisionFunc func(
+		ctx context.Context,
+		hk, id string,
+		rev Revision,
+	) error
+}
 
-// 	if s.EventWriter != nil {
-// 		return s.EventWriter.WriteEvents(ctx, hk, id, begin, end, events)
-// 	}
+func (s *revisionWriterStub) PrepareRevision(
+	ctx context.Context,
+	hk, id string,
+	rev Revision,
+) error {
+	if s.PrepareRevisionFunc != nil {
+		return s.PrepareRevisionFunc(ctx, hk, id, rev)
+	}
 
-// 	return nil
-// }
+	if s.RevisionWriter != nil {
+		return s.RevisionWriter.PrepareRevision(ctx, hk, id, rev)
+	}
+
+	return nil
+}
+
+func (s *revisionWriterStub) CommitRevision(
+	ctx context.Context,
+	hk, id string,
+	rev Revision,
+) error {
+	if s.CommitRevisionFunc != nil {
+		return s.CommitRevisionFunc(ctx, hk, id, rev)
+	}
+
+	if s.RevisionWriter != nil {
+		return s.RevisionWriter.CommitRevision(ctx, hk, id, rev)
+	}
+
+	return nil
+}
+
+// expectEvents reads all revisions starting from begin and asserts that they
+// are equal to expected.
+func expectRevisions(
+	ctx context.Context,
+	reader aggregate.RevisionReader,
+	hk, id string,
+	begin uint64,
+	expected []aggregate.Revision,
+) {
+	var actual []aggregate.Revision
+
+	for {
+		revisions, err := reader.ReadRevisions(
+			ctx,
+			hk,
+			id,
+			begin,
+		)
+		gomega.ExpectWithOffset(1, err).ShouldNot(gomega.HaveOccurred())
+
+		if len(revisions) == 0 {
+			break
+		}
+
+		actual = append(actual, revisions...)
+		begin += uint64(len(revisions))
+	}
+
+	if len(actual) == 0 && len(expected) == 0 {
+		return
+	}
+
+	gomega.ExpectWithOffset(1, actual).To(gomegax.EqualX(expected))
+}

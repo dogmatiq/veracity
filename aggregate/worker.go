@@ -34,8 +34,8 @@ type WorkerConfig struct {
 	// Loader is used to load aggregate state from persistent storage.
 	Loader Loader
 
-	// EventWriter is used to write new events to persistent storage.
-	EventWriter EventWriter
+	// RevisionWriter is used to write new revisions to persistent storage.
+	RevisionWriter RevisionWriter
 
 	// SnapshotWriter is used to persist snapshots of the aggregate root.
 	SnapshotWriter SnapshotWriter
@@ -232,16 +232,36 @@ func (w *Worker) saveChanges(ctx context.Context, sc *scope) error {
 		begin = w.end + 1
 	}
 
-	if err := w.EventWriter.WriteEvents(
-		ctx,
-		w.HandlerIdentity.Key,
-		w.InstanceID,
+	rev := Revision{
 		begin,
 		w.end,
 		sc.EventEnvelopes,
+	}
+
+	if err := w.RevisionWriter.PrepareRevision(
+		ctx,
+		w.HandlerIdentity.Key,
+		w.InstanceID,
+		rev,
 	); err != nil {
 		return fmt.Errorf(
-			"cannot write events for aggregate root %s[%s]: %w",
+			"cannot prepare revision %d of aggregate root %s[%s]: %w",
+			w.end,
+			w.HandlerIdentity.Name,
+			w.InstanceID,
+			err,
+		)
+	}
+
+	if err := w.RevisionWriter.CommitRevision(
+		ctx,
+		w.HandlerIdentity.Key,
+		w.InstanceID,
+		rev,
+	); err != nil {
+		return fmt.Errorf(
+			"cannot commit revision %d of aggregate root %s[%s]: %w",
+			w.end,
 			w.HandlerIdentity.Name,
 			w.InstanceID,
 			err,

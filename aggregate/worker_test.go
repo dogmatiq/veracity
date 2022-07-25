@@ -29,16 +29,16 @@ var _ = Describe("type Worker", func() {
 		ctx    context.Context
 		cancel context.CancelFunc
 
-		eventStore  *memory.AggregateEventStore
-		eventReader *eventReaderStub
-		eventWriter *eventWriterStub
+		revisionStore  *memory.AggregateRevisionStore
+		revisionReader *revisionReaderStub
+		revisionWriter *revisionWriterStub
 
 		snapshotStore  *memory.AggregateSnapshotStore
 		snapshotReader *snapshotReaderStub
 		snapshotWriter *snapshotWriterStub
 
 		packer   *parcel.Packer
-		loader   *EventLoader
+		loader   *RevisionLoader
 		commands chan *Command
 		idle     chan string
 		handler  *AggregateMessageHandler
@@ -49,14 +49,14 @@ var _ = Describe("type Worker", func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 		DeferCleanup(cancel)
 
-		eventStore = &memory.AggregateEventStore{}
+		revisionStore = &memory.AggregateRevisionStore{}
 
-		eventReader = &eventReaderStub{
-			EventReader: eventStore,
+		revisionReader = &revisionReaderStub{
+			RevisionReader: revisionStore,
 		}
 
-		eventWriter = &eventWriterStub{
-			EventWriter: eventStore,
+		revisionWriter = &revisionWriterStub{
+			RevisionWriter: revisionStore,
 		}
 
 		snapshotStore = &memory.AggregateSnapshotStore{
@@ -76,8 +76,8 @@ var _ = Describe("type Worker", func() {
 		)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		loader = &EventLoader{
-			EventReader:    eventReader,
+		loader = &RevisionLoader{
+			RevisionReader: revisionReader,
 			SnapshotReader: snapshotReader,
 			Marshaler:      Marshaler,
 			Logger:         logger,
@@ -119,7 +119,7 @@ var _ = Describe("type Worker", func() {
 				HandlerIdentity: configkit.MustNewIdentity("<handler-name>", "<handler-key>"),
 				Packer:          packer,
 				Loader:          loader,
-				EventWriter:     eventWriter,
+				RevisionWriter:  revisionWriter,
 				SnapshotWriter:  snapshotWriter,
 				Logger:          logger,
 			},
@@ -165,12 +165,11 @@ var _ = Describe("type Worker", func() {
 			Expect(cmd.Err()).ShouldNot(HaveOccurred())
 		})
 
-		It("NACKs the command if writing events fails", func() {
-			eventWriter.WriteEventsFunc = func(
+		It("NACKs the command if preparing the revision fails", func() {
+			revisionWriter.PrepareRevisionFunc = func(
 				ctx context.Context,
 				hk, id string,
-				begin, end uint64,
-				events []*envelopespec.Envelope,
+				rev Revision,
 			) error {
 				return errors.New("<error>")
 			}
@@ -184,7 +183,7 @@ var _ = Describe("type Worker", func() {
 			err := worker.Run(ctx)
 			Expect(err).To(
 				MatchError(
-					"cannot write events for aggregate root <handler-name>[<instance>]: <error>",
+					"cannot prepare revision 0 of aggregate root <handler-name>[<instance>]: <error>",
 				),
 			)
 
@@ -244,20 +243,32 @@ var _ = Describe("type Worker", func() {
 
 		When("the instance has historical events", func() {
 			BeforeEach(func() {
-				err := eventStore.WriteEvents(
+				rev := Revision{
+					Begin: 0,
+					End:   0,
+					Events: []*envelopespec.Envelope{
+						NewEnvelope("<existing>", MessageX1),
+					},
+				}
+
+				err := revisionStore.PrepareRevision(
 					ctx,
 					"<handler-key>",
 					"<instance>",
-					0,
-					0,
-					[]*envelopespec.Envelope{
-						NewEnvelope("<existing>", MessageX1),
-					},
+					rev,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+
+				err = revisionStore.CommitRevision(
+					ctx,
+					"<handler-key>",
+					"<instance>",
+					rev,
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 
-			It("passes the handler the correct aggregate root", func() {
+			It("passes the handler the the aggregate root loaded via the loader", func() {
 				expect := handler.New()
 				expect.ApplyEvent(MessageX1)
 
@@ -281,7 +292,7 @@ var _ = Describe("type Worker", func() {
 			})
 		})
 
-		It("persists recorded events", func() {
+		It("persists a new revision", func() {
 			executeCommandAsync(
 				ctx,
 				commands,
@@ -306,37 +317,50 @@ var _ = Describe("type Worker", func() {
 			err := worker.Run(ctx)
 			Expect(err).To(Equal(context.Canceled))
 
-			expectEvents(
-				eventStore,
+			expectRevisions(
+				ctx,
+				revisionStore,
 				"<handler-key>",
 				"<instance>",
 				0,
-				[]*envelopespec.Envelope{
+				[]Revision{
 					{
-						MessageId:         "0",
-						CausationId:       "<command-1>",
-						CorrelationId:     "<correlation>",
-						SourceApplication: packer.Application,
-						SourceHandler:     marshalkit.MustMarshalEnvelopeIdentity(worker.HandlerIdentity),
-						SourceInstanceId:  "<instance>",
-						CreatedAt:         "2000-01-01T00:00:00Z",
-						Description:       "{E1}",
-						PortableName:      MessageEPortableName,
-						MediaType:         MessageE1Packet.MediaType,
-						Data:              MessageE1Packet.Data,
+						Begin: 0,
+						End:   0,
+						Events: []*envelopespec.Envelope{
+							{
+								MessageId:         "0",
+								CausationId:       "<command-1>",
+								CorrelationId:     "<correlation>",
+								SourceApplication: packer.Application,
+								SourceHandler:     marshalkit.MustMarshalEnvelopeIdentity(worker.HandlerIdentity),
+								SourceInstanceId:  "<instance>",
+								CreatedAt:         "2000-01-01T00:00:00Z",
+								Description:       "{E1}",
+								PortableName:      MessageEPortableName,
+								MediaType:         MessageE1Packet.MediaType,
+								Data:              MessageE1Packet.Data,
+							},
+						},
 					},
 					{
-						MessageId:         "1",
-						CausationId:       "<command-2>",
-						CorrelationId:     "<correlation>",
-						SourceApplication: packer.Application,
-						SourceHandler:     marshalkit.MustMarshalEnvelopeIdentity(worker.HandlerIdentity),
-						SourceInstanceId:  "<instance>",
-						CreatedAt:         "2000-01-01T00:00:01Z",
-						Description:       "{E2}",
-						PortableName:      MessageEPortableName,
-						MediaType:         MessageE2Packet.MediaType,
-						Data:              MessageE2Packet.Data,
+						Begin: 0,
+						End:   1,
+						Events: []*envelopespec.Envelope{
+							{
+								MessageId:         "1",
+								CausationId:       "<command-2>",
+								CorrelationId:     "<correlation>",
+								SourceApplication: packer.Application,
+								SourceHandler:     marshalkit.MustMarshalEnvelopeIdentity(worker.HandlerIdentity),
+								SourceInstanceId:  "<instance>",
+								CreatedAt:         "2000-01-01T00:00:01Z",
+								Description:       "{E2}",
+								PortableName:      MessageEPortableName,
+								MediaType:         MessageE2Packet.MediaType,
+								Data:              MessageE2Packet.Data,
+							},
+						},
 					},
 				},
 			)
@@ -356,17 +380,19 @@ var _ = Describe("type Worker", func() {
 
 				Eventually(cmd.Done()).Should(BeClosed())
 
-				// Write an extra event to the store that the worker doesn't
+				// Write an extra revision to the store that the worker doesn't
 				// know about, making the worker's in-memory knowledge of the
 				// current revision out-of-date.
-				err := eventStore.WriteEvents(
+				err := revisionStore.PrepareRevision(
 					ctx,
 					"<handler-key>",
 					"<instance>",
-					0,
-					1,
-					[]*envelopespec.Envelope{
-						NewEnvelope("<existing>", MessageX1),
+					Revision{
+						Begin: 0,
+						End:   1,
+						Events: []*envelopespec.Envelope{
+							NewEnvelope("<existing>", MessageX1),
+						},
 					},
 				)
 				Expect(err).ShouldNot(HaveOccurred())
@@ -382,7 +408,7 @@ var _ = Describe("type Worker", func() {
 			err := worker.Run(ctx)
 			Expect(err).To(
 				MatchError(
-					"cannot write events for aggregate root <handler-name>[<instance>]: optimistic concurrency conflict, 1 is not the next revision",
+					"cannot prepare revision 1 of aggregate root <handler-name>[<instance>]: optimistic concurrency conflict, 1 is not the next revision",
 				),
 			)
 		})
@@ -459,16 +485,28 @@ var _ = Describe("type Worker", func() {
 					s.Destroy()
 				}
 
-				err := eventStore.WriteEvents(
-					ctx,
-					"<handler-key>",
-					"<instance>",
-					0,
-					0,
-					[]*envelopespec.Envelope{
+				rev := Revision{
+					Begin: 0,
+					End:   0,
+					Events: []*envelopespec.Envelope{
 						NewEnvelope("<existing-1>", MessageX1),
 						NewEnvelope("<existing-2>", MessageX2),
 					},
+				}
+
+				err := revisionStore.PrepareRevision(
+					ctx,
+					"<handler-key>",
+					"<instance>",
+					rev,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+
+				err = revisionStore.CommitRevision(
+					ctx,
+					"<handler-key>",
+					"<instance>",
+					rev,
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -486,7 +524,7 @@ var _ = Describe("type Worker", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 
-			It("archives historical events and snapshots, and signals the idle state", func() {
+			It("archives historical revisions and snapshots, and signals the idle state", func() {
 				executeCommandAsync(
 					ctx,
 					commands,
@@ -498,7 +536,7 @@ var _ = Describe("type Worker", func() {
 				err := worker.Run(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
 
-				begin, end, err := eventStore.ReadBounds(
+				begin, _, end, err := revisionStore.ReadBounds(
 					ctx,
 					"<handler-key>",
 					"<instance>",
@@ -548,7 +586,7 @@ var _ = Describe("type Worker", func() {
 				Expect(err).To(Equal(context.Canceled))
 			})
 
-			It("archives newly recorded events", func() {
+			It("archives the new revision", func() {
 				handler.HandleCommandFunc = func(
 					r dogma.AggregateRoot,
 					s dogma.AggregateCommandScope,
@@ -569,7 +607,7 @@ var _ = Describe("type Worker", func() {
 				err := worker.Run(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
 
-				begin, end, err := eventStore.ReadBounds(
+				begin, _, end, err := revisionStore.ReadBounds(
 					ctx,
 					"<handler-key>",
 					"<instance>",
@@ -658,7 +696,7 @@ var _ = Describe("type Worker", func() {
 					err := worker.Run(ctx)
 					Expect(err).To(Equal(context.Canceled))
 
-					begin, end, err := eventStore.ReadBounds(
+					begin, _, end, err := revisionStore.ReadBounds(
 						ctx,
 						"<handler-key>",
 						"<instance>",
@@ -710,16 +748,28 @@ var _ = Describe("type Worker", func() {
 			})
 
 			It("does not take a snapshot if the existing snapshot is up-to-date", func() {
-				err := eventStore.WriteEvents(
-					ctx,
-					"<handler-key>",
-					"<instance>",
-					0,
-					0,
-					[]*envelopespec.Envelope{
+				rev := Revision{
+					Begin: 0,
+					End:   0,
+					Events: []*envelopespec.Envelope{
 						NewEnvelope("<existing-1>", MessageX1),
 						NewEnvelope("<existing-2>", MessageX2),
 					},
+				}
+
+				err := revisionStore.PrepareRevision(
+					ctx,
+					"<handler-key>",
+					"<instance>",
+					rev,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+
+				err = revisionStore.CommitRevision(
+					ctx,
+					"<handler-key>",
+					"<instance>",
+					rev,
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -824,17 +874,17 @@ var _ = Describe("type Worker", func() {
 		})
 
 		It("returns an error if the root cannot be loaded", func() {
-			eventReader.ReadBoundsFunc = func(
+			revisionReader.ReadBoundsFunc = func(
 				ctx context.Context,
 				hk, id string,
-			) (uint64, uint64, error) {
-				return 0, 0, errors.New("<error>")
+			) (uint64, uint64, uint64, error) {
+				return 0, 0, 0, errors.New("<error>")
 			}
 
 			err := worker.Run(ctx)
 			Expect(err).To(
 				MatchError(
-					"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read event revision bounds: <error>",
+					"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read revision bounds: <error>",
 				),
 			)
 		})
