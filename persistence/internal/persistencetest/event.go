@@ -553,7 +553,7 @@ func expectEvents(
 			id,
 			begin,
 		)
-		gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
+		gomega.ExpectWithOffset(1, err).ShouldNot(gomega.HaveOccurred())
 
 		producedEvents = append(producedEvents, events...)
 
@@ -568,5 +568,5 @@ func expectEvents(
 		return
 	}
 
-	gomega.Expect(producedEvents).To(gomegax.EqualX(expectedEvents))
+	gomega.ExpectWithOffset(1, producedEvents).To(gomegax.EqualX(expectedEvents))
 }
