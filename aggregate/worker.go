@@ -40,6 +40,10 @@ type WorkerConfig struct {
 	// SnapshotWriter is used to persist snapshots of the aggregate root.
 	SnapshotWriter SnapshotWriter
 
+	// Acknowledger is used to acknowledge command messages once they have been
+	// handled successfully.
+	Acknowledger CommandAcknowledger
+
 	// IdleTimeout is the amount of time a worker will continue running without
 	// receiving a command.
 	IdleTimeout time.Duration
@@ -136,15 +140,50 @@ func (w *Worker) stateLoadRoot(ctx context.Context) (workerState, error) {
 	}
 
 	if w.bounds.UncommittedCommandID != "" {
-		return w.resolveUncommittedRevision, nil
+		return w.stateCommitLastRevision, nil
 	}
 
 	return w.stateWaitForCommand, nil
 }
 
-// resolveUncommittedRevision attempts to commit the most recent (uncommitted)
-// revision.
-func (w *Worker) resolveUncommittedRevision(ctx context.Context) (workerState, error) {
+// stateCommitLastRevision attempts to acknowledge the command that produced the
+// most recent revision.
+func (w *Worker) stateCommitLastRevision(ctx context.Context) (workerState, error) {
+	if err := w.Acknowledger.CommitAck(ctx, w.bounds.UncommittedCommandID); err != nil {
+		return nil, fmt.Errorf(
+			"cannot commit acknowledgement of command %s for revision %d of aggregate root %s[%s]: %w",
+			w.bounds.UncommittedCommandID,
+			w.bounds.End-1,
+			w.HandlerIdentity.Name,
+			w.InstanceID,
+			err,
+		)
+	}
+
+	if err := w.RevisionWriter.CommitRevision(
+		ctx,
+		w.HandlerIdentity.Key,
+		w.InstanceID,
+		w.bounds.End,
+	); err != nil {
+		return nil, fmt.Errorf(
+			"cannot commit revision %d of aggregate root %s[%s]: %w",
+			w.bounds.End,
+			w.HandlerIdentity.Name,
+			w.InstanceID,
+			err,
+		)
+	}
+
+	w.Logger.Warn(
+		"recovered from uncommitted acknowledgement/revision",
+		zap.String("handler_name", w.HandlerIdentity.Name),
+		zap.String("handler_key", w.HandlerIdentity.Key),
+		zap.String("instance_id", w.InstanceID),
+		zap.Uint64("revision", w.bounds.End-1),
+		zap.String("command_id", w.bounds.UncommittedCommandID),
+	)
+
 	return w.stateWaitForCommand, nil
 }
 
@@ -174,8 +213,18 @@ func (w *Worker) stateWaitForCommand(ctx context.Context) (workerState, error) {
 // stateHandleCommand calls the user-defined message handler for a single
 // command, then persists the changes it makes.
 func (w *Worker) stateHandleCommand(cmd *Command, ok bool) workerState {
+	// The the command channel has been closed there is no next state.
 	if !ok {
 		return nil
+	}
+
+	// If the command we received was the command that was uncommitted when we
+	// first loaded, then it's already been handled.
+	if cmd.Parcel.ID() == w.bounds.UncommittedCommandID {
+		w.bounds.UncommittedCommandID = ""
+		cmd.Ack()
+
+		return w.stateWaitForCommand
 	}
 
 	return func(ctx context.Context) (workerState, error) {
@@ -190,6 +239,7 @@ func (w *Worker) stateHandleCommand(cmd *Command, ok bool) workerState {
 				zap.String("handler_name", w.HandlerIdentity.Name),
 				zap.String("handler_key", w.HandlerIdentity.Key),
 				zap.String("instance_id", w.InstanceID),
+				zap.Uint64("proposed_revision", w.bounds.End),
 				zap.String("message_id", cmd.Parcel.ID()),
 			).Sugar(),
 		}
@@ -236,13 +286,22 @@ func (w *Worker) stateRequestShutdown(ctx context.Context) (workerState, error) 
 
 // saveChanges persists changes made as a result of handling a single command.
 func (w *Worker) saveChanges(ctx context.Context, sc *scope) error {
-	if !sc.HasChanges {
-		return nil
-	}
+	commandID := sc.Command.ID()
 
 	begin := w.bounds.Begin
 	if sc.IsDestroyed {
 		begin = w.bounds.End + 1
+	}
+
+	if err := w.Acknowledger.PrepareAck(ctx, commandID); err != nil {
+		return fmt.Errorf(
+			"cannot prepare acknowledgement of command %s for revision %d of aggregate root %s[%s]: %w",
+			commandID,
+			w.bounds.End,
+			w.HandlerIdentity.Name,
+			w.InstanceID,
+			err,
+		)
 	}
 
 	if err := w.RevisionWriter.PrepareRevision(
@@ -258,6 +317,17 @@ func (w *Worker) saveChanges(ctx context.Context, sc *scope) error {
 	); err != nil {
 		return fmt.Errorf(
 			"cannot prepare revision %d of aggregate root %s[%s]: %w",
+			w.bounds.End,
+			w.HandlerIdentity.Name,
+			w.InstanceID,
+			err,
+		)
+	}
+
+	if err := w.Acknowledger.CommitAck(ctx, commandID); err != nil {
+		return fmt.Errorf(
+			"cannot commit acknowledgement of command %s for revision %d of aggregate root %s[%s]: %w",
+			commandID,
 			w.bounds.End,
 			w.HandlerIdentity.Name,
 			w.InstanceID,
@@ -282,7 +352,10 @@ func (w *Worker) saveChanges(ctx context.Context, sc *scope) error {
 
 	w.bounds.Begin = begin
 	w.bounds.End++
-	w.snapshotAge++
+
+	if len(sc.EventEnvelopes) > 0 {
+		w.snapshotAge = w.bounds.End
+	}
 
 	return nil
 }
@@ -382,7 +455,7 @@ func (w *Worker) archiveSnapshots(ctx context.Context) error {
 		}
 
 		w.Logger.Warn(
-			"cannot archive snapshots aggregate root",
+			"cannot archive aggregate root snapshots",
 			zap.String("handler_name", w.HandlerIdentity.Name),
 			zap.String("handler_key", w.HandlerIdentity.Key),
 			zap.String("instance_id", w.InstanceID),

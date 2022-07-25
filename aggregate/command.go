@@ -7,6 +7,13 @@ import (
 	"github.com/dogmatiq/veracity/parcel"
 )
 
+// CommandAcknowledger acknowledges commands that have been handled
+// successfully.
+type CommandAcknowledger interface {
+	PrepareAck(ctx context.Context, commandID string) error
+	CommitAck(ctx context.Context, commandID string) error
+}
+
 // Command encapsulates a command message that is to be executed by a worker.
 type Command struct {
 	// Context is the context of the command itself.

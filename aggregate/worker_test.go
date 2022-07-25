@@ -37,12 +37,13 @@ var _ = Describe("type Worker", func() {
 		snapshotReader *snapshotReaderStub
 		snapshotWriter *snapshotWriterStub
 
-		packer   *parcel.Packer
-		loader   *Loader
-		commands chan *Command
-		idle     chan string
-		handler  *AggregateMessageHandler
-		worker   *Worker
+		packer       *parcel.Packer
+		loader       *Loader
+		acknowledger *commandAcknowledgerStub
+		commands     chan *Command
+		idle         chan string
+		handler      *AggregateMessageHandler
+		worker       *Worker
 	)
 
 	BeforeEach(func() {
@@ -83,6 +84,8 @@ var _ = Describe("type Worker", func() {
 			Logger:         logger,
 		}
 
+		acknowledger = &commandAcknowledgerStub{}
+
 		commands = make(chan *Command, DefaultCommandBuffer)
 		idle = make(chan string)
 
@@ -121,6 +124,7 @@ var _ = Describe("type Worker", func() {
 				Loader:          loader,
 				RevisionWriter:  revisionWriter,
 				SnapshotWriter:  snapshotWriter,
+				Acknowledger:    acknowledger,
 				Logger:          logger,
 			},
 			InstanceID: "<instance>",

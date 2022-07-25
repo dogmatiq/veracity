@@ -44,3 +44,36 @@ func executeCommandAsync(
 
 	return cmd
 }
+
+// commandAcknowledgerStub is a test implementation of the CommandAcknowledger
+// interface.
+type commandAcknowledgerStub struct {
+	CommandAcknowledger
+
+	PrepareAckFunc func(ctx context.Context, commandID string) error
+	CommitAckFunc  func(ctx context.Context, commandID string) error
+}
+
+func (s *commandAcknowledgerStub) PrepareAck(ctx context.Context, commandID string) error {
+	if s.PrepareAckFunc != nil {
+		return s.PrepareAckFunc(ctx, commandID)
+	}
+
+	if s.CommandAcknowledger != nil {
+		return s.CommandAcknowledger.PrepareAck(ctx, commandID)
+	}
+
+	return nil
+}
+
+func (s *commandAcknowledgerStub) CommitAck(ctx context.Context, commandID string) error {
+	if s.CommitAckFunc != nil {
+		return s.CommitAckFunc(ctx, commandID)
+	}
+
+	if s.CommandAcknowledger != nil {
+		return s.CommandAcknowledger.CommitAck(ctx, commandID)
+	}
+
+	return nil
+}

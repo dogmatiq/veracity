@@ -29,10 +29,6 @@ type scope struct {
 	// calls to RecordEvent() since.
 	IsDestroyed bool
 
-	// HasChanges is true if the instance has been destroyed or new events have
-	// been recorded.
-	HasChanges bool
-
 	// EventEnvelopes is a slice of envelopes containing the recorded events.
 	EventEnvelopes []*envelopespec.Envelope
 
@@ -49,7 +45,6 @@ func (s *scope) InstanceID() string {
 func (s *scope) Destroy() {
 	if !s.IsDestroyed {
 		s.IsDestroyed = true
-		s.HasChanges = true
 	}
 }
 
@@ -59,7 +54,6 @@ func (s *scope) RecordEvent(m dogma.Message) {
 	s.Root.ApplyEvent(m)
 
 	s.IsDestroyed = false
-	s.HasChanges = true
 	s.EventEnvelopes = append(
 		s.EventEnvelopes,
 		s.Packer.PackChildEvent(
