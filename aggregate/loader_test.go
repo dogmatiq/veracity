@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ = Describe("type Loader", func() {
+var _ = Describe("type EventLoader", func() {
 	var (
 		eventStore  *memory.AggregateEventStore
 		eventReader *eventReaderStub
@@ -28,7 +28,7 @@ var _ = Describe("type Loader", func() {
 
 		handlerID configkit.Identity
 		root      *AggregateRoot
-		loader    *Loader
+		loader    *EventLoader
 	)
 
 	BeforeEach(func() {
@@ -59,7 +59,7 @@ var _ = Describe("type Loader", func() {
 		)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		loader = &Loader{
+		loader = &EventLoader{
 			EventReader: eventReader,
 			Marshaler:   Marshaler,
 			Logger:      logger,

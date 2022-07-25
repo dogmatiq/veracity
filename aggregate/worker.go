@@ -32,7 +32,7 @@ type WorkerConfig struct {
 	Packer *parcel.Packer
 
 	// Loader is used to load aggregate state from persistent storage.
-	Loader *Loader
+	Loader Loader
 
 	// EventWriter is used to write new events to persistent storage.
 	EventWriter EventWriter

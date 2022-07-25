@@ -38,7 +38,7 @@ var _ = Describe("type Worker", func() {
 		snapshotWriter *snapshotWriterStub
 
 		packer   *parcel.Packer
-		loader   *Loader
+		loader   *EventLoader
 		commands chan *Command
 		idle     chan string
 		handler  *AggregateMessageHandler
@@ -76,7 +76,7 @@ var _ = Describe("type Worker", func() {
 		)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		loader = &Loader{
+		loader = &EventLoader{
 			EventReader:    eventReader,
 			SnapshotReader: snapshotReader,
 			Marshaler:      Marshaler,

@@ -18,8 +18,48 @@ const (
 	DefaultLoaderSnapshotWriteTimeout = 250 * time.Millisecond
 )
 
-// Loader loads aggregate roots from persistent storage.
-type Loader struct {
+// A Loader loads aggregate roots from persistent storage.
+type Loader interface {
+	// Load populates an aggregate root with data loaded from persistent
+	// storage.
+	//
+	// h is the identity of the handler that implements the aggregate. id is the
+	// instance of the aggregate to load.
+	//
+	// r must be an aggregate root that represents the "initial state" of the
+	// aggregate. It is typically a zero-value obtained by calling the
+	// AggregateMessageHandler.New() method on the handler identified by h.
+	//
+	// The contents of r is first updated to match the most recent snapshot of
+	// the instance. Then, any historical events that were recorded by the
+	// instance after that snapshot was taken are applied by calling
+	// r.ApplyEvent(). If no snapshot is available, r is populated by applying
+	// all of its historical events, which may take significant time.
+	//
+	// If an error occurs before all historical events can be applied to r, a
+	// new snapshot is taken as of the most recently applied event, then the
+	// error is returned. This can help prevent timeouts that occur while
+	// reading a large number of historical events by making a more up-to-date
+	// snapshot available next time the instance is loaded.
+	//
+	// Load never returns an error as a result of reading or writing snapshots;
+	// it will always fall-back to using the historical events.
+	//
+	// The half-open range [begin, end) is the range of unarchived revisions
+	// that wre used to populate r.
+	//
+	// snapshotAge is the number of revisions that have been made since the last
+	// snapshot was taken.
+	Load(
+		ctx context.Context,
+		h configkit.Identity,
+		id string,
+		r dogma.AggregateRoot,
+	) (begin, end, snapshotAge uint64, _ error)
+}
+
+// EventLoader loads aggregate roots from persistent storage.
+type EventLoader struct {
 	// EventReader is used to read historical events from persistent storage.
 	EventReader EventReader
 
@@ -82,7 +122,7 @@ type Loader struct {
 //
 // snapshotAge is the number of revisions that have been made since the last
 // snapshot was taken.
-func (l *Loader) Load(
+func (l *EventLoader) Load(
 	ctx context.Context,
 	h configkit.Identity,
 	id string,
@@ -238,7 +278,7 @@ func (l *Loader) Load(
 //
 // A failure to load a snapshot is not treated as an error; err is non-nil only
 // if ctx is canceled.
-func (l *Loader) readSnapshot(
+func (l *EventLoader) readSnapshot(
 	ctx context.Context,
 	h configkit.Identity,
 	id string,
@@ -285,7 +325,7 @@ func (l *Loader) readSnapshot(
 //
 // rev is the revision of the aggregate instance as represented by r, which is
 // not necessarily the instance's most recent revision.
-func (l *Loader) writeSnapshot(
+func (l *EventLoader) writeSnapshot(
 	h configkit.Identity,
 	id string,
 	r dogma.AggregateRoot,
@@ -338,7 +378,7 @@ func (l *Loader) writeSnapshot(
 //
 // It reads events in the half-open range [begin, end). end is valid even even
 // if err is non-nil.
-func (l *Loader) readEvents(
+func (l *EventLoader) readEvents(
 	ctx context.Context,
 	h configkit.Identity,
 	id string,
