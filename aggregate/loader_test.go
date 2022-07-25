@@ -9,18 +9,21 @@ import (
 	. "github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/interopspec/envelopespec"
 	. "github.com/dogmatiq/marshalkit/fixtures"
+	"github.com/dogmatiq/veracity/aggregate"
 	. "github.com/dogmatiq/veracity/aggregate"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
 	"github.com/dogmatiq/veracity/persistence/memory"
+	"github.com/jmalloc/gomegax"
 	. "github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap"
 )
 
-var _ = Describe("type EventLoader", func() {
+var _ = Describe("type RevisionLoader", func() {
 	var (
-		eventStore  *memory.AggregateEventStore
-		eventReader *eventReaderStub
+		revisionStore  *memory.AggregateRevisionStore
+		revisionReader *revisionReaderStub
 
 		snapshotStore  *memory.AggregateSnapshotStore
 		snapshotReader *snapshotReaderStub
@@ -28,16 +31,16 @@ var _ = Describe("type EventLoader", func() {
 
 		handlerID configkit.Identity
 		root      *AggregateRoot
-		loader    *EventLoader
+		loader    *Loader
 	)
 
 	BeforeEach(func() {
 		handlerID = configkit.MustNewIdentity("<handler-name>", "<handler>")
 
-		eventStore = &memory.AggregateEventStore{}
+		revisionStore = &memory.AggregateRevisionStore{}
 
-		eventReader = &eventReaderStub{
-			EventReader: eventStore,
+		revisionReader = &revisionReaderStub{
+			RevisionReader: revisionStore,
 		}
 
 		snapshotStore = &memory.AggregateSnapshotStore{
@@ -59,20 +62,20 @@ var _ = Describe("type EventLoader", func() {
 		)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		loader = &EventLoader{
-			EventReader: eventReader,
-			Marshaler:   Marshaler,
-			Logger:      logger,
+		loader = &Loader{
+			RevisionReader: revisionReader,
+			Marshaler:      Marshaler,
+			Logger:         logger,
 		}
 	})
 
 	Describe("func Load()", func() {
-		It("returns an error if event bounds cannot be read", func() {
-			eventReader.ReadBoundsFunc = func(
+		It("returns an error if bounds cannot be read", func() {
+			revisionReader.ReadBoundsFunc = func(
 				ctx context.Context,
 				hk, id string,
-			) (uint64, uint64, error) {
-				return 0, 0, errors.New("<error>")
+			) (uint64, uint64, uint64, error) {
+				return 0, 0, 0, errors.New("<error>")
 			}
 
 			_, _, _, err := loader.Load(
@@ -83,7 +86,7 @@ var _ = Describe("type EventLoader", func() {
 			)
 			Expect(err).To(
 				MatchError(
-					"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read event revision bounds: <error>",
+					"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read revision bounds: <error>",
 				),
 			)
 		})
@@ -106,16 +109,18 @@ var _ = Describe("type EventLoader", func() {
 
 		When("the instance has revisions", func() {
 			BeforeEach(func() {
-				err := eventStore.WriteEvents(
+				err := revisionStore.PrepareRevision(
 					context.Background(),
 					handlerID.Key,
 					"<instance>",
-					0,
-					0,
-					[]*envelopespec.Envelope{
-						NewEnvelope("<event-0>", MessageA1),
-						NewEnvelope("<event-1>", MessageB1),
-						NewEnvelope("<event-2>", MessageC1),
+					aggregate.Revision{
+						Begin: 0,
+						End:   0,
+						Events: []*envelopespec.Envelope{
+							NewEnvelope("<event-0>", MessageA1),
+							NewEnvelope("<event-1>", MessageB1),
+							NewEnvelope("<event-2>", MessageC1),
+						},
 					},
 				)
 				Expect(err).ShouldNot(HaveOccurred())
@@ -242,14 +247,16 @@ var _ = Describe("type EventLoader", func() {
 
 					When("the snapshot is out-of-date", func() {
 						BeforeEach(func() {
-							err := eventStore.WriteEvents(
+							err := revisionStore.PrepareRevision(
 								context.Background(),
 								handlerID.Key,
 								"<instance>",
-								0,
-								1,
-								[]*envelopespec.Envelope{
-									NewEnvelope("<event-3>", MessageD1),
+								aggregate.Revision{
+									Begin: 0,
+									End:   1,
+									Events: []*envelopespec.Envelope{
+										NewEnvelope("<event-3>", MessageD1),
+									},
 								},
 							)
 							Expect(err).ShouldNot(HaveOccurred())
@@ -273,6 +280,37 @@ var _ = Describe("type EventLoader", func() {
 								},
 							))
 						})
+					})
+				})
+			})
+
+			When("there is no snapshot writer", func() {
+				When("a subset of historical events are applied", func() {
+					It("does not attempt to write a snapshot", func() {
+						revisionReader.ReadRevisionsFunc = func(
+							ctx context.Context,
+							hk, id string,
+							begin uint64,
+						) ([]Revision, error) {
+							revisions, _ := revisionStore.ReadRevisions(ctx, hk, id, begin)
+							if len(revisions) > 0 {
+								return revisions, nil
+							}
+
+							return nil, errors.New("<error>")
+						}
+
+						_, _, _, err := loader.Load(
+							context.Background(),
+							handlerID,
+							"<instance>",
+							root,
+						)
+						Expect(err).To(
+							MatchError(
+								"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read revisions: <error>",
+							),
+						)
 					})
 				})
 			})
@@ -306,12 +344,12 @@ var _ = Describe("type EventLoader", func() {
 
 				When("no historical events are applied", func() {
 					It("does not write a snapshot", func() {
-						eventReader.ReadEventsFunc = func(
+						revisionReader.ReadRevisionsFunc = func(
 							ctx context.Context,
 							hk, id string,
 							begin uint64,
-						) ([]*envelopespec.Envelope, uint64, error) {
-							return nil, 0, errors.New("<error>")
+						) ([]Revision, error) {
+							return nil, errors.New("<error>")
 						}
 
 						_, _, _, err := loader.Load(
@@ -322,7 +360,7 @@ var _ = Describe("type EventLoader", func() {
 						)
 						Expect(err).To(
 							MatchError(
-								"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: <error>",
+								"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read revisions: <error>",
 							),
 						)
 
@@ -339,18 +377,18 @@ var _ = Describe("type EventLoader", func() {
 				})
 
 				When("a subset of historical events are applied", func() {
-					It("writes a snapshot if the event reader fails", func() {
-						eventReader.ReadEventsFunc = func(
+					It("writes a snapshot if the revision reader fails", func() {
+						revisionReader.ReadRevisionsFunc = func(
 							ctx context.Context,
 							hk, id string,
 							begin uint64,
-						) ([]*envelopespec.Envelope, uint64, error) {
-							events, _, _ := eventStore.ReadEvents(ctx, hk, id, begin)
-							if len(events) > 0 {
-								return events, begin + 1, nil
+						) ([]Revision, error) {
+							revisions, _ := revisionStore.ReadRevisions(ctx, hk, id, begin)
+							if len(revisions) > 0 {
+								return revisions, nil
 							}
 
-							return nil, 0, errors.New("<error>")
+							return nil, errors.New("<error>")
 						}
 
 						_, _, _, err := loader.Load(
@@ -361,7 +399,7 @@ var _ = Describe("type EventLoader", func() {
 						)
 						Expect(err).To(
 							MatchError(
-								"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: <error>",
+								"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read revisions: <error>",
 							),
 						)
 
@@ -385,17 +423,32 @@ var _ = Describe("type EventLoader", func() {
 					})
 
 					It("writes a snapshot if unmarshaling an envelope fails", func() {
-						eventReader.ReadEventsFunc = func(
+						done := false
+						revisionReader.ReadRevisionsFunc = func(
 							ctx context.Context,
 							hk, id string,
 							begin uint64,
-						) ([]*envelopespec.Envelope, uint64, error) {
-							events, _, _ := eventStore.ReadEvents(ctx, hk, id, begin)
-							if len(events) > 0 {
-								return events, begin + 1, nil
+						) ([]Revision, error) {
+							revisions, _ := revisionStore.ReadRevisions(ctx, hk, id, begin)
+							if len(revisions) > 0 {
+								return revisions, nil
 							}
 
-							return []*envelopespec.Envelope{{ /*empty envelope*/ }}, begin, nil
+							if done {
+								return nil, nil
+							}
+
+							done = true
+
+							return []Revision{
+								{
+									Begin: 0,
+									End:   begin,
+									Events: []*envelopespec.Envelope{
+										{ /*empty envelope*/ },
+									},
+								},
+							}, nil
 						}
 
 						_, _, _, err := loader.Load(
@@ -406,7 +459,7 @@ var _ = Describe("type EventLoader", func() {
 						)
 						Expect(err).To(
 							MatchError(
-								"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: mime: no media type",
+								"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read revisions: mime: no media type",
 							),
 						)
 
@@ -430,17 +483,17 @@ var _ = Describe("type EventLoader", func() {
 					})
 
 					It("does not return a snapshot-related error if the snapshot cannot be written", func() {
-						eventReader.ReadEventsFunc = func(
+						revisionReader.ReadRevisionsFunc = func(
 							ctx context.Context,
 							hk, id string,
 							begin uint64,
-						) ([]*envelopespec.Envelope, uint64, error) {
-							events, _, _ := eventStore.ReadEvents(ctx, hk, id, begin)
-							if len(events) > 0 {
-								return events, begin + 1, nil
+						) ([]Revision, error) {
+							revisions, _ := revisionStore.ReadRevisions(ctx, hk, id, begin)
+							if len(revisions) > 0 {
+								return revisions, nil
 							}
 
-							return nil, 0, errors.New("<causal error>")
+							return nil, errors.New("<causal error>")
 						}
 
 						snapshotWriter.WriteSnapshotFunc = func(
@@ -460,7 +513,7 @@ var _ = Describe("type EventLoader", func() {
 						)
 						Expect(err).To(
 							MatchError(
-								"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read events: <causal error>",
+								"aggregate root <handler-name>[<instance>] cannot be loaded: unable to read revisions: <causal error>",
 							),
 						)
 					})
@@ -469,13 +522,14 @@ var _ = Describe("type EventLoader", func() {
 
 			When("the instance has been destroyed", func() {
 				BeforeEach(func() {
-					err := eventStore.WriteEvents(
+					err := revisionStore.PrepareRevision(
 						context.Background(),
 						handlerID.Key,
 						"<instance>",
-						2,
-						1,
-						nil,
+						Revision{
+							Begin: 2,
+							End:   1,
+						},
 					)
 					Expect(err).ShouldNot(HaveOccurred())
 				})
@@ -496,26 +550,30 @@ var _ = Describe("type EventLoader", func() {
 
 				When("the instance has been recreated", func() {
 					BeforeEach(func() {
-						err := eventStore.WriteEvents(
+						err := revisionStore.PrepareRevision(
 							context.Background(),
 							handlerID.Key,
 							"<instance>",
-							2,
-							2,
-							[]*envelopespec.Envelope{
-								NewEnvelope("<event-3>", MessageD1),
+							Revision{
+								Begin: 2,
+								End:   2,
+								Events: []*envelopespec.Envelope{
+									NewEnvelope("<event-3>", MessageD1),
+								},
 							},
 						)
 						Expect(err).ShouldNot(HaveOccurred())
 
-						err = eventStore.WriteEvents(
+						err = revisionStore.PrepareRevision(
 							context.Background(),
 							handlerID.Key,
 							"<instance>",
-							2,
-							3,
-							[]*envelopespec.Envelope{
-								NewEnvelope("<event-4>", MessageE1),
+							Revision{
+								Begin: 2,
+								End:   3,
+								Events: []*envelopespec.Envelope{
+									NewEnvelope("<event-4>", MessageE1),
+								},
 							},
 						)
 						Expect(err).ShouldNot(HaveOccurred())
@@ -614,3 +672,134 @@ var _ = Describe("type EventLoader", func() {
 		})
 	})
 })
+
+// revisionReaderStub is a test implementation of the RevisionReader interface.
+type revisionReaderStub struct {
+	RevisionReader
+
+	ReadBoundsFunc func(
+		ctx context.Context,
+		hk, id string,
+	) (begin, committed, end uint64, _ error)
+
+	ReadRevisionsFunc func(
+		ctx context.Context,
+		hk, id string,
+		begin uint64,
+	) (revisions []Revision, _ error)
+}
+
+func (s *revisionReaderStub) ReadBounds(
+	ctx context.Context,
+	hk, id string,
+) (begin, committed, end uint64, _ error) {
+	if s.ReadBoundsFunc != nil {
+		return s.ReadBoundsFunc(ctx, hk, id)
+	}
+
+	if s.RevisionReader != nil {
+		return s.RevisionReader.ReadBounds(ctx, hk, id)
+	}
+
+	return 0, 0, 0, nil
+}
+
+func (s *revisionReaderStub) ReadRevisions(
+	ctx context.Context,
+	hk, id string,
+	begin uint64,
+) (revisions []Revision, _ error) {
+	if s.ReadRevisionsFunc != nil {
+		return s.ReadRevisionsFunc(ctx, hk, id, begin)
+	}
+
+	if s.RevisionReader != nil {
+		return s.RevisionReader.ReadRevisions(ctx, hk, id, begin)
+	}
+
+	return nil, nil
+}
+
+// revisionWriterStub is a test implementation of the RevisionWriter interface.
+type revisionWriterStub struct {
+	RevisionWriter
+
+	PrepareRevisionFunc func(
+		ctx context.Context,
+		hk, id string,
+		rev Revision,
+	) error
+
+	CommitRevisionFunc func(
+		ctx context.Context,
+		hk, id string,
+		rev Revision,
+	) error
+}
+
+func (s *revisionWriterStub) PrepareRevision(
+	ctx context.Context,
+	hk, id string,
+	rev Revision,
+) error {
+	if s.PrepareRevisionFunc != nil {
+		return s.PrepareRevisionFunc(ctx, hk, id, rev)
+	}
+
+	if s.RevisionWriter != nil {
+		return s.RevisionWriter.PrepareRevision(ctx, hk, id, rev)
+	}
+
+	return nil
+}
+
+func (s *revisionWriterStub) CommitRevision(
+	ctx context.Context,
+	hk, id string,
+	rev Revision,
+) error {
+	if s.CommitRevisionFunc != nil {
+		return s.CommitRevisionFunc(ctx, hk, id, rev)
+	}
+
+	if s.RevisionWriter != nil {
+		return s.RevisionWriter.CommitRevision(ctx, hk, id, rev)
+	}
+
+	return nil
+}
+
+// expectEvents reads all revisions starting from begin and asserts that they
+// are equal to expected.
+func expectRevisions(
+	ctx context.Context,
+	reader aggregate.RevisionReader,
+	hk, id string,
+	begin uint64,
+	expected []aggregate.Revision,
+) {
+	var actual []aggregate.Revision
+
+	for {
+		revisions, err := reader.ReadRevisions(
+			ctx,
+			hk,
+			id,
+			begin,
+		)
+		gomega.ExpectWithOffset(1, err).ShouldNot(gomega.HaveOccurred())
+
+		if len(revisions) == 0 {
+			break
+		}
+
+		actual = append(actual, revisions...)
+		begin += uint64(len(revisions))
+	}
+
+	if len(actual) == 0 && len(expected) == 0 {
+		return
+	}
+
+	gomega.ExpectWithOffset(1, actual).To(gomegax.EqualX(expected))
+}

@@ -32,7 +32,7 @@ type WorkerConfig struct {
 	Packer *parcel.Packer
 
 	// Loader is used to load aggregate state from persistent storage.
-	Loader Loader
+	Loader *Loader
 
 	// RevisionWriter is used to write new revisions to persistent storage.
 	RevisionWriter RevisionWriter

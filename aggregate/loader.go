@@ -18,50 +18,10 @@ const (
 	DefaultLoaderSnapshotWriteTimeout = 250 * time.Millisecond
 )
 
-// A Loader loads aggregate roots from persistent storage.
-type Loader interface {
-	// Load populates an aggregate root with data loaded from persistent
-	// storage.
-	//
-	// h is the identity of the handler that implements the aggregate. id is the
-	// instance of the aggregate to load.
-	//
-	// r must be an aggregate root that represents the "initial state" of the
-	// aggregate. It is typically a zero-value obtained by calling the
-	// AggregateMessageHandler.New() method on the handler identified by h.
-	//
-	// The contents of r is first updated to match the most recent snapshot of
-	// the instance. Then, any historical events that were recorded by the
-	// instance after that snapshot was taken are applied by calling
-	// r.ApplyEvent(). If no snapshot is available, r is populated by applying
-	// all of its historical events, which may take significant time.
-	//
-	// If an error occurs before events from all historical revisions can be
-	// applied to r, a new snapshot is taken as of the most recently applied
-	// revision, then the error is returned. This can help prevent timeouts that
-	// occur while reading a large number of historical events by making a more
-	// up-to-date snapshot available next time the instance is loaded.
-	//
-	// Load never returns an error as a result of reading or writing snapshots;
-	// it will always fall-back to using the historical events.
-	//
-	// The half-open range [begin, end) is the range of unarchived revisions
-	// that wre used to populate r.
-	//
-	// snapshotAge is the number of revisions that have been made since the last
-	// snapshot was taken.
-	Load(
-		ctx context.Context,
-		h configkit.Identity,
-		id string,
-		r dogma.AggregateRoot,
-	) (begin, end, snapshotAge uint64, _ error)
-}
-
-// EventLoader loads aggregate roots from persistent storage.
-type EventLoader struct {
-	// EventReader is used to read historical events from persistent storage.
-	EventReader EventReader
+// Loader loads aggregate roots from persistent storage.
+type Loader struct {
+	// RevisionReader is used to read revisions from persistent storage.
+	RevisionReader RevisionReader
 
 	// Marshaler is used to unmarshal historical events.
 	Marshaler marshalkit.ValueMarshaler
@@ -76,9 +36,8 @@ type EventLoader struct {
 	// SnapshotWriter is used to persist snapshots of an aggregate root.
 	//
 	// New snapshots are persisted if a load operation fails before all
-	// historical events can be read. Persisting a new snapshot reduces the
-	// number of historical events that need to be read next time the root is
-	// loaded.
+	// revisions can be read. Persisting a new snapshot reduces the number of
+	// historical events that need to be applied next time the root is loaded.
 	//
 	// It may be nil, in which case no snapshots are persisted.
 	SnapshotWriter SnapshotWriter
@@ -122,23 +81,23 @@ type EventLoader struct {
 //
 // snapshotAge is the number of revisions that have been made since the last
 // snapshot was taken.
-func (l *EventLoader) Load(
+func (l *Loader) Load(
 	ctx context.Context,
 	h configkit.Identity,
 	id string,
 	r dogma.AggregateRoot,
 ) (begin, end, snapshotAge uint64, _ error) {
 	// First read the bounds that we are interested in. This helps us optimize
-	// the reads we perform by ignoring any snapshots and events that are no
+	// the reads we perform by ignoring any snapshots and revisions that are no
 	// longer relevant.
-	begin, end, err := l.EventReader.ReadBounds(
+	begin, _, end, err := l.RevisionReader.ReadBounds(
 		ctx,
 		h.Key,
 		id,
 	)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf(
-			"aggregate root %s[%s] cannot be loaded: unable to read event revision bounds: %w",
+			"aggregate root %s[%s] cannot be loaded: unable to read revision bounds: %w",
 			h.Name,
 			id,
 			err,
@@ -148,7 +107,7 @@ func (l *EventLoader) Load(
 	// If the end is zero this instance has no revisions at all.
 	if end == 0 {
 		l.Logger.Debug(
-			"aggregate root has no historical events",
+			"aggregate root has no historical revisions",
 			zap.String("handler_name", h.Name),
 			zap.String("handler_key", h.Key),
 			zap.String("instance_id", id),
@@ -162,7 +121,7 @@ func (l *EventLoader) Load(
 	// be applied.
 	if begin == end {
 		l.Logger.Debug(
-			"aggregate root has no historical events since it was last destroyed",
+			"aggregate root has no historical revisions since it was last destroyed",
 			zap.String("handler_name", h.Name),
 			zap.String("handler_key", h.Key),
 			zap.String("instance_id", id),
@@ -172,8 +131,8 @@ func (l *EventLoader) Load(
 		return begin, end, 0, nil
 	}
 
-	// Attempt to read a snapshot that is newer than begin so that we
-	// don't have to read the entire set of historical events.
+	// Attempt to read a snapshot that is newer than begin so that we don't have
+	// to read the entire set of historical revisions.
 	snapshotRev, hasSnapshot, err := l.readSnapshot(
 		ctx,
 		h,
@@ -193,8 +152,8 @@ func (l *EventLoader) Load(
 	readFrom := begin
 
 	if hasSnapshot {
-		// We found a snapshot, so the first event we want to read is the one
-		// from the revision after that snapshot was taken.
+		// We found a snapshot, so the first revision we want to read is the one
+		// after that snapshot was taken.
 		readFrom = snapshotRev + 1
 
 		// If the revision after the snapshot is the same as the end then no
@@ -213,10 +172,10 @@ func (l *EventLoader) Load(
 		}
 	}
 
-	// Finally, we read and apply the historical events that occurred after the
-	// snapshot (or since the instance was last destroyed if there is no
-	// snapshot available).
-	end, err = l.readEvents(
+	// Finally, we read revisions and apply the historical events that occurred
+	// after the snapshot (or since the instance was last destroyed if there is
+	// no snapshot available).
+	end, err = l.readRevisions(
 		ctx,
 		h,
 		id,
@@ -225,9 +184,9 @@ func (l *EventLoader) Load(
 	)
 	if err != nil {
 		if end > readFrom {
-			// We managed to read _some_ events before this error occurred,
-			// so we write a new snapshot so that we can "pick up where we
-			// left off" next time we attempt to load this instance.
+			// We managed to read _some_ revisions before this error occurred,
+			// so we write a new snapshot so that we can "pick up where we left
+			// off" next time we attempt to load this instance.
 			l.writeSnapshot(
 				h,
 				id,
@@ -237,7 +196,7 @@ func (l *EventLoader) Load(
 		}
 
 		return 0, 0, 0, fmt.Errorf(
-			"aggregate root %s[%s] cannot be loaded: unable to read events: %w",
+			"aggregate root %s[%s] cannot be loaded: unable to read revisions: %w",
 			h.Name,
 			id,
 			err,
@@ -278,7 +237,7 @@ func (l *EventLoader) Load(
 //
 // A failure to load a snapshot is not treated as an error; err is non-nil only
 // if ctx is canceled.
-func (l *EventLoader) readSnapshot(
+func (l *Loader) readSnapshot(
 	ctx context.Context,
 	h configkit.Identity,
 	id string,
@@ -325,7 +284,7 @@ func (l *EventLoader) readSnapshot(
 //
 // rev is the revision of the aggregate instance as represented by r, which is
 // not necessarily the instance's most recent revision.
-func (l *EventLoader) writeSnapshot(
+func (l *Loader) writeSnapshot(
 	h configkit.Identity,
 	id string,
 	r dogma.AggregateRoot,
@@ -374,11 +333,11 @@ func (l *EventLoader) writeSnapshot(
 	)
 }
 
-// readEvents loads historical events and applies them to r.
+// readRevisions loads revisions and applies historical events to r.
 //
-// It reads events in the half-open range [begin, end). end is valid even even
-// if err is non-nil.
-func (l *EventLoader) readEvents(
+// It reads revisions in the half-open range [begin, end). end is valid even
+// even if err is non-nil.
+func (l *Loader) readRevisions(
 	ctx context.Context,
 	h configkit.Identity,
 	id string,
@@ -386,11 +345,10 @@ func (l *EventLoader) readEvents(
 	r dogma.AggregateRoot,
 ) (end uint64, err error) {
 	var events []dogma.Message
+	end = begin
 
 	for {
-		events = events[:0]
-
-		envelopes, unappliedEnd, err := l.EventReader.ReadEvents(
+		revisions, err := l.RevisionReader.ReadRevisions(
 			ctx,
 			h.Key,
 			id,
@@ -400,25 +358,29 @@ func (l *EventLoader) readEvents(
 			return end, err
 		}
 
-		// Unmarshal all of the envelopes before applying them to guarantee that
-		// we can apply all events from the revision.
-		for _, env := range envelopes {
-			ev, err := marshalkit.UnmarshalMessageFromEnvelope(l.Marshaler, env)
-			if err != nil {
-				return end, err
+		if len(revisions) == 0 {
+			return end, nil
+		}
+
+		for _, rev := range revisions {
+			events = events[:0]
+
+			// Unmarshal all of the envelopes before applying them to guarantee
+			// that we can apply all events from the revision.
+			for _, env := range rev.Events {
+				ev, err := marshalkit.UnmarshalMessageFromEnvelope(l.Marshaler, env)
+				if err != nil {
+					return end, err
+				}
+
+				events = append(events, ev)
 			}
 
-			events = append(events, ev)
-		}
+			for _, ev := range events {
+				r.ApplyEvent(ev)
+			}
 
-		for _, ev := range events {
-			r.ApplyEvent(ev)
-		}
-
-		end = unappliedEnd
-
-		if begin == end {
-			return end, nil
+			end++
 		}
 
 		begin = end
