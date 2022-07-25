@@ -131,8 +131,21 @@ func (w *Worker) stateLoadRoot(ctx context.Context) (workerState, error) {
 		w.InstanceID,
 		w.root,
 	)
+	if err != nil {
+		return nil, err
+	}
 
-	return w.stateWaitForCommand, err
+	if w.bounds.UncommittedCommandID != "" {
+		return w.resolveUncommittedRevision, nil
+	}
+
+	return w.stateWaitForCommand, nil
+}
+
+// resolveUncommittedRevision attempts to commit the most recent (uncommitted)
+// revision.
+func (w *Worker) resolveUncommittedRevision(ctx context.Context) (workerState, error) {
+	return w.stateWaitForCommand, nil
 }
 
 // stateWaitForCommand blocks until a command is available for handling, or the

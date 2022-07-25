@@ -529,9 +529,8 @@ var _ = Describe("type Worker", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(bounds).To(Equal(
 					Bounds{
-						Begin:       2,
-						End:         2,
-						Uncommitted: false,
+						Begin: 2,
+						End:   2,
 					},
 				))
 
@@ -606,9 +605,8 @@ var _ = Describe("type Worker", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(bounds).To(Equal(
 					Bounds{
-						Begin:       2,
-						End:         2,
-						Uncommitted: false,
+						Begin: 2,
+						End:   2,
 					},
 				))
 			})
@@ -701,9 +699,8 @@ var _ = Describe("type Worker", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(bounds).To(Equal(
 						Bounds{
-							Begin:       0,
-							End:         2,
-							Uncommitted: false,
+							Begin: 0,
+							End:   2,
 						},
 					))
 

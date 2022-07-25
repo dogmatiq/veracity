@@ -125,6 +125,15 @@ func (s *AggregateRevisionStore) PrepareRevision(
 	hk, id string,
 	rev aggregate.Revision,
 ) error {
+	if rev.CommandID == "" {
+		panic("command ID must not be empty")
+	}
+
+	events, err := marshalEnvelopes(rev.Events)
+	if err != nil {
+		return err
+	}
+
 	s.m.Lock()
 	defer s.m.Unlock()
 
@@ -135,13 +144,8 @@ func (s *AggregateRevisionStore) PrepareRevision(
 		return fmt.Errorf("optimistic concurrency conflict, %d is not the next revision", rev.End)
 	}
 
-	if i.Bounds.Uncommitted {
+	if i.Bounds.UncommittedCommandID != "" {
 		panic("cannot prepare new revision when there is an uncommitted revision")
-	}
-
-	events, err := marshalEnvelopes(rev.Events)
-	if err != nil {
-		return err
 	}
 
 	i.Revisions = append(i.Revisions, aggregateRevision{
@@ -152,7 +156,7 @@ func (s *AggregateRevisionStore) PrepareRevision(
 
 	i.Bounds.Begin = rev.Begin
 	i.Bounds.End++
-	i.Bounds.Uncommitted = true
+	i.Bounds.UncommittedCommandID = rev.CommandID
 
 	if s.instances == nil {
 		s.instances = map[instanceKey]aggregateInstance{}
@@ -190,8 +194,8 @@ func (s *AggregateRevisionStore) CommitRevision(
 	last := i.Bounds.End - 1
 
 	if rev == last {
-		if i.Bounds.Uncommitted {
-			i.Bounds.Uncommitted = false
+		if i.Bounds.UncommittedCommandID != "" {
+			i.Bounds.UncommittedCommandID = ""
 
 			r := i.Revisions[rev-i.FirstRevision]
 			i.Revisions = i.Revisions[r.Begin-i.FirstRevision:]

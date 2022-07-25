@@ -39,9 +39,11 @@ type Bounds struct {
 	// End is the (exclusive) end revision of the aggregate instance.
 	End uint64
 
-	// Uncommitted is true if the most recent revision has not yet been
-	// committed.
-	Uncommitted bool
+	// UncommittedCommandID is the ID of the command that produced the most
+	// recent revision if that revision has not been committed.
+	//
+	// If the most recent revision has been committed, this field is empty.
+	UncommittedCommandID string
 }
 
 // RevisionReader is an interface for reading historical revisions recorded by

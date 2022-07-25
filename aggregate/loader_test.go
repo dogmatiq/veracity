@@ -108,9 +108,8 @@ var _ = Describe("type Loader", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(bounds).To(Equal(
 					Bounds{
-						Begin:       0,
-						End:         0,
-						Uncommitted: false,
+						Begin: 0,
+						End:   0,
 					},
 				))
 				Expect(snapshotAge).To(BeNumerically("==", 0))
@@ -149,9 +148,8 @@ var _ = Describe("type Loader", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(bounds).To(Equal(
 						Bounds{
-							Begin:       0,
-							End:         1,
-							Uncommitted: false,
+							Begin: 0,
+							End:   1,
 						},
 					))
 					Expect(snapshotAge).To(BeNumerically("==", 1))
@@ -216,9 +214,8 @@ var _ = Describe("type Loader", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(bounds).To(Equal(
 						Bounds{
-							Begin:       0,
-							End:         1,
-							Uncommitted: false,
+							Begin: 0,
+							End:   1,
 						},
 					))
 					Expect(snapshotAge).To(BeNumerically("==", 1))
@@ -258,9 +255,8 @@ var _ = Describe("type Loader", func() {
 							Expect(err).ShouldNot(HaveOccurred())
 							Expect(bounds).To(Equal(
 								Bounds{
-									Begin:       0,
-									End:         1,
-									Uncommitted: false,
+									Begin: 0,
+									End:   1,
 								},
 							))
 							Expect(snapshotAge).To(BeNumerically("==", 0))
@@ -300,9 +296,8 @@ var _ = Describe("type Loader", func() {
 							Expect(err).ShouldNot(HaveOccurred())
 							Expect(bounds).To(Equal(
 								Bounds{
-									Begin:       0,
-									End:         2,
-									Uncommitted: false,
+									Begin: 0,
+									End:   2,
 								},
 							))
 							Expect(snapshotAge).To(BeNumerically("==", 1))
@@ -579,9 +574,8 @@ var _ = Describe("type Loader", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(bounds).To(Equal(
 						Bounds{
-							Begin:       2,
-							End:         2,
-							Uncommitted: false,
+							Begin: 2,
+							End:   2,
 						},
 					))
 					Expect(snapshotAge).To(BeNumerically("==", 0))
@@ -631,9 +625,8 @@ var _ = Describe("type Loader", func() {
 						Expect(err).ShouldNot(HaveOccurred())
 						Expect(bounds).To(Equal(
 							Bounds{
-								Begin:       2,
-								End:         4,
-								Uncommitted: false,
+								Begin: 2,
+								End:   4,
 							},
 						))
 						Expect(snapshotAge).To(BeNumerically("==", 2))
@@ -673,9 +666,8 @@ var _ = Describe("type Loader", func() {
 							Expect(err).ShouldNot(HaveOccurred())
 							Expect(bounds).To(Equal(
 								Bounds{
-									Begin:       2,
-									End:         4,
-									Uncommitted: false,
+									Begin: 2,
+									End:   4,
 								},
 							))
 							Expect(snapshotAge).To(BeNumerically("==", 1))
@@ -710,9 +702,8 @@ var _ = Describe("type Loader", func() {
 							Expect(err).ShouldNot(HaveOccurred())
 							Expect(bounds).To(Equal(
 								Bounds{
-									Begin:       2,
-									End:         4,
-									Uncommitted: false,
+									Begin: 2,
+									End:   4,
 								},
 							))
 							Expect(snapshotAge).To(BeNumerically("==", 2))

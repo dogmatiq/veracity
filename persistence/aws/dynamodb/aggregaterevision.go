@@ -62,7 +62,7 @@ func (r *AggregateRevisionReader) ReadBounds(
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":id": marshalAggregateRevisionPartitionID(hk, id),
 			},
-			ProjectionExpression: aws.String(`Revision, BeginRevision, Uncommitted`),
+			ProjectionExpression: aws.String(`Revision, BeginRevision, CommandID, Uncommitted`),
 			ScanIndexForward:     aws.Bool(false),
 			Limit:                aws.Int64(1),
 		},
@@ -89,7 +89,10 @@ func (r *AggregateRevisionReader) ReadBounds(
 	}
 
 	bounds.End++
-	bounds.Uncommitted = unmarshalBool(item["Uncommitted"])
+
+	if unmarshalBool(item["Uncommitted"]) {
+		bounds.UncommittedCommandID = unmarshalString(item["CommandID"])
+	}
 
 	return bounds, nil
 }
@@ -221,6 +224,10 @@ func (w *AggregateRevisionWriter) PrepareRevision(
 	hk, id string,
 	rev aggregate.Revision,
 ) error {
+	if rev.CommandID == "" {
+		panic("command ID must not be empty")
+	}
+
 	item := map[string]*dynamodb.AttributeValue{
 		"HandlerKeyAndInstanceID": marshalAggregateRevisionPartitionID(hk, id),
 		"Revision":                marshalRevision(rev.End),
