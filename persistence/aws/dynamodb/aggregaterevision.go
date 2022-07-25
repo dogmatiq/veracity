@@ -298,11 +298,8 @@ func (w *AggregateRevisionWriter) CommitRevision(
 				`attribute_exists(HandlerKeyAndInstanceID)`,
 			),
 			UpdateExpression: aws.String(
-				`SET Uncommitted = :uncommitted`,
+				`REMOVE Uncommitted`,
 			),
-			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-				":uncommitted": marshalBool(false),
-			},
 			ReturnValues: aws.String("UPDATED_OLD"),
 		},
 	)
