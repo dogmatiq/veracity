@@ -17,9 +17,7 @@ type AggregateRevisionStore struct {
 }
 
 type aggregateInstanceX struct {
-	Begin     uint64
-	Committed uint64
-	End       uint64
+	Bounds    aggregate.Bounds
 	Revisions []aggregateRevision
 }
 
@@ -33,25 +31,17 @@ type aggregateRevision struct {
 //
 // hk is the identity key of the aggregate message handler. id is the aggregate
 // instance ID.
-//
-// commited is the revision after the most recent committed revision, whereas
-// end is the revision after the most recent revision, regardless of whether it
-// is committed.
-//
-// When loading the instance, only those events from revisions in the half-open
-// range [begin, committed) should be applied to the aggregate root. committed
-// may be less than begin.
 func (s *AggregateRevisionStore) ReadBounds(
 	ctx context.Context,
 	hk, id string,
-) (begin, committed, end uint64, _ error) {
+) (aggregate.Bounds, error) {
 	s.m.RLock()
 	defer s.m.RUnlock()
 
 	k := instanceKey{hk, id}
 	i := s.instances[k]
 
-	return i.Begin, i.Committed, i.End, nil
+	return i.Bounds, nil
 }
 
 // ReadRevisions loads some historical revisions for a specific aggregate
@@ -80,12 +70,12 @@ func (s *AggregateRevisionStore) ReadRevisions(
 	k := instanceKey{hk, id}
 	i := s.instances[k]
 
-	if begin < i.Begin /* TODO: only if committed */ {
+	if begin < i.Bounds.Begin /* TODO: only if committed */ {
 		return nil, fmt.Errorf("revision %d is archived", begin)
 	}
 
-	if begin < i.End {
-		index := begin - i.Begin
+	if begin < i.Bounds.End {
+		index := begin - i.Bounds.Begin
 		rev := i.Revisions[index]
 
 		events, err := unmarshalEnvelopes(rev.Events)
@@ -135,7 +125,7 @@ func (s *AggregateRevisionStore) PrepareRevision(
 	k := instanceKey{hk, id}
 	i := s.instances[k]
 
-	if rev.End != i.End {
+	if rev.End != i.Bounds.End {
 		return fmt.Errorf("optimistic concurrency conflict, %d is not the next revision", rev.End)
 	}
 
@@ -149,12 +139,13 @@ func (s *AggregateRevisionStore) PrepareRevision(
 		Events: events,
 	})
 
-	if rev.Begin > i.Begin {
-		i.Revisions = i.Revisions[rev.Begin-i.Begin:]
-		i.Begin = rev.Begin
+	if rev.Begin > i.Bounds.Begin {
+		index := rev.Begin - i.Bounds.Begin
+		i.Bounds.Begin = rev.Begin
+		i.Revisions = i.Revisions[index:]
 	}
 
-	i.End++
+	i.Bounds.End++
 
 	if s.instances == nil {
 		s.instances = map[instanceKey]aggregateInstanceX{}
@@ -189,19 +180,19 @@ func (s *AggregateRevisionStore) CommitRevision(
 	k := instanceKey{hk, id}
 	i := s.instances[k]
 
-	if rev.End >= i.End {
+	if rev.End >= i.Bounds.End {
 		return fmt.Errorf("revision %d does not exist", rev.End)
 	}
 
-	if rev.End < i.Committed {
+	if rev.End < i.Bounds.Committed {
 		return fmt.Errorf("revision %d is already committed", rev.End)
 	}
 
-	if rev.End > i.Committed {
+	if rev.End > i.Bounds.Committed {
 		return fmt.Errorf("cannot commit revision %d, the previous revision is not committed", rev.End)
 	}
 
-	i.Committed++
+	i.Bounds.Committed++
 	s.instances[k] = i
 
 	return nil

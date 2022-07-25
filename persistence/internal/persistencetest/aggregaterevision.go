@@ -54,19 +54,23 @@ func DeclareAggregateRevisionTests(
 	})
 
 	ginkgo.Describe("func ReadBounds()", func() {
-		ginkgo.It("returns 0, 0, 0 when there are no revisions", func() {
-			begin, committed, end, err := tc.Reader.ReadBounds(
+		ginkgo.It("returns {0, 0, 0} when there are no revisions", func() {
+			bounds, err := tc.Reader.ReadBounds(
 				ctx,
 				"<handler>",
 				"<instance>",
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-			gomega.Expect(begin).To(gomega.BeNumerically("==", 0))
-			gomega.Expect(committed).To(gomega.BeNumerically("==", 0))
-			gomega.Expect(end).To(gomega.BeNumerically("==", 0))
+			gomega.Expect(bounds).To(gomega.Equal(
+				aggregate.Bounds{
+					Begin:     0,
+					End:       0,
+					Committed: 0,
+				},
+			))
 		})
 
-		ginkgo.It("returns 0, 0, 1 when there is one uncommitted revision", func() {
+		ginkgo.It("returns {0, 1, 0} when there is one uncommitted revision", func() {
 			err := tc.Writer.PrepareRevision(
 				ctx,
 				"<handler>",
@@ -79,18 +83,23 @@ func DeclareAggregateRevisionTests(
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-			begin, committed, end, err := tc.Reader.ReadBounds(
+			bounds, err := tc.Reader.ReadBounds(
 				ctx,
 				"<handler>",
 				"<instance>",
 			)
+
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-			gomega.Expect(begin).To(gomega.BeNumerically("==", 0))
-			gomega.Expect(committed).To(gomega.BeNumerically("==", 0))
-			gomega.Expect(end).To(gomega.BeNumerically("==", 1))
+			gomega.Expect(bounds).To(gomega.Equal(
+				aggregate.Bounds{
+					Begin:     0,
+					End:       1,
+					Committed: 0,
+				},
+			))
 		})
 
-		ginkgo.It("returns 0, 1, 1 when there is one committed revision", func() {
+		ginkgo.It("returns {0, 1, 1} when there is one committed revision", func() {
 			rev := aggregate.Revision{
 				Begin:  0,
 				End:    0,
@@ -113,15 +122,19 @@ func DeclareAggregateRevisionTests(
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-			begin, committed, end, err := tc.Reader.ReadBounds(
+			bounds, err := tc.Reader.ReadBounds(
 				ctx,
 				"<handler>",
 				"<instance>",
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-			gomega.Expect(begin).To(gomega.BeNumerically("==", 0))
-			gomega.Expect(committed).To(gomega.BeNumerically("==", 1))
-			gomega.Expect(end).To(gomega.BeNumerically("==", 1))
+			gomega.Expect(bounds).To(gomega.Equal(
+				aggregate.Bounds{
+					Begin:     0,
+					End:       1,
+					Committed: 1,
+				},
+			))
 		})
 
 		ginkgo.It("allows multiple uncommitted revisions", func() {
@@ -138,15 +151,19 @@ func DeclareAggregateRevisionTests(
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-				begin, committed, end, err := tc.Reader.ReadBounds(
+				bounds, err := tc.Reader.ReadBounds(
 					ctx,
 					"<handler>",
 					"<instance>",
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-				gomega.Expect(begin).To(gomega.BeNumerically("==", 0))
-				gomega.Expect(committed).To(gomega.BeNumerically("==", 0))
-				gomega.Expect(end).To(gomega.BeNumerically("==", next+1))
+				gomega.Expect(bounds).To(gomega.Equal(
+					aggregate.Bounds{
+						Begin:     0,
+						End:       next + 1,
+						Committed: 0,
+					},
+				))
 			}
 
 			for next := uint64(0); next < 3; next++ {
@@ -162,19 +179,23 @@ func DeclareAggregateRevisionTests(
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-				begin, committed, end, err := tc.Reader.ReadBounds(
+				bounds, err := tc.Reader.ReadBounds(
 					ctx,
 					"<handler>",
 					"<instance>",
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-				gomega.Expect(begin).To(gomega.BeNumerically("==", 0))
-				gomega.Expect(committed).To(gomega.BeNumerically("==", next+1))
-				gomega.Expect(end).To(gomega.BeNumerically("==", 3))
+				gomega.Expect(bounds).To(gomega.Equal(
+					aggregate.Bounds{
+						Begin:     0,
+						End:       3,
+						Committed: next + 1,
+					},
+				))
 			}
 		})
 
-		ginkgo.It("returns n, ?, n when begin == end", func() {
+		ginkgo.It("returns {n, n, 0} when begin == end", func() {
 			for next := uint64(0); next < 3; next++ {
 				err := tc.Writer.PrepareRevision(
 					ctx,
@@ -188,18 +209,23 @@ func DeclareAggregateRevisionTests(
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-				begin, _, end, err := tc.Reader.ReadBounds(
+				bounds, err := tc.Reader.ReadBounds(
 					ctx,
 					"<handler>",
 					"<instance>",
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-				gomega.Expect(begin).To(gomega.BeNumerically("==", next+1))
-				gomega.Expect(end).To(gomega.BeNumerically("==", next+1))
+				gomega.Expect(bounds).To(gomega.Equal(
+					aggregate.Bounds{
+						Begin:     next + 1,
+						End:       next + 1,
+						Committed: 0,
+					},
+				))
 			}
 		})
 
-		ginkgo.It("returns n-1, ?, n when there is a revision written after setting begin == end", func() {
+		ginkgo.It("returns {n-1, n, 0} when there is a revision written after setting begin == end", func() {
 			err := tc.Writer.PrepareRevision(
 				ctx,
 				"<handler>",
@@ -224,14 +250,19 @@ func DeclareAggregateRevisionTests(
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-			begin, _, end, err := tc.Reader.ReadBounds(
+			bounds, err := tc.Reader.ReadBounds(
 				ctx,
 				"<handler>",
 				"<instance>",
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-			gomega.Expect(begin).To(gomega.BeNumerically("==", 1))
-			gomega.Expect(end).To(gomega.BeNumerically("==", 2))
+			gomega.Expect(bounds).To(gomega.Equal(
+				aggregate.Bounds{
+					Begin:     1,
+					End:       2,
+					Committed: 0,
+				},
+			))
 		})
 	})
 
@@ -479,15 +510,19 @@ func DeclareAggregateRevisionTests(
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
-			begin, committed, end, err := tc.Reader.ReadBounds(
+			bounds, err := tc.Reader.ReadBounds(
 				ctx,
 				"<handler>",
 				"<instance>",
 			)
 			gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-			gomega.Expect(begin).To(gomega.BeNumerically("==", 1))
-			gomega.Expect(committed).To(gomega.BeNumerically("==", 0))
-			gomega.Expect(end).To(gomega.BeNumerically("==", 1))
+			gomega.Expect(bounds).To(gomega.Equal(
+				aggregate.Bounds{
+					Begin:     1,
+					End:       1,
+					Committed: 0,
+				},
+			))
 		})
 
 		ginkgo.It("stores separate bounds for each combination of handler key and instance ID", func() {
@@ -548,17 +583,22 @@ func DeclareAggregateRevisionTests(
 			}
 
 			for i, inst := range instances {
-				expectedBegin := i + 1
+				expectedBegin := uint64(i) + 1
 				expectedEnd := expectedBegin + 1
 
-				begin, _, end, err := tc.Reader.ReadBounds(
+				bounds, err := tc.Reader.ReadBounds(
 					ctx,
 					inst.HandlerKey,
 					inst.InstanceID,
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-				gomega.Expect(begin).To(gomega.BeNumerically("==", expectedBegin))
-				gomega.Expect(end).To(gomega.BeNumerically("==", expectedEnd))
+				gomega.Expect(bounds).To(gomega.Equal(
+					aggregate.Bounds{
+						Begin:     expectedBegin,
+						End:       expectedEnd,
+						Committed: 0,
+					},
+				))
 			}
 		})
 
@@ -746,19 +786,19 @@ func DeclareAggregateRevisionTests(
 			}
 
 			for i, inst := range instances {
-				expectedBegin := 0
-				expectedCommitted := i
-				expectedEnd := len(instances)
-
-				begin, committed, end, err := tc.Reader.ReadBounds(
+				bounds, err := tc.Reader.ReadBounds(
 					ctx,
 					inst.HandlerKey,
 					inst.InstanceID,
 				)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-				gomega.Expect(begin).To(gomega.BeNumerically("==", expectedBegin))
-				gomega.Expect(committed).To(gomega.BeNumerically("==", expectedCommitted))
-				gomega.Expect(end).To(gomega.BeNumerically("==", expectedEnd))
+				gomega.Expect(bounds).To(gomega.Equal(
+					aggregate.Bounds{
+						Begin:     0,
+						End:       uint64(len(instances)),
+						Committed: uint64(i),
+					},
+				))
 			}
 		})
 	})

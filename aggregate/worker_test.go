@@ -536,13 +536,19 @@ var _ = Describe("type Worker", func() {
 				err := worker.Run(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
 
-				begin, _, end, err := revisionStore.ReadBounds(
+				bounds, err := revisionStore.ReadBounds(
 					ctx,
 					"<handler-key>",
 					"<instance>",
 				)
-				Expect(begin).To(BeNumerically("==", 2))
-				Expect(end).To(BeNumerically("==", 2))
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(bounds).To(Equal(
+					Bounds{
+						Begin:     2,
+						End:       2,
+						Committed: 2,
+					},
+				))
 
 				_, ok, err := snapshotStore.ReadSnapshot(
 					ctx,
@@ -607,13 +613,19 @@ var _ = Describe("type Worker", func() {
 				err := worker.Run(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
 
-				begin, _, end, err := revisionStore.ReadBounds(
+				bounds, err := revisionStore.ReadBounds(
 					ctx,
 					"<handler-key>",
 					"<instance>",
 				)
-				Expect(begin).To(BeNumerically("==", 2))
-				Expect(end).To(BeNumerically("==", 2))
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(bounds).To(Equal(
+					Bounds{
+						Begin:     2,
+						End:       2,
+						Committed: 2,
+					},
+				))
 			})
 
 			It("returns an error if the context is canceled while archiving a snapshot", func() {
@@ -696,13 +708,19 @@ var _ = Describe("type Worker", func() {
 					err := worker.Run(ctx)
 					Expect(err).To(Equal(context.Canceled))
 
-					begin, _, end, err := revisionStore.ReadBounds(
+					bounds, err := revisionStore.ReadBounds(
 						ctx,
 						"<handler-key>",
 						"<instance>",
 					)
-					Expect(begin).To(BeNumerically("==", 0))
-					Expect(end).To(BeNumerically("==", 2))
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(bounds).To(Equal(
+						Bounds{
+							Begin:     0,
+							End:       2,
+							Committed: 2,
+						},
+					))
 
 					snapshotRev, ok, err := snapshotStore.ReadSnapshot(
 						ctx,
@@ -877,8 +895,8 @@ var _ = Describe("type Worker", func() {
 			revisionReader.ReadBoundsFunc = func(
 				ctx context.Context,
 				hk, id string,
-			) (uint64, uint64, uint64, error) {
-				return 0, 0, 0, errors.New("<error>")
+			) (Bounds, error) {
+				return Bounds{}, errors.New("<error>")
 			}
 
 			err := worker.Run(ctx)

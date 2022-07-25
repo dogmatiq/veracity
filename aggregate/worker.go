@@ -79,8 +79,8 @@ type Worker struct {
 	// root is the aggregate root for this instance.
 	root dogma.AggregateRoot
 
-	// [begin, end) is the range of unarchived revisions for this instance.
-	begin, end uint64
+	// Bounds is the revision bounds for this instance.
+	bounds Bounds
 
 	// snapshotAge is the number of revisions that have been made since the last
 	// snapshot was taken.
@@ -120,12 +120,12 @@ func (w *Worker) Run(ctx context.Context) error {
 
 // stateLoadRoot loads the aggregate root.
 //
-// It populates w.root, w.begin, w.end and w.snapshotAge.
+// It populates w.bounds and w.snapshotAge.
 func (w *Worker) stateLoadRoot(ctx context.Context) (workerState, error) {
 	var err error
 	w.root = w.Handler.New()
 
-	w.begin, w.end, w.snapshotAge, err = w.Loader.Load(
+	w.bounds, w.snapshotAge, err = w.Loader.Load(
 		ctx,
 		w.HandlerIdentity,
 		w.InstanceID,
@@ -172,7 +172,7 @@ func (w *Worker) stateHandleCommand(cmd *Command, ok bool) workerState {
 			ID:              w.InstanceID,
 			Root:            w.root,
 			Packer:          w.Packer,
-			IsDestroyed:     w.begin >= w.end,
+			IsDestroyed:     w.bounds.Begin >= w.bounds.End,
 			Logger: w.Logger.With(
 				zap.String("handler_name", w.HandlerIdentity.Name),
 				zap.String("handler_key", w.HandlerIdentity.Key),
@@ -227,14 +227,14 @@ func (w *Worker) saveChanges(ctx context.Context, sc *scope) error {
 		return nil
 	}
 
-	begin := w.begin
+	begin := w.bounds.Begin
 	if sc.IsDestroyed {
-		begin = w.end + 1
+		begin = w.bounds.End + 1
 	}
 
 	rev := Revision{
 		begin,
-		w.end,
+		w.bounds.End,
 		sc.EventEnvelopes,
 	}
 
@@ -246,7 +246,7 @@ func (w *Worker) saveChanges(ctx context.Context, sc *scope) error {
 	); err != nil {
 		return fmt.Errorf(
 			"cannot prepare revision %d of aggregate root %s[%s]: %w",
-			w.end,
+			w.bounds.End,
 			w.HandlerIdentity.Name,
 			w.InstanceID,
 			err,
@@ -261,15 +261,15 @@ func (w *Worker) saveChanges(ctx context.Context, sc *scope) error {
 	); err != nil {
 		return fmt.Errorf(
 			"cannot commit revision %d of aggregate root %s[%s]: %w",
-			w.end,
+			w.bounds.End,
 			w.HandlerIdentity.Name,
 			w.InstanceID,
 			err,
 		)
 	}
 
-	w.begin = begin
-	w.end++
+	w.bounds.Begin = begin
+	w.bounds.End++
 	w.snapshotAge++
 
 	return nil
@@ -309,7 +309,7 @@ func (w *Worker) takeSnapshot(ctx context.Context) error {
 		return nil
 	}
 
-	snapshotRev := w.end - 1
+	snapshotRev := w.bounds.End - 1
 
 	if err := w.SnapshotWriter.WriteSnapshot(
 		ctx,

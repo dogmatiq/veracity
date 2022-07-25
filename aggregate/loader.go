@@ -76,9 +76,6 @@ type Loader struct {
 // Load never returns an error as a result of reading or writing snapshots; it
 // will always fall-back to using the historical events.
 //
-// The half-open range [begin, end) is the range of unarchived revisions that
-// wre used to populate r.
-//
 // snapshotAge is the number of revisions that have been made since the last
 // snapshot was taken.
 func (l *Loader) Load(
@@ -86,17 +83,17 @@ func (l *Loader) Load(
 	h configkit.Identity,
 	id string,
 	r dogma.AggregateRoot,
-) (begin, end, snapshotAge uint64, _ error) {
+) (_ Bounds, snapshotAge uint64, _ error) {
 	// First read the bounds that we are interested in. This helps us optimize
 	// the reads we perform by ignoring any snapshots and revisions that are no
 	// longer relevant.
-	begin, _, end, err := l.RevisionReader.ReadBounds(
+	bounds, err := l.RevisionReader.ReadBounds(
 		ctx,
 		h.Key,
 		id,
 	)
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf(
+		return Bounds{}, 0, fmt.Errorf(
 			"aggregate root %s[%s] cannot be loaded: unable to read revision bounds: %w",
 			h.Name,
 			id,
@@ -105,7 +102,7 @@ func (l *Loader) Load(
 	}
 
 	// If the end is zero this instance has no revisions at all.
-	if end == 0 {
+	if bounds.End == 0 {
 		l.Logger.Debug(
 			"aggregate root has no historical revisions",
 			zap.String("handler_name", h.Name),
@@ -113,22 +110,24 @@ func (l *Loader) Load(
 			zap.String("instance_id", id),
 		)
 
-		return 0, 0, 0, nil
+		return bounds, 0, nil
 	}
 
 	// If begin and end are the same then the instance was destroyed at the same
 	// time the most recent revision was made, and therefore no events need to
 	// be applied.
-	if begin == end {
+	if bounds.Begin == bounds.End {
 		l.Logger.Debug(
 			"aggregate root has no historical revisions since it was last destroyed",
 			zap.String("handler_name", h.Name),
 			zap.String("handler_key", h.Key),
 			zap.String("instance_id", id),
-			zap.Uint64("destruction_revision", begin-1),
+			zap.Uint64("begin_revision", bounds.Begin),
+			zap.Uint64("end_revision", bounds.End),
+			zap.Uint64("committed_revision", bounds.Committed),
 		)
 
-		return begin, end, 0, nil
+		return bounds, 0, nil
 	}
 
 	// Attempt to read a snapshot that is newer than begin so that we don't have
@@ -138,10 +137,10 @@ func (l *Loader) Load(
 		h,
 		id,
 		r,
-		begin, // ignore any snapshots that were taken before the first relevant revision
+		bounds.Begin, // ignore any snapshots that were taken before the first relevant revision
 	)
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf(
+		return Bounds{}, 0, fmt.Errorf(
 			"aggregate root %s[%s] cannot be loaded: unable to read snapshot: %w",
 			h.Name,
 			id,
@@ -149,7 +148,7 @@ func (l *Loader) Load(
 		)
 	}
 
-	readFrom := begin
+	readFrom := bounds.Begin
 
 	if hasSnapshot {
 		// We found a snapshot, so the first revision we want to read is the one
@@ -159,23 +158,26 @@ func (l *Loader) Load(
 		// If the revision after the snapshot is the same as the end then no
 		// revisions have been made since the snapshot was taken, and therefore
 		// there's nothing more to load.
-		if readFrom == end {
+		if readFrom == bounds.End {
 			l.Logger.Debug(
 				"aggregate root loaded from up-to-date snapshot",
 				zap.String("handler_name", h.Name),
 				zap.String("handler_key", h.Key),
 				zap.String("instance_id", id),
+				zap.Uint64("begin_revision", bounds.Begin),
+				zap.Uint64("end_revision", bounds.End),
+				zap.Uint64("committed_revision", bounds.Committed),
 				zap.Uint64("snapshot_revision", snapshotRev),
 			)
 
-			return begin, end, 0, nil
+			return bounds, 0, nil
 		}
 	}
 
 	// Finally, we read revisions and apply the historical events that occurred
 	// after the snapshot (or since the instance was last destroyed if there is
 	// no snapshot available).
-	end, err = l.readRevisions(
+	bounds.End, err = l.readRevisions(
 		ctx,
 		h,
 		id,
@@ -183,7 +185,7 @@ func (l *Loader) Load(
 		r,
 	)
 	if err != nil {
-		if end > readFrom {
+		if bounds.End > readFrom {
 			// We managed to read _some_ revisions before this error occurred,
 			// so we write a new snapshot so that we can "pick up where we left
 			// off" next time we attempt to load this instance.
@@ -191,11 +193,11 @@ func (l *Loader) Load(
 				h,
 				id,
 				r,
-				end-1, // snapshot revision
+				bounds.End-1, // snapshot revision
 			)
 		}
 
-		return 0, 0, 0, fmt.Errorf(
+		return Bounds{}, 0, fmt.Errorf(
 			"aggregate root %s[%s] cannot be loaded: unable to read revisions: %w",
 			h.Name,
 			id,
@@ -203,7 +205,7 @@ func (l *Loader) Load(
 		)
 	}
 
-	snapshotAge = end - readFrom
+	snapshotAge = bounds.End - readFrom
 
 	// Log about how the aggregate root was loaded.
 	if hasSnapshot {
@@ -212,8 +214,10 @@ func (l *Loader) Load(
 			zap.String("handler_name", h.Name),
 			zap.String("handler_key", h.Key),
 			zap.String("instance_id", id),
+			zap.Uint64("begin_revision", bounds.Begin),
+			zap.Uint64("end_revision", bounds.End),
+			zap.Uint64("committed_revision", bounds.Committed),
 			zap.Uint64("snapshot_revision", snapshotRev),
-			zap.Uint64("snapshot_age", snapshotAge),
 		)
 	} else {
 		l.Logger.Debug(
@@ -221,11 +225,13 @@ func (l *Loader) Load(
 			zap.String("handler_name", h.Name),
 			zap.String("handler_key", h.Key),
 			zap.String("instance_id", id),
-			zap.Uint64("revisions", snapshotAge),
+			zap.Uint64("begin_revision", bounds.Begin),
+			zap.Uint64("end_revision", bounds.End),
+			zap.Uint64("committed_revision", bounds.Committed),
 		)
 	}
 
-	return begin, end, snapshotAge, nil
+	return bounds, snapshotAge, nil
 }
 
 // readSnapshot updates the contents of r to match the most recent snapshot that

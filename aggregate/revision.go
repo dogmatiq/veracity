@@ -22,6 +22,27 @@ type Revision struct {
 	Events []*envelopespec.Envelope
 }
 
+// Bounds describes the revisions that are the bounds of the relevant historical
+// revisions for a specific aggregate instance.
+type Bounds struct {
+	// Begin is the (inclusive) first revision of the aggregate instance that is
+	// relevant to its state.
+	//
+	// When loading the instance, only those events from revisions in the
+	// half-open range [begin, end) should be applied to the aggregate
+	// root.
+	Begin uint64
+
+	// End is the (exclusive) end revision of the aggregate instance.
+	End uint64
+
+	// Committed is the (exclusive) revision of latest comitted revision.
+	//
+	// That is, only the revisions in the half-open range [0, committed)
+	// have been committed. Committed may be less than Begin.
+	Committed uint64
+}
+
 // RevisionReader is an interface for reading historical revisions recorded by
 // aggregate instances.
 type RevisionReader interface {
@@ -30,18 +51,10 @@ type RevisionReader interface {
 	//
 	// hk is the identity key of the aggregate message handler. id is the
 	// aggregate instance ID.
-	//
-	// commited is the revision after the most recent committed revision,
-	// whereas end is the revision after the most recent revision, regardless of
-	// whether it is committed.
-	//
-	// When loading the instance, only those events from revisions in the
-	// half-open range [begin, end) should be applied to the aggregate
-	// root.
 	ReadBounds(
 		ctx context.Context,
 		hk, id string,
-	) (begin, committed, end uint64, _ error)
+	) (Bounds, error)
 
 	// ReadRevisions loads some historical revisions for a specific aggregate
 	// instance.

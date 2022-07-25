@@ -3,6 +3,7 @@ package aggregate_test
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/dogmatiq/configkit"
 	"github.com/dogmatiq/dogma"
@@ -13,15 +14,16 @@ import (
 	. "github.com/dogmatiq/veracity/aggregate"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
 	"github.com/dogmatiq/veracity/persistence/memory"
-	"github.com/jmalloc/gomegax"
 	. "github.com/onsi/ginkgo/v2"
-	"github.com/onsi/gomega"
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap"
 )
 
-var _ = Describe("type RevisionLoader", func() {
+var _ = Describe("type Loader", func() {
 	var (
+		ctx    context.Context
+		cancel context.CancelFunc
+
 		revisionStore  *memory.AggregateRevisionStore
 		revisionReader *revisionReaderStub
 
@@ -35,6 +37,9 @@ var _ = Describe("type RevisionLoader", func() {
 	)
 
 	BeforeEach(func() {
+		ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+		DeferCleanup(cancel)
+
 		handlerID = configkit.MustNewIdentity("<handler-name>", "<handler>")
 
 		revisionStore = &memory.AggregateRevisionStore{}
@@ -74,11 +79,11 @@ var _ = Describe("type RevisionLoader", func() {
 			revisionReader.ReadBoundsFunc = func(
 				ctx context.Context,
 				hk, id string,
-			) (uint64, uint64, uint64, error) {
-				return 0, 0, 0, errors.New("<error>")
+			) (Bounds, error) {
+				return Bounds{}, errors.New("<error>")
 			}
 
-			_, _, _, err := loader.Load(
+			_, _, err := loader.Load(
 				context.Background(),
 				handlerID,
 				"<instance>",
@@ -93,15 +98,20 @@ var _ = Describe("type RevisionLoader", func() {
 
 		When("the instance has no revisions", func() {
 			It("does not modify the root", func() {
-				begin, end, snapshotAge, err := loader.Load(
+				bounds, snapshotAge, err := loader.Load(
 					context.Background(),
 					handlerID,
 					"<instance>",
 					root,
 				)
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(begin).To(BeNumerically("==", 0))
-				Expect(end).To(BeNumerically("==", 0))
+				Expect(bounds).To(Equal(
+					Bounds{
+						Begin:     0,
+						End:       0,
+						Committed: 0,
+					},
+				))
 				Expect(snapshotAge).To(BeNumerically("==", 0))
 				Expect(root.AppliedEvents).To(BeEmpty())
 			})
@@ -109,8 +119,9 @@ var _ = Describe("type RevisionLoader", func() {
 
 		When("the instance has revisions", func() {
 			BeforeEach(func() {
-				err := revisionStore.PrepareRevision(
-					context.Background(),
+				commitRevision(
+					ctx,
+					revisionStore,
 					handlerID.Key,
 					"<instance>",
 					aggregate.Revision{
@@ -123,20 +134,24 @@ var _ = Describe("type RevisionLoader", func() {
 						},
 					},
 				)
-				Expect(err).ShouldNot(HaveOccurred())
 			})
 
 			When("there is no snapshot reader", func() {
 				It("applies all historical events to the root", func() {
-					begin, end, snapshotAge, err := loader.Load(
+					bounds, snapshotAge, err := loader.Load(
 						context.Background(),
 						handlerID,
 						"<instance>",
 						root,
 					)
 					Expect(err).ShouldNot(HaveOccurred())
-					Expect(begin).To(BeNumerically("==", 0))
-					Expect(end).To(BeNumerically("==", 1))
+					Expect(bounds).To(Equal(
+						Bounds{
+							Begin:     0,
+							End:       1,
+							Committed: 1,
+						},
+					))
 					Expect(snapshotAge).To(BeNumerically("==", 1))
 					Expect(root.AppliedEvents).To(Equal(
 						[]dogma.Message{
@@ -167,7 +182,7 @@ var _ = Describe("type RevisionLoader", func() {
 						return 0, false, ctx.Err()
 					}
 
-					_, _, _, err := loader.Load(
+					_, _, err := loader.Load(
 						ctx,
 						handlerID,
 						"<instance>",
@@ -190,15 +205,20 @@ var _ = Describe("type RevisionLoader", func() {
 						return 0, false, errors.New("<error>")
 					}
 
-					begin, end, snapshotAge, err := loader.Load(
+					bounds, snapshotAge, err := loader.Load(
 						context.Background(),
 						handlerID,
 						"<instance>",
 						root,
 					)
 					Expect(err).ShouldNot(HaveOccurred())
-					Expect(begin).To(BeNumerically("==", 0))
-					Expect(end).To(BeNumerically("==", 1))
+					Expect(bounds).To(Equal(
+						Bounds{
+							Begin:     0,
+							End:       1,
+							Committed: 1,
+						},
+					))
 					Expect(snapshotAge).To(BeNumerically("==", 1))
 					Expect(root.AppliedEvents).To(Equal(
 						[]dogma.Message{
@@ -227,15 +247,20 @@ var _ = Describe("type RevisionLoader", func() {
 
 					When("the snapshot is up-to-date", func() {
 						It("does not apply any events", func() {
-							begin, end, snapshotAge, err := loader.Load(
+							bounds, snapshotAge, err := loader.Load(
 								context.Background(),
 								handlerID,
 								"<instance>",
 								root,
 							)
 							Expect(err).ShouldNot(HaveOccurred())
-							Expect(begin).To(BeNumerically("==", 0))
-							Expect(end).To(BeNumerically("==", 1))
+							Expect(bounds).To(Equal(
+								Bounds{
+									Begin:     0,
+									End:       1,
+									Committed: 1,
+								},
+							))
 							Expect(snapshotAge).To(BeNumerically("==", 0))
 							Expect(root.AppliedEvents).To(Equal(
 								[]dogma.Message{
@@ -247,8 +272,9 @@ var _ = Describe("type RevisionLoader", func() {
 
 					When("the snapshot is out-of-date", func() {
 						BeforeEach(func() {
-							err := revisionStore.PrepareRevision(
-								context.Background(),
+							commitRevision(
+								ctx,
+								revisionStore,
 								handlerID.Key,
 								"<instance>",
 								aggregate.Revision{
@@ -259,19 +285,23 @@ var _ = Describe("type RevisionLoader", func() {
 									},
 								},
 							)
-							Expect(err).ShouldNot(HaveOccurred())
 						})
 
 						It("applies only those events that occurred after the snapshot", func() {
-							begin, end, snapshotAge, err := loader.Load(
+							bounds, snapshotAge, err := loader.Load(
 								context.Background(),
 								handlerID,
 								"<instance>",
 								root,
 							)
 							Expect(err).ShouldNot(HaveOccurred())
-							Expect(begin).To(BeNumerically("==", 0))
-							Expect(end).To(BeNumerically("==", 2))
+							Expect(bounds).To(Equal(
+								Bounds{
+									Begin:     0,
+									End:       2,
+									Committed: 2,
+								},
+							))
 							Expect(snapshotAge).To(BeNumerically("==", 1))
 							Expect(root.AppliedEvents).To(Equal(
 								[]dogma.Message{
@@ -300,7 +330,7 @@ var _ = Describe("type RevisionLoader", func() {
 							return nil, errors.New("<error>")
 						}
 
-						_, _, _, err := loader.Load(
+						_, _, err := loader.Load(
 							context.Background(),
 							handlerID,
 							"<instance>",
@@ -322,7 +352,7 @@ var _ = Describe("type RevisionLoader", func() {
 
 				When("all historical events are applied", func() {
 					It("does not write a snapshot", func() {
-						_, _, _, err := loader.Load(
+						_, _, err := loader.Load(
 							context.Background(),
 							handlerID,
 							"<instance>",
@@ -352,7 +382,7 @@ var _ = Describe("type RevisionLoader", func() {
 							return nil, errors.New("<error>")
 						}
 
-						_, _, _, err := loader.Load(
+						_, _, err := loader.Load(
 							context.Background(),
 							handlerID,
 							"<instance>",
@@ -391,7 +421,7 @@ var _ = Describe("type RevisionLoader", func() {
 							return nil, errors.New("<error>")
 						}
 
-						_, _, _, err := loader.Load(
+						_, _, err := loader.Load(
 							context.Background(),
 							handlerID,
 							"<instance>",
@@ -451,7 +481,7 @@ var _ = Describe("type RevisionLoader", func() {
 							}, nil
 						}
 
-						_, _, _, err := loader.Load(
+						_, _, err := loader.Load(
 							context.Background(),
 							handlerID,
 							"<instance>",
@@ -505,7 +535,7 @@ var _ = Describe("type RevisionLoader", func() {
 							return errors.New("<snapshot error>")
 						}
 
-						_, _, _, err := loader.Load(
+						_, _, err := loader.Load(
 							context.Background(),
 							handlerID,
 							"<instance>",
@@ -522,8 +552,9 @@ var _ = Describe("type RevisionLoader", func() {
 
 			When("the instance has been destroyed", func() {
 				BeforeEach(func() {
-					err := revisionStore.PrepareRevision(
-						context.Background(),
+					commitRevision(
+						ctx,
+						revisionStore,
 						handlerID.Key,
 						"<instance>",
 						Revision{
@@ -531,27 +562,32 @@ var _ = Describe("type RevisionLoader", func() {
 							End:   1,
 						},
 					)
-					Expect(err).ShouldNot(HaveOccurred())
 				})
 
 				It("does not apply any events", func() {
-					begin, end, snapshotAge, err := loader.Load(
+					bounds, snapshotAge, err := loader.Load(
 						context.Background(),
 						handlerID,
 						"<instance>",
 						root,
 					)
 					Expect(err).ShouldNot(HaveOccurred())
-					Expect(begin).To(BeNumerically("==", 2))
-					Expect(end).To(BeNumerically("==", 2))
+					Expect(bounds).To(Equal(
+						Bounds{
+							Begin:     2,
+							End:       2,
+							Committed: 2,
+						},
+					))
 					Expect(snapshotAge).To(BeNumerically("==", 0))
 					Expect(root.AppliedEvents).To(BeEmpty())
 				})
 
 				When("the instance has been recreated", func() {
 					BeforeEach(func() {
-						err := revisionStore.PrepareRevision(
-							context.Background(),
+						commitRevision(
+							ctx,
+							revisionStore,
 							handlerID.Key,
 							"<instance>",
 							Revision{
@@ -562,10 +598,10 @@ var _ = Describe("type RevisionLoader", func() {
 								},
 							},
 						)
-						Expect(err).ShouldNot(HaveOccurred())
 
-						err = revisionStore.PrepareRevision(
-							context.Background(),
+						commitRevision(
+							ctx,
+							revisionStore,
 							handlerID.Key,
 							"<instance>",
 							Revision{
@@ -576,19 +612,23 @@ var _ = Describe("type RevisionLoader", func() {
 								},
 							},
 						)
-						Expect(err).ShouldNot(HaveOccurred())
 					})
 
 					It("applies only those events that occurred after destruction", func() {
-						begin, end, snapshotAge, err := loader.Load(
+						bounds, snapshotAge, err := loader.Load(
 							context.Background(),
 							handlerID,
 							"<instance>",
 							root,
 						)
 						Expect(err).ShouldNot(HaveOccurred())
-						Expect(begin).To(BeNumerically("==", 2))
-						Expect(end).To(BeNumerically("==", 4))
+						Expect(bounds).To(Equal(
+							Bounds{
+								Begin:     2,
+								End:       4,
+								Committed: 4,
+							},
+						))
 						Expect(snapshotAge).To(BeNumerically("==", 2))
 						Expect(root.AppliedEvents).To(Equal(
 							[]dogma.Message{
@@ -617,15 +657,20 @@ var _ = Describe("type RevisionLoader", func() {
 							)
 							Expect(err).ShouldNot(HaveOccurred())
 
-							begin, end, snapshotAge, err := loader.Load(
+							bounds, snapshotAge, err := loader.Load(
 								context.Background(),
 								handlerID,
 								"<instance>",
 								root,
 							)
 							Expect(err).ShouldNot(HaveOccurred())
-							Expect(begin).To(BeNumerically("==", 2))
-							Expect(end).To(BeNumerically("==", 4))
+							Expect(bounds).To(Equal(
+								Bounds{
+									Begin:     2,
+									End:       4,
+									Committed: 4,
+								},
+							))
 							Expect(snapshotAge).To(BeNumerically("==", 1))
 							Expect(root.AppliedEvents).To(Equal(
 								[]dogma.Message{
@@ -649,15 +694,20 @@ var _ = Describe("type RevisionLoader", func() {
 							)
 							Expect(err).ShouldNot(HaveOccurred())
 
-							begin, end, snapshotAge, err := loader.Load(
+							bounds, snapshotAge, err := loader.Load(
 								context.Background(),
 								handlerID,
 								"<instance>",
 								root,
 							)
 							Expect(err).ShouldNot(HaveOccurred())
-							Expect(begin).To(BeNumerically("==", 2))
-							Expect(end).To(BeNumerically("==", 4))
+							Expect(bounds).To(Equal(
+								Bounds{
+									Begin:     2,
+									End:       4,
+									Committed: 4,
+								},
+							))
 							Expect(snapshotAge).To(BeNumerically("==", 2))
 							Expect(root.AppliedEvents).To(Equal(
 								[]dogma.Message{
@@ -672,134 +722,3 @@ var _ = Describe("type RevisionLoader", func() {
 		})
 	})
 })
-
-// revisionReaderStub is a test implementation of the RevisionReader interface.
-type revisionReaderStub struct {
-	RevisionReader
-
-	ReadBoundsFunc func(
-		ctx context.Context,
-		hk, id string,
-	) (begin, committed, end uint64, _ error)
-
-	ReadRevisionsFunc func(
-		ctx context.Context,
-		hk, id string,
-		begin uint64,
-	) (revisions []Revision, _ error)
-}
-
-func (s *revisionReaderStub) ReadBounds(
-	ctx context.Context,
-	hk, id string,
-) (begin, committed, end uint64, _ error) {
-	if s.ReadBoundsFunc != nil {
-		return s.ReadBoundsFunc(ctx, hk, id)
-	}
-
-	if s.RevisionReader != nil {
-		return s.RevisionReader.ReadBounds(ctx, hk, id)
-	}
-
-	return 0, 0, 0, nil
-}
-
-func (s *revisionReaderStub) ReadRevisions(
-	ctx context.Context,
-	hk, id string,
-	begin uint64,
-) (revisions []Revision, _ error) {
-	if s.ReadRevisionsFunc != nil {
-		return s.ReadRevisionsFunc(ctx, hk, id, begin)
-	}
-
-	if s.RevisionReader != nil {
-		return s.RevisionReader.ReadRevisions(ctx, hk, id, begin)
-	}
-
-	return nil, nil
-}
-
-// revisionWriterStub is a test implementation of the RevisionWriter interface.
-type revisionWriterStub struct {
-	RevisionWriter
-
-	PrepareRevisionFunc func(
-		ctx context.Context,
-		hk, id string,
-		rev Revision,
-	) error
-
-	CommitRevisionFunc func(
-		ctx context.Context,
-		hk, id string,
-		rev Revision,
-	) error
-}
-
-func (s *revisionWriterStub) PrepareRevision(
-	ctx context.Context,
-	hk, id string,
-	rev Revision,
-) error {
-	if s.PrepareRevisionFunc != nil {
-		return s.PrepareRevisionFunc(ctx, hk, id, rev)
-	}
-
-	if s.RevisionWriter != nil {
-		return s.RevisionWriter.PrepareRevision(ctx, hk, id, rev)
-	}
-
-	return nil
-}
-
-func (s *revisionWriterStub) CommitRevision(
-	ctx context.Context,
-	hk, id string,
-	rev Revision,
-) error {
-	if s.CommitRevisionFunc != nil {
-		return s.CommitRevisionFunc(ctx, hk, id, rev)
-	}
-
-	if s.RevisionWriter != nil {
-		return s.RevisionWriter.CommitRevision(ctx, hk, id, rev)
-	}
-
-	return nil
-}
-
-// expectEvents reads all revisions starting from begin and asserts that they
-// are equal to expected.
-func expectRevisions(
-	ctx context.Context,
-	reader aggregate.RevisionReader,
-	hk, id string,
-	begin uint64,
-	expected []aggregate.Revision,
-) {
-	var actual []aggregate.Revision
-
-	for {
-		revisions, err := reader.ReadRevisions(
-			ctx,
-			hk,
-			id,
-			begin,
-		)
-		gomega.ExpectWithOffset(1, err).ShouldNot(gomega.HaveOccurred())
-
-		if len(revisions) == 0 {
-			break
-		}
-
-		actual = append(actual, revisions...)
-		begin += uint64(len(revisions))
-	}
-
-	if len(actual) == 0 && len(expected) == 0 {
-		return
-	}
-
-	gomega.ExpectWithOffset(1, actual).To(gomegax.EqualX(expected))
-}
