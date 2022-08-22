@@ -23,8 +23,9 @@ github.com/dogmatiq/dogma v0.11.1 h1:N80eSyJ6uk7Bi20pZa4TJ5W/0B83ZgMLblENLB0Pv6U
 github.com/dogmatiq/dogma v0.11.1/go.mod h1:8TdjQ5jjV2DcCPb/jjHPgSrqU66H6092yMEIF5HGx0g=
 github.com/dogmatiq/iago v0.4.0 h1:57nZqVT34IZxtCZEW/RFif7DNUEjMXgevfr/Mmd0N8I=
 github.com/dogmatiq/iago v0.4.0/go.mod h1:fishMWBtzYcjgis6d873VTv9kFm/wHYLOzOyO9ECBDc=
-github.com/dogmatiq/interopspec v0.5.0 h1:R2oXavMLcATUre5h7NX8+rMhr4tkqXPtsEgOp6nsSeM=
 github.com/dogmatiq/interopspec v0.5.0/go.mod h1:30FOKEhMeiM6ZIpq8mQfE7LINrh1Jv7ukErZB79/mTg=
+github.com/dogmatiq/interopspec v0.5.1 h1:tVAfguYpLWkwG0dP3Itfqo5RXXbJ5+JFCXs3xtwQzqo=
+github.com/dogmatiq/interopspec v0.5.1/go.mod h1:7SSW0T1Cz3HiJ6LlM/MBR3wW9XhwlncnbsCx1PyO7LU=
 github.com/dogmatiq/linger v0.2.1 h1:ecVwiFlTcQuQ7ygQXH5bUPkWNve8n5BmVnCYMGMQ3zc=
 github.com/dogmatiq/linger v0.2.1/go.mod h1:vQPEiGNtb3Qy+1IdmdSMyLxr4d9vPChknnQkClQimGM=
 github.com/dogmatiq/marshalkit v0.7.2 h1:ANI+RkyEalTePjB7GHlq6HKPYtX+7UcMnI+sx/BWpos=
@@ -97,7 +98,6 @@ github.com/onsi/ginkgo v1.15.0/go.mod h1:hF8qUzuuC8DJGygJH3726JnCZX4MYbRB8yFfISq
 github.com/onsi/ginkgo v1.16.2/go.mod h1:CObGmKUOKaSC0RjmoAK7tKyn4Azo5P2IWuoMnvwxz1E=
 github.com/onsi/ginkgo v1.16.4/go.mod h1:dX+/inL/fNMqNlz0e9LfyB9TswhZpCVdJM/Z6Vvnwo0=
 github.com/onsi/ginkgo v1.16.5 h1:8xi0RTUf59SOSfEtZMvwTvXYMzG4gV23XVHOZiXNtnE=
-github.com/onsi/ginkgo v1.16.5/go.mod h1:+E8gABHa3K6zRBolWtd+ROzc/U5bkGt0FwiG042wbpU=
 github.com/onsi/ginkgo/v2 v2.1.4 h1:GNapqRSid3zijZ9H77KrgVG4/8KqiyRsxcSxe+7ApXY=
 github.com/onsi/ginkgo/v2 v2.1.4/go.mod h1:um6tUpWM/cxCK3/FK8BXqEiUMUwRgSM4JXG47RKZmLU=
 github.com/onsi/gomega v1.4.3/go.mod h1:ex+gbHU/CVuBBDIJjb2X0qEXbFg53c61hWP/1CpauHY=
