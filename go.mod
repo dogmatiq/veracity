@@ -6,7 +6,7 @@ require (
 	github.com/aws/aws-sdk-go v1.44.81
 	github.com/dogmatiq/configkit v0.11.1
 	github.com/dogmatiq/dogma v0.11.1
-	github.com/dogmatiq/interopspec v0.5.0
+	github.com/dogmatiq/interopspec v0.5.1
 	github.com/dogmatiq/linger v0.2.1
 	github.com/dogmatiq/marshalkit v0.7.2
 	github.com/google/uuid v1.3.0
@@ -20,10 +20,8 @@ require (
 require (
 	github.com/dogmatiq/iago v0.4.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.3.0 // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/go-cmp v0.5.8 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
-	github.com/onsi/ginkgo v1.16.5 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
