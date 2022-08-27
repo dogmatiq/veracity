@@ -29,21 +29,24 @@ type CommandExecutor struct {
 	Packer          *parcel.Packer
 	Root            dogma.AggregateRoot
 	HandleCommand   func(dogma.AggregateRoot, dogma.AggregateCommandScope, dogma.Message)
+
+	scope scope
 }
 
 func (e *CommandExecutor) ExecuteCommand(
 	ctx context.Context,
 	cmd parcel.Parcel,
+	ack func(ctx context.Context) error,
 ) error {
-	s := &scope{
-		Command:         cmd,
-		HandlerIdentity: e.HandlerIdentity,
-		ID:              e.InstanceID,
-		Packer:          e.Packer,
-		Root:            e.Root,
+	e.scope.Executor = e
+	e.scope.Command = cmd
+	e.scope.Events = e.scope.Events[:0]
+
+	e.HandleCommand(e.Root, &e.scope, cmd.Message)
+
+	if err := e.Stream.Write(ctx, e.scope.Events); err != nil {
+		return err
 	}
 
-	e.HandleCommand(e.Root, s, cmd.Message)
-
-	return e.Stream.Write(ctx, s.Events)
+	return ack(ctx)
 }

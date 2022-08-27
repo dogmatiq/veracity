@@ -24,6 +24,7 @@ var _ = Describe("type CommandExecutor", func() {
 
 		// journal *journalStub
 		stream   *eventStreamStub
+		ack      func(ctx context.Context) error
 		executor *CommandExecutor
 	)
 
@@ -33,6 +34,10 @@ var _ = Describe("type CommandExecutor", func() {
 
 		stream = &eventStreamStub{
 			EventStream: &MemoryEventStream{},
+		}
+
+		ack = func(ctx context.Context) error {
+			return nil
 		}
 
 		executor = &CommandExecutor{
@@ -62,7 +67,7 @@ var _ = Describe("type CommandExecutor", func() {
 	Describe("func ExecuteCommand()", func() {
 		It("appends recorded events to the event stream", func() {
 			cmd := NewParcel("<command>", MessageC1)
-			err := executor.ExecuteCommand(ctx, cmd)
+			err := executor.ExecuteCommand(ctx, cmd, ack)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			expectEvents(
@@ -99,7 +104,7 @@ var _ = Describe("type CommandExecutor", func() {
 
 		It("applies recorded events to the aggregate root", func() {
 			cmd := NewParcel("<command>", MessageC1)
-			err := executor.ExecuteCommand(ctx, cmd)
+			err := executor.ExecuteCommand(ctx, cmd, ack)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			executor.HandleCommand = func(
@@ -113,6 +118,19 @@ var _ = Describe("type CommandExecutor", func() {
 					},
 				}))
 			}
+		})
+
+		It("acknowledges the command", func() {
+			called := false
+			ack = func(ctx context.Context) error {
+				called = true
+				return nil
+			}
+
+			cmd := NewParcel("<command>", MessageC1)
+			err := executor.ExecuteCommand(ctx, cmd, ack)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(called).To(BeTrue())
 		})
 	})
 })
