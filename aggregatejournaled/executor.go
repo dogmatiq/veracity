@@ -25,11 +25,10 @@ type Record struct {
 type CommandExecutor struct {
 	HandlerIdentity *envelopespec.Identity
 	InstanceID      string
-	Handler         dogma.AggregateMessageHandler
+	Stream          EventStream
 	Packer          *parcel.Packer
-
-	Root   dogma.AggregateRoot
-	Stream EventStream
+	Root            dogma.AggregateRoot
+	HandleCommand   func(dogma.AggregateRoot, dogma.AggregateCommandScope, dogma.Message)
 }
 
 func (e *CommandExecutor) ExecuteCommand(
@@ -41,14 +40,10 @@ func (e *CommandExecutor) ExecuteCommand(
 		HandlerIdentity: e.HandlerIdentity,
 		ID:              e.InstanceID,
 		Packer:          e.Packer,
+		Root:            e.Root,
 	}
 
-	e.Handler.HandleCommand(e.Root, s, cmd.Message)
+	e.HandleCommand(e.Root, s, cmd.Message)
 
-	e.Stream.Write(
-		ctx,
-		s.Events,
-	)
-
-	return nil
+	return e.Stream.Write(ctx, s.Events)
 }

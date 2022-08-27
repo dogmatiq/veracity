@@ -22,7 +22,6 @@ var _ = Describe("type CommandExecutor", func() {
 		ctx    context.Context
 		cancel context.CancelFunc
 
-		handler *AggregateMessageHandler
 		// journal *journalStub
 		stream   *eventStreamStub
 		executor *CommandExecutor
@@ -31,8 +30,6 @@ var _ = Describe("type CommandExecutor", func() {
 	BeforeEach(func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 		DeferCleanup(cancel)
-
-		handler = &AggregateMessageHandler{}
 
 		stream = &eventStreamStub{
 			EventStream: &MemoryEventStream{},
@@ -44,7 +41,6 @@ var _ = Describe("type CommandExecutor", func() {
 				Key:  "<handler-key>",
 			},
 			InstanceID: "<instance>",
-			Handler:    handler,
 			Stream:     stream,
 			Packer: NewPacker(
 				message.TypeRoles{
@@ -52,19 +48,19 @@ var _ = Describe("type CommandExecutor", func() {
 					MessageEType: message.EventRole,
 				},
 			),
-		}
-	})
-
-	Describe("func ExecuteCommand()", func() {
-		It("appends recorded events to the event stream", func() {
-			handler.HandleCommandFunc = func(
+			Root: &AggregateRoot{},
+			HandleCommand: func(
 				r dogma.AggregateRoot,
 				s dogma.AggregateCommandScope,
 				m dogma.Message,
 			) {
 				s.RecordEvent(MessageE1)
-			}
+			},
+		}
+	})
 
+	Describe("func ExecuteCommand()", func() {
+		It("appends recorded events to the event stream", func() {
 			cmd := NewParcel("<command>", MessageC1)
 			err := executor.ExecuteCommand(ctx, cmd)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -99,6 +95,24 @@ var _ = Describe("type CommandExecutor", func() {
 					},
 				},
 			)
+		})
+
+		It("applies recorded events to the aggregate root", func() {
+			cmd := NewParcel("<command>", MessageC1)
+			err := executor.ExecuteCommand(ctx, cmd)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			executor.HandleCommand = func(
+				r dogma.AggregateRoot,
+				_ dogma.AggregateCommandScope,
+				_ dogma.Message,
+			) {
+				Expect(r).To(Equal(&AggregateRoot{
+					AppliedEvents: []dogma.Message{
+						MessageE1,
+					},
+				}))
+			}
 		})
 	})
 })
