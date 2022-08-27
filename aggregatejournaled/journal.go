@@ -4,17 +4,21 @@ import (
 	"context"
 )
 
+type JournalEntry interface {
+	ApplyTo(*Snapshot)
+}
+
 type Journal interface {
 	Read(
 		ctx context.Context,
 		hk, id string,
 		offset uint64,
-	) ([]Record, error)
+	) ([]JournalEntry, error)
 
 	Write(
 		ctx context.Context,
 		hk, id string,
 		offset uint64,
-		r Record,
+		e JournalEntry,
 	) error
 }

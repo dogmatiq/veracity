@@ -27,7 +27,6 @@ var _ = Describe("type CommandExecutor", func() {
 		stream  *eventStreamStub
 		loader  *Loader
 		handler *AggregateMessageHandler
-		packer  *parcel.Packer
 
 		command        parcel.Parcel
 		event0, event1 parcel.Parcel
@@ -63,13 +62,6 @@ var _ = Describe("type CommandExecutor", func() {
 				s.RecordEvent(MessageE2)
 			},
 		}
-
-		packer = NewPacker(
-			message.TypeRoles{
-				MessageCType: message.CommandRole,
-				MessageEType: message.EventRole,
-			},
-		)
 
 		command = NewParcel("<command>", MessageC1)
 		event0 = parcel.Parcel{
@@ -133,7 +125,12 @@ var _ = Describe("type CommandExecutor", func() {
 			Handler:    handler,
 			Journal:    journal,
 			Stream:     stream,
-			Packer:     packer,
+			Packer: NewPacker(
+				message.TypeRoles{
+					MessageCType: message.CommandRole,
+					MessageEType: message.EventRole,
+				},
+			),
 		}
 
 		err := executor.Load(ctx)
@@ -184,75 +181,125 @@ var _ = Describe("type CommandExecutor", func() {
 			Expect(acked).To(BeTrue())
 		})
 
-		When("an event cannot be written to the stream", func() {
-			It("writes the event next time the instance is loaded", func() {
-				count := 0
-				stream.WriteFunc = func(
-					ctx context.Context,
-					ev parcel.Parcel,
-				) error {
-					count++
+		When("there is a fault", func() {
+			DescribeTable(
+				"writes the events to the event stream exactly once",
+				func(setup func()) {
+					var (
+						originalHandlerHandleCommand = handler.HandleCommandFunc
+						originalJournalWrite         = journal.WriteFunc
+						originalStreamWrite          = stream.WriteFunc
+						originalAck                  = ack
+					)
 
-					switch count {
-					case 1:
-						return stream.EventStream.Write(ctx, ev)
-					case 2:
+					By("creating a fault condition", func() {
+						setup()
+					})
+
+					By("attempting execute the command", func() {
+						defer func() {
+							switch r := recover(); r {
+							case nil:
+								// no panic
+							case "<panic>":
+								// induced fault condition
+							default:
+								// any other panic
+								panic(r)
+							}
+						}()
+
+						err := executor.ExecuteCommand(ctx, command, ack)
+						Expect(err).To(MatchError("<error>"))
+					})
+
+					By("resetting the fault condition", func() {
+						handler.HandleCommandFunc = originalHandlerHandleCommand
+						journal.WriteFunc = originalJournalWrite
+						stream.WriteFunc = originalStreamWrite
+						ack = originalAck
+						executor.Packer = NewPacker(
+							message.TypeRoles{
+								MessageCType: message.CommandRole,
+								MessageEType: message.EventRole,
+							},
+						)
+					})
+
+					By("reloading the snapshot", func() {
+						err := executor.Load(ctx)
+						Expect(err).ShouldNot(HaveOccurred())
+					})
+
+					By("retrying the command", func() {
+						err := executor.ExecuteCommand(
+							ctx,
+							command,
+							func(context.Context) error {
+								return nil
+							},
+						)
+						Expect(err).ShouldNot(HaveOccurred())
+					})
+
+					expectEvents(
+						ctx,
+						stream,
+						0,
+						event0,
+						event1,
+					)
+				},
+				Entry("entry cannot be written to the journal", func() {
+					journal.WriteFunc = func(
+						ctx context.Context,
+						hk, id string,
+						offset uint64,
+						e JournalEntry,
+					) error {
 						return errors.New("<error>")
-					default:
+					}
+				}),
+				Entry("command cannot be acknowledged", func() {
+					ack = func(context.Context) error {
+						return errors.New("<error>")
+					}
+				}),
+				Entry("events cannot be written to the stream", func() {
+					stream.WriteFunc = func(
+						ctx context.Context,
+						ev parcel.Parcel,
+					) error {
+						return errors.New("<error>")
+					}
+				}),
+				Entry("some events cannot be written to the stream", func() {
+					stream.WriteFunc = func(
+						ctx context.Context,
+						ev parcel.Parcel,
+					) error {
+						// Setup stream to fail on the NEXT event.
+						stream.WriteFunc = func(
+							ctx context.Context,
+							ev parcel.Parcel,
+						) error {
+							return errors.New("<error>")
+						}
+
+						// But succeed this time.
 						return stream.EventStream.Write(ctx, ev)
 					}
-				}
-
-				err := executor.ExecuteCommand(ctx, command, ack)
-				Expect(err).Should(MatchError("<error>"))
-
-				err = executor.Load(ctx)
-				Expect(err).ShouldNot(HaveOccurred())
-
-				expectEvents(
-					ctx,
-					stream,
-					0,
-					event0,
-					event1,
-				)
-			})
-		})
-
-		When("the command cannot be acknowledged", func() {
-			It("does not re-handle the command", func() {
-				err := executor.ExecuteCommand(
-					ctx,
-					command,
-					func(context.Context) error {
-						return errors.New("<error>")
-					},
-				)
-				Expect(err).Should(MatchError("<error>"))
-
-				err = executor.Load(ctx)
-				Expect(err).ShouldNot(HaveOccurred())
-
-				acked := false
-				err = executor.ExecuteCommand(
-					ctx,
-					command,
-					func(context.Context) error {
-						acked = true
-						return nil
-					},
-				)
-				Expect(err).ShouldNot(HaveOccurred())
-				Expect(acked).To(BeTrue())
-
-				expectEvents(
-					ctx,
-					stream,
-					0,
-					event0,
-					event1,
-				)
-			})
+				}),
+				Entry("handler panics", func() {
+					handler.HandleCommandFunc = func(
+						r dogma.AggregateRoot,
+						s dogma.AggregateCommandScope,
+						m dogma.Message,
+					) {
+						panic("<panic>")
+					}
+				}),
+			)
 		})
 	})
 })

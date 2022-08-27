@@ -48,19 +48,19 @@ func (s *MemoryEventStream) Write(
 
 type MemoryJournal struct {
 	m       sync.RWMutex
-	records []Record
+	entries []JournalEntry
 }
 
 func (j *MemoryJournal) Read(
 	ctx context.Context,
 	hk, id string,
 	offset uint64,
-) ([]Record, error) {
+) ([]JournalEntry, error) {
 	j.m.RLock()
 	defer j.m.RUnlock()
 
 	index := int(offset)
-	count := len(j.records)
+	count := len(j.entries)
 
 	if index > count {
 		panic("offset out of range")
@@ -70,7 +70,7 @@ func (j *MemoryJournal) Read(
 		return nil, nil
 	}
 
-	return j.records[index : index+1], nil
+	return j.entries[index : index+1], nil
 
 }
 
@@ -78,15 +78,15 @@ func (j *MemoryJournal) Write(
 	ctx context.Context,
 	hk, id string,
 	offset uint64,
-	r Record,
+	r JournalEntry,
 ) error {
 	j.m.Lock()
 	defer j.m.Unlock()
 
-	count := uint64(len(j.records))
+	count := uint64(len(j.entries))
 
 	if offset == count {
-		j.records = append(j.records, r)
+		j.entries = append(j.entries, r)
 		return nil
 	}
 

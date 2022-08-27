@@ -14,10 +14,6 @@ type Snapshot struct {
 	Root          dogma.AggregateRoot
 }
 
-type Record interface {
-	ApplyTo(*Snapshot)
-}
-
 type commandExecuted struct {
 	Command parcel.Parcel
 	Events  []parcel.Parcel
@@ -107,7 +103,7 @@ func (e *CommandExecutor) ExecuteCommand(
 	return nil
 }
 
-func (e *CommandExecutor) writeToJournal(ctx context.Context, r Record) error {
+func (e *CommandExecutor) writeToJournal(ctx context.Context, r JournalEntry) error {
 	if err := e.Journal.Write(
 		ctx,
 		e.HandlerIdentity.Key,

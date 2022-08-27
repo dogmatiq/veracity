@@ -18,17 +18,17 @@ func (l *Loader) Load(
 ) error {
 	var offset uint64
 	for {
-		records, err := l.Journal.Read(ctx, hk, id, offset)
+		entries, err := l.Journal.Read(ctx, hk, id, offset)
 		if err != nil {
 			return err
 		}
-		if len(records) == 0 {
+		if len(entries) == 0 {
 			break
 		}
 
-		for _, r := range records {
+		for _, e := range entries {
 			offset++
-			r.ApplyTo(sn)
+			e.ApplyTo(sn)
 		}
 	}
 
