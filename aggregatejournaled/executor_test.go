@@ -29,7 +29,8 @@ var _ = Describe("type CommandExecutor", func() {
 		handler *AggregateMessageHandler
 		packer  *parcel.Packer
 
-		command, event parcel.Parcel
+		command        parcel.Parcel
+		event0, event1 parcel.Parcel
 		ack            func(context.Context) error
 
 		executor *CommandExecutor
@@ -59,6 +60,7 @@ var _ = Describe("type CommandExecutor", func() {
 				m dogma.Message,
 			) {
 				s.RecordEvent(MessageE1)
+				s.RecordEvent(MessageE2)
 			},
 		}
 
@@ -70,7 +72,7 @@ var _ = Describe("type CommandExecutor", func() {
 		)
 
 		command = NewParcel("<command>", MessageC1)
-		event = parcel.Parcel{
+		event0 = parcel.Parcel{
 			Envelope: &envelopespec.Envelope{
 				MessageId:     "0",
 				CausationId:   "<command>",
@@ -92,6 +94,29 @@ var _ = Describe("type CommandExecutor", func() {
 			},
 			Message:   MessageE1,
 			CreatedAt: time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+		}
+		event1 = parcel.Parcel{
+			Envelope: &envelopespec.Envelope{
+				MessageId:     "1",
+				CausationId:   "<command>",
+				CorrelationId: "<correlation>",
+				SourceApplication: &envelopespec.Identity{
+					Name: "<app-name>",
+					Key:  "<app-key>",
+				},
+				SourceHandler: &envelopespec.Identity{
+					Name: "<handler-name>",
+					Key:  "<handler-key>",
+				},
+				SourceInstanceId: "<instance>",
+				CreatedAt:        "2000-01-01T00:00:01Z",
+				Description:      "{E2}",
+				PortableName:     "MessageE",
+				MediaType:        MessageE2Packet.MediaType,
+				Data:             MessageE2Packet.Data,
+			},
+			Message:   MessageE2,
+			CreatedAt: time.Date(2000, 1, 1, 0, 0, 1, 0, time.UTC),
 		}
 
 		ack = func(ctx context.Context) error {
@@ -128,6 +153,7 @@ var _ = Describe("type CommandExecutor", func() {
 				Expect(r).To(Equal(&AggregateRoot{
 					AppliedEvents: []dogma.Message{
 						MessageE1,
+						MessageE2,
 					},
 				}))
 			}
@@ -141,7 +167,8 @@ var _ = Describe("type CommandExecutor", func() {
 				ctx,
 				stream,
 				0,
-				event,
+				event0,
+				event1,
 			)
 		})
 
@@ -159,17 +186,26 @@ var _ = Describe("type CommandExecutor", func() {
 
 		When("an event cannot be written to the stream", func() {
 			It("writes the event next time the instance is loaded", func() {
+				count := 0
 				stream.WriteFunc = func(
 					ctx context.Context,
 					ev parcel.Parcel,
 				) error {
-					return errors.New("<error>")
+					count++
+
+					switch count {
+					case 1:
+						return stream.EventStream.Write(ctx, ev)
+					case 2:
+						return errors.New("<error>")
+					default:
+						return stream.EventStream.Write(ctx, ev)
+					}
 				}
 
 				err := executor.ExecuteCommand(ctx, command, ack)
 				Expect(err).Should(MatchError("<error>"))
 
-				stream.WriteFunc = nil
 				err = executor.Load(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -177,7 +213,8 @@ var _ = Describe("type CommandExecutor", func() {
 					ctx,
 					stream,
 					0,
-					event,
+					event0,
+					event1,
 				)
 			})
 		})
@@ -212,7 +249,8 @@ var _ = Describe("type CommandExecutor", func() {
 					ctx,
 					stream,
 					0,
-					event,
+					event0,
+					event1,
 				)
 			})
 		})
