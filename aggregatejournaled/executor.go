@@ -9,9 +9,9 @@ import (
 )
 
 type Snapshot struct {
-	LastCommandID     string
-	UnpublishedEvents []parcel.Parcel
-	Root              dogma.AggregateRoot
+	LastCommandID string
+	PendingEvents []parcel.Parcel
+	Root          dogma.AggregateRoot
 }
 
 type Record interface {
@@ -25,12 +25,13 @@ type commandExecuted struct {
 
 func (r commandExecuted) ApplyTo(s *Snapshot) {
 	s.LastCommandID = r.Command.ID()
-	s.UnpublishedEvents = r.Events
+	s.PendingEvents = r.Events
 }
 
 type CommandExecutor struct {
 	HandlerIdentity *envelopespec.Identity
 	InstanceID      string
+	Loader          *Loader
 	Handler         dogma.AggregateMessageHandler
 	Journal         Journal
 	Stream          EventStream
@@ -40,61 +41,26 @@ type CommandExecutor struct {
 }
 
 func (e *CommandExecutor) Load(ctx context.Context) error {
-	var offset uint64
-
 	e.snapshot = Snapshot{
 		Root: e.Handler.New(),
 	}
 
-	for {
-		records, err := e.Journal.Read(
-			ctx,
-			e.HandlerIdentity.Key,
-			e.InstanceID,
-			offset,
-		)
-		if err != nil {
-			return err
-		}
-		if len(records) == 0 {
-			break
-		}
-
-		for _, r := range records {
-			offset++
-			r.ApplyTo(&e.snapshot)
-		}
+	if err := e.Loader.Load(
+		ctx,
+		e.HandlerIdentity.Key,
+		e.InstanceID,
+		&e.snapshot,
+	); err != nil {
+		return err
 	}
 
-	if len(e.snapshot.UnpublishedEvents) == 0 {
-		return nil
-	}
-
-	offset = 0
-	for {
-		events, err := e.Stream.Read(ctx, offset)
-		if err != nil {
-			return err
-		}
-		if len(events) == 0 {
-			break
-		}
-
-		for _, ev := range events {
-			if ev.ID() == e.snapshot.UnpublishedEvents[0].ID() {
-				e.snapshot.UnpublishedEvents = e.snapshot.UnpublishedEvents[1:]
-			}
-		}
-	}
-
-	for _, ev := range e.snapshot.UnpublishedEvents {
-		offset++
+	for _, ev := range e.snapshot.PendingEvents {
 		if err := e.Stream.Write(ctx, ev); err != nil {
 			return err
 		}
 	}
 
-	e.snapshot.UnpublishedEvents = nil
+	e.snapshot.PendingEvents = nil
 
 	return nil
 }
@@ -104,7 +70,7 @@ func (e *CommandExecutor) ExecuteCommand(
 	cmd parcel.Parcel,
 	ack func(ctx context.Context) error,
 ) error {
-	if len(e.snapshot.UnpublishedEvents) != 0 {
+	if len(e.snapshot.PendingEvents) != 0 {
 		panic("cannot execute a new command while there are unpublished events")
 	}
 

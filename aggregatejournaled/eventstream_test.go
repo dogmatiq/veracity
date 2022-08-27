@@ -11,6 +11,8 @@ import (
 
 type eventStreamStub struct {
 	EventStream
+
+	WriteFunc func(ctx context.Context, ev parcel.Parcel) error
 }
 
 func (s *eventStreamStub) Read(
@@ -24,6 +26,10 @@ func (s *eventStreamStub) Write(
 	ctx context.Context,
 	ev parcel.Parcel,
 ) error {
+	if s.WriteFunc != nil {
+		return s.WriteFunc(ctx, ev)
+	}
+
 	return s.EventStream.Write(ctx, ev)
 }
 

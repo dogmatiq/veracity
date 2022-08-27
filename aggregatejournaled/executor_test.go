@@ -23,19 +23,51 @@ var _ = Describe("type CommandExecutor", func() {
 		ctx    context.Context
 		cancel context.CancelFunc
 
+		journal *journalStub
+		stream  *eventStreamStub
+		loader  *Loader
+		handler *AggregateMessageHandler
+		packer  *parcel.Packer
+
 		command, event parcel.Parcel
 		ack            func(context.Context) error
 
-		handler  *AggregateMessageHandler
-		journal  *journalStub
-		stream   *eventStreamStub
-		packer   *parcel.Packer
 		executor *CommandExecutor
 	)
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 		DeferCleanup(cancel)
+
+		journal = &journalStub{
+			Journal: &MemoryJournal{},
+		}
+
+		stream = &eventStreamStub{
+			EventStream: &MemoryEventStream{},
+		}
+
+		loader = &Loader{
+			Journal: journal,
+			Stream:  stream,
+		}
+
+		handler = &AggregateMessageHandler{
+			HandleCommandFunc: func(
+				r dogma.AggregateRoot,
+				s dogma.AggregateCommandScope,
+				m dogma.Message,
+			) {
+				s.RecordEvent(MessageE1)
+			},
+		}
+
+		packer = NewPacker(
+			message.TypeRoles{
+				MessageCType: message.CommandRole,
+				MessageEType: message.EventRole,
+			},
+		)
 
 		command = NewParcel("<command>", MessageC1)
 		event = parcel.Parcel{
@@ -66,37 +98,13 @@ var _ = Describe("type CommandExecutor", func() {
 			return nil
 		}
 
-		handler = &AggregateMessageHandler{
-			HandleCommandFunc: func(
-				r dogma.AggregateRoot,
-				s dogma.AggregateCommandScope,
-				m dogma.Message,
-			) {
-				s.RecordEvent(MessageE1)
-			},
-		}
-
-		journal = &journalStub{
-			Journal: &MemoryJournal{},
-		}
-
-		stream = &eventStreamStub{
-			EventStream: &MemoryEventStream{},
-		}
-
-		packer = NewPacker(
-			message.TypeRoles{
-				MessageCType: message.CommandRole,
-				MessageEType: message.EventRole,
-			},
-		)
-
 		executor = &CommandExecutor{
 			HandlerIdentity: &envelopespec.Identity{
 				Name: "<handler-name>",
 				Key:  "<handler-key>",
 			},
 			InstanceID: "<instance>",
+			Loader:     loader,
 			Handler:    handler,
 			Journal:    journal,
 			Stream:     stream,
@@ -108,18 +116,6 @@ var _ = Describe("type CommandExecutor", func() {
 	})
 
 	Describe("func ExecuteCommand()", func() {
-		It("appends recorded events to the event stream", func() {
-			err := executor.ExecuteCommand(ctx, command, ack)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			expectEvents(
-				ctx,
-				stream,
-				0,
-				event,
-			)
-		})
-
 		It("applies recorded events to the aggregate root", func() {
 			err := executor.ExecuteCommand(ctx, command, ack)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -137,6 +133,18 @@ var _ = Describe("type CommandExecutor", func() {
 			}
 		})
 
+		It("writes recorded events to the event stream", func() {
+			err := executor.ExecuteCommand(ctx, command, ack)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			expectEvents(
+				ctx,
+				stream,
+				0,
+				event,
+			)
+		})
+
 		It("acknowledges the command", func() {
 			acked := false
 			ack = func(ctx context.Context) error {
@@ -149,46 +157,64 @@ var _ = Describe("type CommandExecutor", func() {
 			Expect(acked).To(BeTrue())
 		})
 
-		It("does not re-handle the command when acknowledgement fails", func() {
-			err := executor.ExecuteCommand(
-				ctx,
-				command,
-				func(context.Context) error {
+		When("an event cannot be written to the stream", func() {
+			It("writes the event next time the instance is loaded", func() {
+				stream.WriteFunc = func(
+					ctx context.Context,
+					ev parcel.Parcel,
+				) error {
 					return errors.New("<error>")
-				},
-			)
-			Expect(err).Should(MatchError("<error>"))
+				}
 
-			acked := false
-			executor = &CommandExecutor{
-				HandlerIdentity: executor.HandlerIdentity,
-				InstanceID:      executor.InstanceID,
-				Handler:         executor.Handler,
-				Journal:         executor.Journal,
-				Stream:          executor.Stream,
-				Packer:          executor.Packer,
-			}
+				err := executor.ExecuteCommand(ctx, command, ack)
+				Expect(err).Should(MatchError("<error>"))
 
-			err = executor.Load(ctx)
-			Expect(err).ShouldNot(HaveOccurred())
+				stream.WriteFunc = nil
+				err = executor.Load(ctx)
+				Expect(err).ShouldNot(HaveOccurred())
 
-			err = executor.ExecuteCommand(
-				ctx,
-				command,
-				func(context.Context) error {
-					acked = true
-					return nil
-				},
-			)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(acked).To(BeTrue())
+				expectEvents(
+					ctx,
+					stream,
+					0,
+					event,
+				)
+			})
+		})
 
-			expectEvents(
-				ctx,
-				stream,
-				0,
-				event,
-			)
+		When("the command cannot be acknowledged", func() {
+			It("does not re-handle the command", func() {
+				err := executor.ExecuteCommand(
+					ctx,
+					command,
+					func(context.Context) error {
+						return errors.New("<error>")
+					},
+				)
+				Expect(err).Should(MatchError("<error>"))
+
+				err = executor.Load(ctx)
+				Expect(err).ShouldNot(HaveOccurred())
+
+				acked := false
+				err = executor.ExecuteCommand(
+					ctx,
+					command,
+					func(context.Context) error {
+						acked = true
+						return nil
+					},
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(acked).To(BeTrue())
+
+				expectEvents(
+					ctx,
+					stream,
+					0,
+					event,
+				)
+			})
 		})
 	})
 })

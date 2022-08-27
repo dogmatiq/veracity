@@ -14,6 +14,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.1.6
 	github.com/onsi/gomega v1.20.2
 	go.uber.org/zap v1.23.0
+	golang.org/x/exp v0.0.0-20220826205824-bd9bcdd0b820
 	google.golang.org/protobuf v1.28.1
 )
 
