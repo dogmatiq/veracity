@@ -2,6 +2,7 @@ package aggregate_test
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	. "github.com/dogmatiq/configkit/fixtures"
@@ -22,9 +23,13 @@ var _ = Describe("type CommandExecutor", func() {
 		ctx    context.Context
 		cancel context.CancelFunc
 
-		// journal *journalStub
+		command, event parcel.Parcel
+		ack            func(context.Context) error
+
+		handler  *AggregateMessageHandler
+		journal  *journalStub
 		stream   *eventStreamStub
-		ack      func(ctx context.Context) error
+		packer   *parcel.Packer
 		executor *CommandExecutor
 	)
 
@@ -32,29 +37,37 @@ var _ = Describe("type CommandExecutor", func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 		DeferCleanup(cancel)
 
-		stream = &eventStreamStub{
-			EventStream: &MemoryEventStream{},
+		command = NewParcel("<command>", MessageC1)
+		event = parcel.Parcel{
+			Envelope: &envelopespec.Envelope{
+				MessageId:     "0",
+				CausationId:   "<command>",
+				CorrelationId: "<correlation>",
+				SourceApplication: &envelopespec.Identity{
+					Name: "<app-name>",
+					Key:  "<app-key>",
+				},
+				SourceHandler: &envelopespec.Identity{
+					Name: "<handler-name>",
+					Key:  "<handler-key>",
+				},
+				SourceInstanceId: "<instance>",
+				CreatedAt:        "2000-01-01T00:00:00Z",
+				Description:      "{E1}",
+				PortableName:     "MessageE",
+				MediaType:        MessageE1Packet.MediaType,
+				Data:             MessageE1Packet.Data,
+			},
+			Message:   MessageE1,
+			CreatedAt: time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
 		}
 
 		ack = func(ctx context.Context) error {
 			return nil
 		}
 
-		executor = &CommandExecutor{
-			HandlerIdentity: &envelopespec.Identity{
-				Name: "<handler-name>",
-				Key:  "<handler-key>",
-			},
-			InstanceID: "<instance>",
-			Stream:     stream,
-			Packer: NewPacker(
-				message.TypeRoles{
-					MessageCType: message.CommandRole,
-					MessageEType: message.EventRole,
-				},
-			),
-			Root: &AggregateRoot{},
-			HandleCommand: func(
+		handler = &AggregateMessageHandler{
+			HandleCommandFunc: func(
 				r dogma.AggregateRoot,
 				s dogma.AggregateCommandScope,
 				m dogma.Message,
@@ -62,52 +75,56 @@ var _ = Describe("type CommandExecutor", func() {
 				s.RecordEvent(MessageE1)
 			},
 		}
+
+		journal = &journalStub{
+			Journal: &MemoryJournal{},
+		}
+
+		stream = &eventStreamStub{
+			EventStream: &MemoryEventStream{},
+		}
+
+		packer = NewPacker(
+			message.TypeRoles{
+				MessageCType: message.CommandRole,
+				MessageEType: message.EventRole,
+			},
+		)
+
+		executor = &CommandExecutor{
+			HandlerIdentity: &envelopespec.Identity{
+				Name: "<handler-name>",
+				Key:  "<handler-key>",
+			},
+			InstanceID: "<instance>",
+			Handler:    handler,
+			Journal:    journal,
+			Stream:     stream,
+			Packer:     packer,
+		}
+
+		err := executor.Load(ctx)
+		Expect(err).ShouldNot(HaveOccurred())
 	})
 
 	Describe("func ExecuteCommand()", func() {
 		It("appends recorded events to the event stream", func() {
-			cmd := NewParcel("<command>", MessageC1)
-			err := executor.ExecuteCommand(ctx, cmd, ack)
+			err := executor.ExecuteCommand(ctx, command, ack)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			expectEvents(
 				ctx,
 				stream,
 				0,
-				[]parcel.Parcel{
-					{
-						Envelope: &envelopespec.Envelope{
-							MessageId:     "0",
-							CausationId:   "<command>",
-							CorrelationId: "<correlation>",
-							SourceApplication: &envelopespec.Identity{
-								Name: "<app-name>",
-								Key:  "<app-key>",
-							},
-							SourceHandler: &envelopespec.Identity{
-								Name: "<handler-name>",
-								Key:  "<handler-key>",
-							},
-							SourceInstanceId: "<instance>",
-							CreatedAt:        "2000-01-01T00:00:00Z",
-							Description:      "{E1}",
-							PortableName:     "MessageE",
-							MediaType:        MessageE1Packet.MediaType,
-							Data:             MessageE1Packet.Data,
-						},
-						Message:   MessageE1,
-						CreatedAt: time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
-					},
-				},
+				event,
 			)
 		})
 
 		It("applies recorded events to the aggregate root", func() {
-			cmd := NewParcel("<command>", MessageC1)
-			err := executor.ExecuteCommand(ctx, cmd, ack)
+			err := executor.ExecuteCommand(ctx, command, ack)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			executor.HandleCommand = func(
+			handler.HandleCommandFunc = func(
 				r dogma.AggregateRoot,
 				_ dogma.AggregateCommandScope,
 				_ dogma.Message,
@@ -121,16 +138,57 @@ var _ = Describe("type CommandExecutor", func() {
 		})
 
 		It("acknowledges the command", func() {
-			called := false
+			acked := false
 			ack = func(ctx context.Context) error {
-				called = true
+				acked = true
 				return nil
 			}
 
-			cmd := NewParcel("<command>", MessageC1)
-			err := executor.ExecuteCommand(ctx, cmd, ack)
+			err := executor.ExecuteCommand(ctx, command, ack)
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(called).To(BeTrue())
+			Expect(acked).To(BeTrue())
+		})
+
+		It("does not re-handle the command when acknowledgement fails", func() {
+			err := executor.ExecuteCommand(
+				ctx,
+				command,
+				func(context.Context) error {
+					return errors.New("<error>")
+				},
+			)
+			Expect(err).Should(MatchError("<error>"))
+
+			acked := false
+			executor = &CommandExecutor{
+				HandlerIdentity: executor.HandlerIdentity,
+				InstanceID:      executor.InstanceID,
+				Handler:         executor.Handler,
+				Journal:         executor.Journal,
+				Stream:          executor.Stream,
+				Packer:          executor.Packer,
+			}
+
+			err = executor.Load(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = executor.ExecuteCommand(
+				ctx,
+				command,
+				func(context.Context) error {
+					acked = true
+					return nil
+				},
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(acked).To(BeTrue())
+
+			expectEvents(
+				ctx,
+				stream,
+				0,
+				event,
+			)
 		})
 	})
 })

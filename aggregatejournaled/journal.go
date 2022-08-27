@@ -17,10 +17,4 @@ type Journal interface {
 		offset uint64,
 		r Record,
 	) error
-
-	Truncate(
-		ctx context.Context,
-		hk, id string,
-		offset uint64,
-	) error
 }

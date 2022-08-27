@@ -7,6 +7,7 @@ import (
 )
 
 type journalStub struct {
+	Journal
 }
 
 func (s *journalStub) Read(
@@ -14,7 +15,7 @@ func (s *journalStub) Read(
 	hk, id string,
 	offset uint64,
 ) ([]Record, error) {
-	panic("not implemented")
+	return s.Journal.Read(ctx, hk, id, offset)
 }
 
 func (s *journalStub) Write(
@@ -23,13 +24,5 @@ func (s *journalStub) Write(
 	offset uint64,
 	r Record,
 ) error {
-	panic("not implemented")
-}
-
-func (s *journalStub) Truncate(
-	ctx context.Context,
-	hk, id string,
-	offset uint64,
-) error {
-	panic("not implemented")
+	return s.Journal.Write(ctx, hk, id, offset, r)
 }

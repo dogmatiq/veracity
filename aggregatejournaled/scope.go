@@ -25,7 +25,7 @@ func (s *scope) Destroy() {
 // RecordEvent records the occurrence of an event as a result of the command
 // message that is being handled.
 func (s *scope) RecordEvent(m dogma.Message) {
-	s.Executor.Root.ApplyEvent(m)
+	s.Executor.snapshot.Root.ApplyEvent(m)
 
 	// s.IsDestroyed = false
 	s.Events = append(

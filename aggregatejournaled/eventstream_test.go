@@ -22,9 +22,9 @@ func (s *eventStreamStub) Read(
 
 func (s *eventStreamStub) Write(
 	ctx context.Context,
-	events []parcel.Parcel,
+	ev parcel.Parcel,
 ) error {
-	return s.EventStream.Write(ctx, events)
+	return s.EventStream.Write(ctx, ev)
 }
 
 // expectEvents reads all events from an EventStore starting at the given offset
@@ -33,7 +33,7 @@ func expectEvents(
 	ctx context.Context,
 	s EventStream,
 	offset uint64,
-	expected []parcel.Parcel,
+	expected ...parcel.Parcel,
 ) {
 	var actual []parcel.Parcel
 

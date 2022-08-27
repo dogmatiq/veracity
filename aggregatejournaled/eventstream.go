@@ -14,6 +14,6 @@ type EventStream interface {
 
 	Write(
 		ctx context.Context,
-		events []parcel.Parcel,
+		ev parcel.Parcel,
 	) error
 }
