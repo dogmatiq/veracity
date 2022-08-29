@@ -12,7 +12,8 @@ import (
 type eventStreamStub struct {
 	EventStream
 
-	WriteFunc func(ctx context.Context, ev parcel.Parcel) error
+	WriteFunc         func(ctx context.Context, ev parcel.Parcel) error
+	WriteAtOffsetFunc func(ctx context.Context, offset uint64, ev parcel.Parcel) error
 }
 
 func (s *eventStreamStub) Read(
@@ -31,6 +32,18 @@ func (s *eventStreamStub) Write(
 	}
 
 	return s.EventStream.Write(ctx, ev)
+}
+
+func (s *eventStreamStub) WriteAtOffset(
+	ctx context.Context,
+	offset uint64,
+	ev parcel.Parcel,
+) error {
+	if s.WriteAtOffsetFunc != nil {
+		return s.WriteAtOffsetFunc(ctx, offset, ev)
+	}
+
+	return s.EventStream.WriteAtOffset(ctx, offset, ev)
 }
 
 // expectEvents reads all events from an EventStore starting at the given offset

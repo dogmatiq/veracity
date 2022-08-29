@@ -2,13 +2,17 @@ package aggregate
 
 import (
 	"context"
-	"time"
+	"errors"
 
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/parcel"
 	"golang.org/x/exp/slices"
 )
+
+// ErrConflict is an error that indicates an OCC failure when attempting to
+// write to a journal or event stream.
+var ErrConflict = errors.New("optimistic concurrency conflict")
 
 type Snapshot struct {
 	UnacknowledgedCommandIDs map[string]struct{}
@@ -52,8 +56,9 @@ type CommandExecutor struct {
 	Stream          EventStream
 	Packer          *parcel.Packer
 
-	snapshot Snapshot
-	offset   uint64
+	snapshot      Snapshot
+	journalOffset uint64
+	streamOffset  uint64
 }
 
 func (e *CommandExecutor) Load(ctx context.Context) error {
@@ -61,13 +66,13 @@ func (e *CommandExecutor) Load(ctx context.Context) error {
 		Root: e.Handler.New(),
 	}
 
-	e.offset = 0
+	e.journalOffset = 0
 	for {
 		entries, err := e.Journal.Read(
 			ctx,
 			e.HandlerIdentity.Key,
 			e.InstanceID,
-			e.offset,
+			e.journalOffset,
 		)
 		if err != nil {
 			return err
@@ -77,19 +82,18 @@ func (e *CommandExecutor) Load(ctx context.Context) error {
 		}
 
 		for _, entry := range entries {
-			e.offset++
+			e.journalOffset++
 			entry.ApplyTo(&e.snapshot)
 		}
 	}
 
-	var offset uint64
-
+	e.streamOffset = 0
 	for {
 		if len(e.snapshot.UnpublishedEvents) == 0 {
 			return nil
 		}
 
-		events, err := e.Stream.Read(ctx, offset)
+		events, err := e.Stream.Read(ctx, e.streamOffset)
 		if err != nil {
 			return err
 		}
@@ -98,7 +102,7 @@ func (e *CommandExecutor) Load(ctx context.Context) error {
 		}
 
 		for _, ev := range events {
-			offset++
+			e.streamOffset++
 
 			if i := slices.IndexFunc(
 				e.snapshot.UnpublishedEvents,
@@ -116,10 +120,11 @@ func (e *CommandExecutor) Load(ctx context.Context) error {
 	}
 
 	for _, ev := range e.snapshot.UnpublishedEvents {
-		err := e.Stream.Write(ctx, ev)
+		err := e.Stream.WriteAtOffset(ctx, e.streamOffset, ev)
 		if err != nil {
 			return err
 		}
+		e.streamOffset++
 	}
 
 	return e.writeToJournal(
@@ -152,9 +157,10 @@ func (e *CommandExecutor) ExecuteCommand(
 	}
 
 	for _, ev := range e.snapshot.UnpublishedEvents {
-		if err := e.Stream.Write(ctx, ev); err != nil {
+		if err := e.Stream.WriteAtOffset(ctx, e.streamOffset, ev); err != nil {
 			return err
 		}
+		e.streamOffset++
 	}
 
 	return e.writeToJournal(
@@ -204,16 +210,14 @@ func (e *CommandExecutor) writeToJournal(ctx context.Context, r JournalEntry) er
 		ctx,
 		e.HandlerIdentity.Key,
 		e.InstanceID,
-		e.offset,
+		e.journalOffset,
 		r,
 	); err != nil {
 		return err
 	}
 
 	r.ApplyTo(&e.snapshot)
-	e.offset++
-
-	time.Sleep(1 * time.Millisecond)
+	e.journalOffset++
 
 	return nil
 }

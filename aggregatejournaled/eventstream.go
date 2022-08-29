@@ -21,5 +21,5 @@ type EventStream interface {
 		ctx context.Context,
 		offset uint64,
 		ev parcel.Parcel,
-	) (bool, error)
+	) error
 }

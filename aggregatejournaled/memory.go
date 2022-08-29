@@ -2,7 +2,6 @@ package aggregate
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/dogmatiq/veracity/parcel"
@@ -50,7 +49,7 @@ func (s *MemoryEventStream) WriteAtOffset(
 	ctx context.Context,
 	offset uint64,
 	ev parcel.Parcel,
-) (bool, error) {
+) error {
 	s.m.Lock()
 	defer s.m.Unlock()
 
@@ -58,11 +57,11 @@ func (s *MemoryEventStream) WriteAtOffset(
 
 	if offset == count {
 		s.events = append(s.events, ev)
-		return true, nil
+		return nil
 	}
 
 	if offset < count {
-		return false, nil
+		return ErrConflict
 	}
 
 	panic("offset out of range")
@@ -113,7 +112,7 @@ func (j *MemoryJournal) Write(
 	}
 
 	if offset < count {
-		return errors.New("optimistic concurrency failure")
+		return ErrConflict
 	}
 
 	panic("offset out of range")

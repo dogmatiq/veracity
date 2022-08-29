@@ -146,6 +146,7 @@ var _ = Describe("type CommandExecutor (fault recovery)", func() {
 
 				originalJournalWriteFunc := journal.WriteFunc
 				originalStreamWriteFunc := stream.WriteFunc
+				originalStreamWriteAtOffsetFunc := stream.WriteAtOffsetFunc
 				originalHandlerHandleCommandFunc := handler.HandleCommandFunc
 				originalAckErr := ackErr
 
@@ -173,6 +174,7 @@ var _ = Describe("type CommandExecutor (fault recovery)", func() {
 				By("resetting the fault condition", func() {
 					journal.WriteFunc = originalJournalWriteFunc
 					stream.WriteFunc = originalStreamWriteFunc
+					stream.WriteAtOffsetFunc = originalStreamWriteAtOffsetFunc
 					handler.HandleCommandFunc = originalHandlerHandleCommandFunc
 					ackErr = originalAckErr
 				})
@@ -220,22 +222,41 @@ var _ = Describe("type CommandExecutor (fault recovery)", func() {
 				) error {
 					return errors.New("<error>")
 				}
+
+				stream.WriteAtOffsetFunc = func(
+					ctx context.Context,
+					offset uint64,
+					ev parcel.Parcel,
+				) error {
+					return errors.New("<error>")
+				}
 			}),
 			Entry("some events cannot be written to the stream", func() {
+				succeed := true
+
 				stream.WriteFunc = func(
 					ctx context.Context,
 					ev parcel.Parcel,
 				) error {
-					// Setup stream to fail on the NEXT event.
-					stream.WriteFunc = func(
-						ctx context.Context,
-						ev parcel.Parcel,
-					) error {
-						return errors.New("<error>")
+					if succeed {
+						succeed = false
+						return stream.EventStream.Write(ctx, ev)
 					}
 
-					// But succeed this time.
-					return stream.EventStream.Write(ctx, ev)
+					return errors.New("<error>")
+				}
+
+				stream.WriteAtOffsetFunc = func(
+					ctx context.Context,
+					offset uint64,
+					ev parcel.Parcel,
+				) error {
+					if succeed {
+						succeed = false
+						return stream.EventStream.WriteAtOffset(ctx, offset, ev)
+					}
+
+					return errors.New("<error>")
 				}
 			}),
 			Entry("handler panics", func() {

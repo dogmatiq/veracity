@@ -15,6 +15,7 @@ require (
 	github.com/onsi/gomega v1.20.2
 	go.uber.org/zap v1.23.0
 	golang.org/x/exp v0.0.0-20220826205824-bd9bcdd0b820
+	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	google.golang.org/protobuf v1.28.1
 )
 
