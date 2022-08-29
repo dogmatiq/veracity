@@ -9,6 +9,7 @@ import (
 	. "github.com/dogmatiq/dogma/fixtures"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
 	. "github.com/dogmatiq/veracity/queue"
+	"github.com/dogmatiq/veracity/queue/memory"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"golang.org/x/sync/errgroup"
@@ -16,7 +17,7 @@ import (
 
 var _ = Describe("type Queue (parallelism)", func() {
 	It("acknowledges each message exactly once", func() {
-		journal := &MemoryJournal{}
+		journal := &memory.Journal{}
 
 		queue := &Queue{
 			Journal: journal,

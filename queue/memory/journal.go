@@ -1,19 +1,22 @@
-package queue
+package memory
 
 import (
 	"context"
 	"sync"
+
+	"github.com/dogmatiq/veracity/queue"
 )
 
-type MemoryJournal struct {
+// Journal is an in-memory implementation of the Journal interface.
+type Journal struct {
 	m       sync.RWMutex
-	entries []JournalEntry
+	entries []queue.JournalEntry
 }
 
-func (j *MemoryJournal) Read(
+func (j *Journal) Read(
 	ctx context.Context,
 	offset uint64,
-) ([]JournalEntry, uint64, error) {
+) ([]queue.JournalEntry, uint64, error) {
 	j.m.RLock()
 	defer j.m.RUnlock()
 
@@ -31,10 +34,10 @@ func (j *MemoryJournal) Read(
 	return j.entries[index : index+1], offset + 1, nil
 }
 
-func (j *MemoryJournal) Write(
+func (j *Journal) Write(
 	ctx context.Context,
 	offset uint64,
-	r JournalEntry,
+	r queue.JournalEntry,
 ) error {
 	j.m.Lock()
 	defer j.m.Unlock()
@@ -47,7 +50,7 @@ func (j *MemoryJournal) Write(
 	}
 
 	if offset < count {
-		return ErrConflict
+		return queue.ErrConflict
 	}
 
 	panic("offset out of range")

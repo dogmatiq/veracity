@@ -7,6 +7,7 @@ import (
 	. "github.com/dogmatiq/dogma/fixtures"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
 	. "github.com/dogmatiq/veracity/queue"
+	"github.com/dogmatiq/veracity/queue/memory"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -15,7 +16,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 	DescribeTable(
 		"it acknowledges the message exactly once",
 		func(before, after func(JournalEntry) error) {
-			impl := &MemoryJournal{}
+			impl := &memory.Journal{}
 			journal := &journalStub{
 				Journal: impl,
 				WriteFunc: func(
@@ -104,7 +105,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"enqueue fails before journal entry is written",
 			func(e JournalEntry) error {
-				if _, ok := e.(EnqueueEntry); ok {
+				if _, ok := e.(Enqueue); ok {
 					return errors.New("<error>")
 				}
 				return nil
@@ -115,7 +116,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"enqueue fails after journal entry is written",
 			nil,
 			func(e JournalEntry) error {
-				if _, ok := e.(EnqueueEntry); ok {
+				if _, ok := e.(Enqueue); ok {
 					return errors.New("<error>")
 				}
 				return nil
@@ -124,7 +125,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"acquire fails before journal entry is written",
 			func(e JournalEntry) error {
-				if _, ok := e.(AcquireEntry); ok {
+				if _, ok := e.(Acquire); ok {
 					return errors.New("<error>")
 				}
 				return nil
@@ -135,7 +136,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"acquire fails after journal entry is written",
 			nil,
 			func(e JournalEntry) error {
-				if _, ok := e.(AcquireEntry); ok {
+				if _, ok := e.(Acquire); ok {
 					return errors.New("<error>")
 				}
 				return nil
@@ -144,7 +145,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"ack fails before journal entry is written",
 			func(e JournalEntry) error {
-				if _, ok := e.(AckEntry); ok {
+				if _, ok := e.(Ack); ok {
 					return errors.New("<error>")
 				}
 				return nil
@@ -155,7 +156,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"ack fails after journal entry is written",
 			nil,
 			func(e JournalEntry) error {
-				if _, ok := e.(AckEntry); ok {
+				if _, ok := e.(Ack); ok {
 					return errors.New("<error>")
 				}
 				return nil
@@ -164,7 +165,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"nack fails before journal entry is written",
 			func(e JournalEntry) error {
-				if _, ok := e.(NackEntry); ok {
+				if _, ok := e.(Nack); ok {
 					return errors.New("<error>")
 				}
 				return nil
@@ -175,7 +176,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"nack fails after journal entry is written",
 			nil,
 			func(e JournalEntry) error {
-				if _, ok := e.(NackEntry); ok {
+				if _, ok := e.(Nack); ok {
 					return errors.New("<error>")
 				}
 				return nil

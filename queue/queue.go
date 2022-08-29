@@ -26,18 +26,22 @@ func (q *Queue) Enqueue(ctx context.Context, p parcel.Parcel) error {
 
 	return q.apply(
 		ctx,
-		EnqueueEntry{p},
+		Enqueue{
+			[]parcel.Parcel{p},
+		},
 	)
 }
 
-func (e EnqueueEntry) apply(q *Queue) {
-	m := &message{
-		Parcel:   e.Parcel,
-		Priority: q.offset,
-	}
+func (e Enqueue) apply(q *Queue) {
+	for _, p := range e.Parcels {
+		m := &message{
+			Parcel:   p,
+			Priority: q.offset,
+		}
 
-	q.messages[e.Parcel.ID()] = m
-	heap.Push(&q.queue, m)
+		q.messages[p.ID()] = m
+		heap.Push(&q.queue, m)
+	}
 }
 
 func (q *Queue) Acquire(ctx context.Context) (parcel.Parcel, bool, error) {
@@ -53,14 +57,20 @@ func (q *Queue) Acquire(ctx context.Context) (parcel.Parcel, bool, error) {
 
 	return p, true, q.apply(
 		ctx,
-		AcquireEntry{p.ID()},
+		Acquire{
+			MessageIDs: []string{
+				p.ID(),
+			},
+		},
 	)
 }
 
-func (e AcquireEntry) apply(q *Queue) {
-	m := q.messages[e.ID]
-	heap.Remove(&q.queue, m.index)
-	m.Acquired = true
+func (e Acquire) apply(q *Queue) {
+	for _, id := range e.MessageIDs {
+		m := q.messages[id]
+		heap.Remove(&q.queue, m.index)
+		m.Acquired = true
+	}
 }
 
 func (q *Queue) Ack(ctx context.Context, id string) error {
@@ -70,12 +80,16 @@ func (q *Queue) Ack(ctx context.Context, id string) error {
 
 	return q.apply(
 		ctx,
-		AckEntry{id},
+		Ack{
+			MessageIDs: []string{id},
+		},
 	)
 }
 
-func (e AckEntry) apply(q *Queue) {
-	q.messages[e.ID] = nil
+func (e Ack) apply(q *Queue) {
+	for _, id := range e.MessageIDs {
+		q.messages[id] = nil
+	}
 }
 
 func (q *Queue) Nack(ctx context.Context, id string) error {
@@ -85,14 +99,14 @@ func (q *Queue) Nack(ctx context.Context, id string) error {
 
 	return q.apply(
 		ctx,
-		NackEntry{
-			[]string{id},
+		Nack{
+			MessageIDs: []string{id},
 		},
 	)
 }
 
-func (e NackEntry) apply(q *Queue) {
-	for _, id := range e.IDs {
+func (e Nack) apply(q *Queue) {
+	for _, id := range e.MessageIDs {
 		m := q.messages[id]
 		m.Acquired = false
 		heap.Push(&q.queue, m)
@@ -131,7 +145,7 @@ func (q *Queue) load(ctx context.Context) error {
 
 	return q.apply(
 		ctx,
-		NackEntry{acquired},
+		Nack{acquired},
 	)
 }
 
