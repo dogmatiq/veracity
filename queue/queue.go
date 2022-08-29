@@ -14,6 +14,7 @@ type Queue struct {
 	pending        map[string]parcel.Parcel
 	unacknowledged map[string]parcel.Parcel
 	acknowledged   map[string]struct{}
+	order          []string
 }
 
 func (q *Queue) Enqueue(ctx context.Context, m parcel.Parcel) error {
@@ -31,21 +32,31 @@ func (q *Queue) Enqueue(ctx context.Context, m parcel.Parcel) error {
 	)
 }
 
+func (e EnqueueEntry) apply(q *Queue) {
+	q.pending[e.Parcel.ID()] = e.Parcel
+	q.order = append(q.order, e.Parcel.ID())
+}
+
 func (q *Queue) Acquire(ctx context.Context) (parcel.Parcel, bool, error) {
 	if err := q.load(ctx); err != nil {
 		return parcel.Parcel{}, false, err
 	}
 
-	for _, m := range q.pending {
-		return m, true, q.apply(
-			ctx,
-			AcquireEntry{
-				m.ID(),
-			},
-		)
+	for _, id := range q.order {
+		if m, ok := q.pending[id]; ok {
+			return m, true, q.apply(
+				ctx,
+				AcquireEntry{id},
+			)
+		}
 	}
 
 	return parcel.Parcel{}, false, nil
+}
+
+func (e AcquireEntry) apply(q *Queue) {
+	q.unacknowledged[e.ID] = q.pending[e.ID]
+	delete(q.pending, e.ID)
 }
 
 func (q *Queue) Ack(ctx context.Context, id string) error {
@@ -59,6 +70,11 @@ func (q *Queue) Ack(ctx context.Context, id string) error {
 	)
 }
 
+func (e AckEntry) apply(q *Queue) {
+	q.acknowledged[e.ID] = struct{}{}
+	delete(q.unacknowledged, e.ID)
+}
+
 func (q *Queue) Nack(ctx context.Context, id string) error {
 	if _, ok := q.unacknowledged[id]; !ok {
 		panic("message has not been acquired")
@@ -70,6 +86,13 @@ func (q *Queue) Nack(ctx context.Context, id string) error {
 			[]string{id},
 		},
 	)
+}
+
+func (e NackEntry) apply(q *Queue) {
+	for _, id := range e.IDs {
+		q.pending[id] = q.unacknowledged[id]
+		delete(q.unacknowledged, id)
+	}
 }
 
 func (q *Queue) load(ctx context.Context) error {
@@ -91,7 +114,7 @@ func (q *Queue) load(ctx context.Context) error {
 		}
 
 		for _, e := range entries {
-			e.ApplyTo(q)
+			e.apply(q)
 		}
 
 		q.offset = offset
@@ -117,7 +140,7 @@ func (q *Queue) apply(
 		return err
 	}
 
-	e.ApplyTo(q)
+	e.apply(q)
 	q.offset++
 
 	return nil

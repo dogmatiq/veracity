@@ -6,13 +6,14 @@ import (
 
 	. "github.com/dogmatiq/dogma/fixtures"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
+	"github.com/dogmatiq/veracity/parcel"
 	. "github.com/dogmatiq/veracity/queue"
 	. "github.com/jmalloc/gomegax"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
-var _ = XDescribe("type Queue", func() {
+var _ = Describe("type Queue", func() {
 	var (
 		ctx    context.Context
 		cancel context.CancelFunc
@@ -41,8 +42,8 @@ var _ = XDescribe("type Queue", func() {
 	})
 
 	It("does not allow acquiring a message that has already been acquired", func() {
-		cmd := NewParcel("<id>", MessageM1)
-		err := queue.Enqueue(ctx, cmd)
+		m := NewParcel("<id>", MessageM1)
+		err := queue.Enqueue(ctx, m)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		_, ok, err := queue.Acquire(ctx)
@@ -55,8 +56,8 @@ var _ = XDescribe("type Queue", func() {
 	})
 
 	It("removes a message from the queue when it is ack'd", func() {
-		cmd := NewParcel("<id>", MessageM1)
-		err := queue.Enqueue(ctx, cmd)
+		m := NewParcel("<id>", MessageM1)
+		err := queue.Enqueue(ctx, m)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		expect, ok, err := queue.Acquire(ctx)
@@ -72,8 +73,8 @@ var _ = XDescribe("type Queue", func() {
 	})
 
 	It("allows re-acquiring a message that has been nack'd", func() {
-		cmd := NewParcel("<id>", MessageM1)
-		err := queue.Enqueue(ctx, cmd)
+		m := NewParcel("<id>", MessageM1)
+		err := queue.Enqueue(ctx, m)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		expect, ok, err := queue.Acquire(ctx)
@@ -86,6 +87,34 @@ var _ = XDescribe("type Queue", func() {
 		actual, ok, err := queue.Acquire(ctx)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(ok).To(BeTrue(), "queue should not be empty")
+		Expect(actual).To(EqualX(expect))
+	})
+
+	It("acquires messages in the order they are enqueued", func() {
+		messages := []parcel.Parcel{
+			NewParcel("<id-1>", MessageM1),
+			NewParcel("<id-2>", MessageM2),
+			NewParcel("<id-3>", MessageM3),
+		}
+
+		var expect, actual []string
+
+		for _, m := range messages {
+			err := queue.Enqueue(ctx, m)
+			Expect(err).ShouldNot(HaveOccurred())
+			expect = append(expect, m.ID())
+		}
+
+		for {
+			m, ok, err := queue.Acquire(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+			if !ok {
+				break
+			}
+
+			actual = append(actual, m.ID())
+		}
+
 		Expect(actual).To(EqualX(expect))
 	})
 })
