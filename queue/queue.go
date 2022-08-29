@@ -7,6 +7,7 @@ import (
 	"github.com/dogmatiq/veracity/parcel"
 )
 
+// Queue is a durable, ordered queue of messages.
 type Queue struct {
 	Journal Journal
 
@@ -15,6 +16,7 @@ type Queue struct {
 	queue    pqueue
 }
 
+// Enqueue adds a message to the queue.
 func (q *Queue) Enqueue(ctx context.Context, p parcel.Parcel) error {
 	if err := q.load(ctx); err != nil {
 		return err
@@ -27,7 +29,7 @@ func (q *Queue) Enqueue(ctx context.Context, p parcel.Parcel) error {
 	return q.apply(
 		ctx,
 		Enqueue{
-			[]parcel.Parcel{p},
+			Parcels: []parcel.Parcel{p},
 		},
 	)
 }
@@ -44,7 +46,14 @@ func (e Enqueue) apply(q *Queue) {
 	}
 }
 
-func (q *Queue) Acquire(ctx context.Context) (parcel.Parcel, bool, error) {
+// Acquire acquires a message from the queue for processing.
+//
+// If the queue is empty ok is false; otherwise, p is the next unacquired
+// message in the queue.
+//
+// The message must be subsequently removed from the queue or returned to the
+// pool of unacquired messages by calling Ack() or Nack(), respectively.
+func (q *Queue) Acquire(ctx context.Context) (p parcel.Parcel, ok bool, err error) {
 	if err := q.load(ctx); err != nil {
 		return parcel.Parcel{}, false, err
 	}
@@ -53,7 +62,7 @@ func (q *Queue) Acquire(ctx context.Context) (parcel.Parcel, bool, error) {
 		return parcel.Parcel{}, false, nil
 	}
 
-	p := q.queue.Peek()
+	p = q.queue.Peek()
 
 	return p, true, q.apply(
 		ctx,
@@ -73,6 +82,8 @@ func (e Acquire) apply(q *Queue) {
 	}
 }
 
+// Ack acknowledges a previously acquired message, permanently removing it from
+// the queue.
 func (q *Queue) Ack(ctx context.Context, id string) error {
 	if !q.messages[id].Acquired {
 		panic("message has not been acquired")
@@ -92,6 +103,8 @@ func (e Ack) apply(q *Queue) {
 	}
 }
 
+// Nack negatively acknowledges a previously acquired message, returning it to
+// the queue so that it may be re-acquired.
 func (q *Queue) Nack(ctx context.Context, id string) error {
 	if !q.messages[id].Acquired {
 		panic("message has not been acquired")
@@ -113,6 +126,7 @@ func (e Nack) apply(q *Queue) {
 	}
 }
 
+// load reads all entries from the journal and applies them to the queue.
 func (q *Queue) load(ctx context.Context) error {
 	if q.messages != nil {
 		return nil
@@ -145,10 +159,13 @@ func (q *Queue) load(ctx context.Context) error {
 
 	return q.apply(
 		ctx,
-		Nack{acquired},
+		Nack{
+			MessageIDs: acquired,
+		},
 	)
 }
 
+// apply writes an entry to the journal and applies it to the queue.
 func (q *Queue) apply(
 	ctx context.Context,
 	e JournalEntry,
