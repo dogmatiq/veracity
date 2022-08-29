@@ -6,8 +6,8 @@ import (
 
 	. "github.com/dogmatiq/dogma/fixtures"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
+	"github.com/dogmatiq/veracity/journal"
 	. "github.com/dogmatiq/veracity/queue"
-	"github.com/dogmatiq/veracity/queue/memory"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -16,27 +16,27 @@ var _ = Describe("type Queue (idempotence)", func() {
 	DescribeTable(
 		"it acknowledges the message exactly once",
 		func(before, after func(JournalEntry) error) {
-			impl := &memory.Journal{}
-			journal := &journalStub{
+			impl := &journal.InMemory[JournalEntry]{}
+			stub := &journal.Stub[JournalEntry]{
 				Journal: impl,
 				WriteFunc: func(
 					ctx context.Context,
 					offset uint64,
-					e JournalEntry,
+					entry JournalEntry,
 				) error {
 					if before != nil {
-						if err := before(e); err != nil {
+						if err := before(entry); err != nil {
 							before = nil
 							return err
 						}
 					}
 
-					if err := impl.Write(ctx, offset, e); err != nil {
+					if err := impl.Write(ctx, offset, entry); err != nil {
 						return err
 					}
 
 					if after != nil {
-						if err := after(e); err != nil {
+						if err := after(entry); err != nil {
 							after = nil
 							return err
 						}
@@ -51,7 +51,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 
 			tick := func(ctx context.Context) error {
 				queue := &Queue{
-					Journal: journal,
+					Journal: stub,
 				}
 
 				if !enqueued {
@@ -91,7 +91,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			Expect(expectErr).To(BeFalse(), "process should fail at least once")
 
 			queue := &Queue{
-				Journal: journal,
+				Journal: stub,
 			}
 			_, ok, err := queue.Acquire(context.Background())
 			Expect(err).ShouldNot(HaveOccurred())

@@ -8,8 +8,8 @@ import (
 
 	. "github.com/dogmatiq/dogma/fixtures"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
+	"github.com/dogmatiq/veracity/journal"
 	. "github.com/dogmatiq/veracity/queue"
-	"github.com/dogmatiq/veracity/queue/memory"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"golang.org/x/sync/errgroup"
@@ -17,10 +17,8 @@ import (
 
 var _ = Describe("type Queue (parallelism)", func() {
 	It("acknowledges each message exactly once", func() {
-		journal := &memory.Journal{}
-
 		queue := &Queue{
-			Journal: journal,
+			Journal: &journal.InMemory[JournalEntry]{},
 		}
 
 		var (
@@ -42,11 +40,11 @@ var _ = Describe("type Queue (parallelism)", func() {
 		}
 
 		tick := func(ctx context.Context) (bool, error) {
-			queue := &Queue{
-				Journal: journal,
+			q := &Queue{
+				Journal: queue.Journal,
 			}
 
-			m, ok, err := queue.Acquire(ctx)
+			m, ok, err := q.Acquire(ctx)
 			if err != nil {
 				return false, err
 			}
@@ -54,11 +52,11 @@ var _ = Describe("type Queue (parallelism)", func() {
 				return true, nil
 			}
 
-			if err = queue.Nack(ctx, m.ID()); err != nil {
+			if err = q.Nack(ctx, m.ID()); err != nil {
 				return false, err
 			}
 
-			m, ok, err = queue.Acquire(ctx)
+			m, ok, err = q.Acquire(ctx)
 			if err != nil {
 				return false, err
 			}
@@ -66,7 +64,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 				return true, nil
 			}
 
-			if err = queue.Ack(ctx, m.ID()); err != nil {
+			if err = q.Ack(ctx, m.ID()); err != nil {
 				return false, err
 			}
 
@@ -83,7 +81,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 			g.Go(func() error {
 				for {
 					done, err := tick(context.Background())
-					if err == ErrConflict {
+					if err == journal.ErrConflict {
 						continue
 					} else if err != nil {
 						return err

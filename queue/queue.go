@@ -135,7 +135,7 @@ func (q *Queue) load(ctx context.Context) error {
 	q.messages = map[string]*message{}
 
 	for {
-		entries, offset, err := q.Journal.Read(ctx, q.offset)
+		entries, err := q.Journal.Read(ctx, &q.offset)
 		if err != nil {
 			return err
 		}
@@ -146,8 +146,6 @@ func (q *Queue) load(ctx context.Context) error {
 		for _, e := range entries {
 			e.apply(q)
 		}
-
-		q.offset = offset
 	}
 
 	var acquired []string
