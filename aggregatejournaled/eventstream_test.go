@@ -41,7 +41,23 @@ func expectEvents(
 	offset uint64,
 	expected ...parcel.Parcel,
 ) {
-	var actual []parcel.Parcel
+	actual := readAllEvents(ctx, s, offset)
+
+	if len(actual) == 0 && len(expected) == 0 {
+		return
+	}
+
+	ExpectWithOffset(1, actual).To(EqualX(expected))
+}
+
+// readAllEvents reads all events from an EventStore starting at the given
+// offset.
+func readAllEvents(
+	ctx context.Context,
+	s EventStream,
+	offset uint64,
+) []parcel.Parcel {
+	var result []parcel.Parcel
 
 	for {
 		events, err := s.Read(ctx, offset)
@@ -51,13 +67,9 @@ func expectEvents(
 			break
 		}
 
-		actual = append(actual, events...)
+		result = append(result, events...)
 		offset += uint64(len(events))
 	}
 
-	if len(actual) == 0 && len(expected) == 0 {
-		return
-	}
-
-	ExpectWithOffset(1, actual).To(EqualX(expected))
+	return result
 }

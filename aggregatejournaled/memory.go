@@ -46,6 +46,28 @@ func (s *MemoryEventStream) Write(
 	return nil
 }
 
+func (s *MemoryEventStream) WriteAtOffset(
+	ctx context.Context,
+	offset uint64,
+	ev parcel.Parcel,
+) (bool, error) {
+	s.m.Lock()
+	defer s.m.Unlock()
+
+	count := uint64(len(s.events))
+
+	if offset == count {
+		s.events = append(s.events, ev)
+		return true, nil
+	}
+
+	if offset < count {
+		return false, nil
+	}
+
+	panic("offset out of range")
+}
+
 type MemoryJournal struct {
 	m       sync.RWMutex
 	entries []JournalEntry

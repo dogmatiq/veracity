@@ -16,4 +16,10 @@ type EventStream interface {
 		ctx context.Context,
 		ev parcel.Parcel,
 	) error
+
+	WriteAtOffset(
+		ctx context.Context,
+		offset uint64,
+		ev parcel.Parcel,
+	) (bool, error)
 }
