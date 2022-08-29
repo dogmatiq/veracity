@@ -2,6 +2,7 @@ package queue_test
 
 import (
 	"context"
+	"math/rand"
 	"time"
 
 	. "github.com/dogmatiq/dogma/fixtures"
@@ -91,30 +92,98 @@ var _ = Describe("type Queue", func() {
 	})
 
 	It("acquires messages in the order they are enqueued", func() {
-		messages := []parcel.Parcel{
-			NewParcel("<id-1>", MessageM1),
-			NewParcel("<id-2>", MessageM2),
-			NewParcel("<id-3>", MessageM3),
-		}
-
-		var expect, actual []string
-
-		for _, m := range messages {
-			err := queue.Enqueue(ctx, m)
-			Expect(err).ShouldNot(HaveOccurred())
-			expect = append(expect, m.ID())
-		}
-
-		for {
-			m, ok, err := queue.Acquire(ctx)
-			Expect(err).ShouldNot(HaveOccurred())
-			if !ok {
-				break
+		var expect []string
+		By("enqueueing several messages", func() {
+			messages := []parcel.Parcel{
+				NewParcel("<id-1>", MessageM1),
+				NewParcel("<id-2>", MessageM2),
+				NewParcel("<id-3>", MessageM3),
 			}
 
-			actual = append(actual, m.ID())
-		}
+			for _, m := range messages {
+				err := queue.Enqueue(ctx, m)
+				Expect(err).ShouldNot(HaveOccurred())
+				expect = append(expect, m.ID())
+			}
+		})
 
-		Expect(actual).To(EqualX(expect))
+		var actual []string
+		By("re-acquiring the messages", func() {
+			for {
+				m, ok, err := queue.Acquire(ctx)
+				Expect(err).ShouldNot(HaveOccurred())
+				if !ok {
+					break
+				}
+
+				actual = append(actual, m.ID())
+			}
+		})
+
+		Expect(actual).To(
+			EqualX(expect),
+			"acquired messages should be in the same order as they enqueued",
+		)
+	})
+
+	It("acquires nack'd messages in the order they were enqueued", func() {
+		var expect []string
+		By("enqueueing several messages", func() {
+			messages := []parcel.Parcel{
+				NewParcel("<id-1>", MessageM1),
+				NewParcel("<id-2>", MessageM2),
+				NewParcel("<id-3>", MessageM3),
+			}
+
+			for _, m := range messages {
+				err := queue.Enqueue(ctx, m)
+				Expect(err).ShouldNot(HaveOccurred())
+				expect = append(expect, m.ID())
+			}
+		})
+
+		var acquired []string
+		By("acquiring the messages", func() {
+			for {
+				m, ok, err := queue.Acquire(ctx)
+				Expect(err).ShouldNot(HaveOccurred())
+				if !ok {
+					break
+				}
+				acquired = append(acquired, m.ID())
+			}
+		})
+
+		By("nack'ing the messages in a random order", func() {
+			rand.Shuffle(
+				len(acquired),
+				func(i, j int) {
+					acquired[i], acquired[j] = acquired[j], acquired[i]
+				},
+			)
+
+			for _, id := range acquired {
+				err := queue.Nack(ctx, id)
+				Expect(err).ShouldNot(HaveOccurred())
+			}
+		})
+
+		var actual []string
+		By("re-acquiring the messages", func() {
+			for {
+				m, ok, err := queue.Acquire(ctx)
+				Expect(err).ShouldNot(HaveOccurred())
+				if !ok {
+					break
+				}
+
+				actual = append(actual, m.ID())
+			}
+		})
+
+		Expect(actual).To(
+			EqualX(expect),
+			"acquired messages should be in the same order as they enqueued",
+		)
 	})
 })

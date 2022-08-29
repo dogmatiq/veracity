@@ -1,42 +1,43 @@
 package queue
 
 import (
+	"container/heap"
 	"context"
 
 	"github.com/dogmatiq/veracity/parcel"
-	"golang.org/x/exp/maps"
 )
 
 type Queue struct {
 	Journal Journal
 
-	offset      uint64
-	deduplicate map[string]struct{}
-	pending     map[string]parcel.Parcel
-	enqueued    []string
-	acquired    map[string]struct{}
+	offset   uint64
+	messages map[string]*message
+	queue    pqueue
 }
 
-func (q *Queue) Enqueue(ctx context.Context, m parcel.Parcel) error {
+func (q *Queue) Enqueue(ctx context.Context, p parcel.Parcel) error {
 	if err := q.load(ctx); err != nil {
 		return err
 	}
 
-	if _, ok := q.deduplicate[m.ID()]; ok {
+	if _, ok := q.messages[p.ID()]; ok {
 		return nil
 	}
 
 	return q.apply(
 		ctx,
-		EnqueueEntry{m},
+		EnqueueEntry{p},
 	)
 }
 
 func (e EnqueueEntry) apply(q *Queue) {
-	id := e.Parcel.ID()
-	q.deduplicate[id] = struct{}{}
-	q.pending[id] = e.Parcel
-	q.enqueued = append(q.enqueued, id)
+	m := &message{
+		Parcel:   e.Parcel,
+		Priority: q.offset,
+	}
+
+	q.messages[e.Parcel.ID()] = m
+	heap.Push(&q.queue, m)
 }
 
 func (q *Queue) Acquire(ctx context.Context) (parcel.Parcel, bool, error) {
@@ -44,30 +45,26 @@ func (q *Queue) Acquire(ctx context.Context) (parcel.Parcel, bool, error) {
 		return parcel.Parcel{}, false, err
 	}
 
-	if len(q.enqueued) == 0 {
+	if q.queue.Len() == 0 {
 		return parcel.Parcel{}, false, nil
 	}
 
-	id := q.enqueued[0]
-	m := q.pending[id]
+	p := q.queue.Peek()
 
-	return m, true, q.apply(
+	return p, true, q.apply(
 		ctx,
-		AcquireEntry{id},
+		AcquireEntry{p.ID()},
 	)
 }
 
 func (e AcquireEntry) apply(q *Queue) {
-	if e.ID != q.enqueued[0] {
-		panic("acquired message is not at the head of the queue")
-	}
-
-	q.enqueued = q.enqueued[1:]
-	q.acquired[e.ID] = struct{}{}
+	m := q.messages[e.ID]
+	heap.Remove(&q.queue, m.index)
+	m.Acquired = true
 }
 
 func (q *Queue) Ack(ctx context.Context, id string) error {
-	if _, ok := q.acquired[id]; !ok {
+	if !q.messages[id].Acquired {
 		panic("message has not been acquired")
 	}
 
@@ -78,12 +75,11 @@ func (q *Queue) Ack(ctx context.Context, id string) error {
 }
 
 func (e AckEntry) apply(q *Queue) {
-	delete(q.pending, e.ID)
-	delete(q.acquired, e.ID)
+	q.messages[e.ID] = nil
 }
 
 func (q *Queue) Nack(ctx context.Context, id string) error {
-	if _, ok := q.acquired[id]; !ok {
+	if !q.messages[id].Acquired {
 		panic("message has not been acquired")
 	}
 
@@ -97,20 +93,18 @@ func (q *Queue) Nack(ctx context.Context, id string) error {
 
 func (e NackEntry) apply(q *Queue) {
 	for _, id := range e.IDs {
-		delete(q.acquired, id)
+		m := q.messages[id]
+		m.Acquired = false
+		heap.Push(&q.queue, m)
 	}
-
-	q.enqueued = append(q.enqueued, e.IDs...)
 }
 
 func (q *Queue) load(ctx context.Context) error {
-	if q.deduplicate != nil {
+	if q.messages != nil {
 		return nil
 	}
 
-	q.deduplicate = map[string]struct{}{}
-	q.pending = map[string]parcel.Parcel{}
-	q.acquired = map[string]struct{}{}
+	q.messages = map[string]*message{}
 
 	for {
 		entries, offset, err := q.Journal.Read(ctx, q.offset)
@@ -128,15 +122,16 @@ func (q *Queue) load(ctx context.Context) error {
 		q.offset = offset
 	}
 
-	if len(q.acquired) == 0 {
-		return nil
+	var acquired []string
+	for _, m := range q.messages {
+		if m != nil && m.Acquired {
+			acquired = append(acquired, m.Parcel.ID())
+		}
 	}
 
 	return q.apply(
 		ctx,
-		NackEntry{
-			maps.Keys(q.acquired),
-		},
+		NackEntry{acquired},
 	)
 }
 
