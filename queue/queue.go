@@ -10,11 +10,11 @@ import (
 type Queue struct {
 	Journal Journal
 
-	offset         uint64
-	pending        map[string]parcel.Parcel
-	unacknowledged map[string]parcel.Parcel
-	acknowledged   map[string]struct{}
-	order          []string
+	offset      uint64
+	deduplicate map[string]struct{}
+	pending     map[string]parcel.Parcel
+	enqueued    []string
+	acquired    map[string]struct{}
 }
 
 func (q *Queue) Enqueue(ctx context.Context, m parcel.Parcel) error {
@@ -22,7 +22,7 @@ func (q *Queue) Enqueue(ctx context.Context, m parcel.Parcel) error {
 		return err
 	}
 
-	if _, ok := q.acknowledged[m.ID()]; ok {
+	if _, ok := q.deduplicate[m.ID()]; ok {
 		return nil
 	}
 
@@ -33,8 +33,10 @@ func (q *Queue) Enqueue(ctx context.Context, m parcel.Parcel) error {
 }
 
 func (e EnqueueEntry) apply(q *Queue) {
-	q.pending[e.Parcel.ID()] = e.Parcel
-	q.order = append(q.order, e.Parcel.ID())
+	id := e.Parcel.ID()
+	q.deduplicate[id] = struct{}{}
+	q.pending[id] = e.Parcel
+	q.enqueued = append(q.enqueued, id)
 }
 
 func (q *Queue) Acquire(ctx context.Context) (parcel.Parcel, bool, error) {
@@ -42,25 +44,30 @@ func (q *Queue) Acquire(ctx context.Context) (parcel.Parcel, bool, error) {
 		return parcel.Parcel{}, false, err
 	}
 
-	for _, id := range q.order {
-		if m, ok := q.pending[id]; ok {
-			return m, true, q.apply(
-				ctx,
-				AcquireEntry{id},
-			)
-		}
+	if len(q.enqueued) == 0 {
+		return parcel.Parcel{}, false, nil
 	}
 
-	return parcel.Parcel{}, false, nil
+	id := q.enqueued[0]
+	m := q.pending[id]
+
+	return m, true, q.apply(
+		ctx,
+		AcquireEntry{id},
+	)
 }
 
 func (e AcquireEntry) apply(q *Queue) {
-	q.unacknowledged[e.ID] = q.pending[e.ID]
-	delete(q.pending, e.ID)
+	if e.ID != q.enqueued[0] {
+		panic("acquired message is not at the head of the queue")
+	}
+
+	q.enqueued = q.enqueued[1:]
+	q.acquired[e.ID] = struct{}{}
 }
 
 func (q *Queue) Ack(ctx context.Context, id string) error {
-	if _, ok := q.unacknowledged[id]; !ok {
+	if _, ok := q.acquired[id]; !ok {
 		panic("message has not been acquired")
 	}
 
@@ -71,12 +78,12 @@ func (q *Queue) Ack(ctx context.Context, id string) error {
 }
 
 func (e AckEntry) apply(q *Queue) {
-	q.acknowledged[e.ID] = struct{}{}
-	delete(q.unacknowledged, e.ID)
+	delete(q.pending, e.ID)
+	delete(q.acquired, e.ID)
 }
 
 func (q *Queue) Nack(ctx context.Context, id string) error {
-	if _, ok := q.unacknowledged[id]; !ok {
+	if _, ok := q.acquired[id]; !ok {
 		panic("message has not been acquired")
 	}
 
@@ -90,19 +97,20 @@ func (q *Queue) Nack(ctx context.Context, id string) error {
 
 func (e NackEntry) apply(q *Queue) {
 	for _, id := range e.IDs {
-		q.pending[id] = q.unacknowledged[id]
-		delete(q.unacknowledged, id)
+		delete(q.acquired, id)
 	}
+
+	q.enqueued = append(q.enqueued, e.IDs...)
 }
 
 func (q *Queue) load(ctx context.Context) error {
-	if q.pending != nil {
+	if q.deduplicate != nil {
 		return nil
 	}
 
+	q.deduplicate = map[string]struct{}{}
 	q.pending = map[string]parcel.Parcel{}
-	q.unacknowledged = map[string]parcel.Parcel{}
-	q.acknowledged = map[string]struct{}{}
+	q.acquired = map[string]struct{}{}
 
 	for {
 		entries, offset, err := q.Journal.Read(ctx, q.offset)
@@ -120,14 +128,14 @@ func (q *Queue) load(ctx context.Context) error {
 		q.offset = offset
 	}
 
-	if len(q.unacknowledged) == 0 {
+	if len(q.acquired) == 0 {
 		return nil
 	}
 
 	return q.apply(
 		ctx,
 		NackEntry{
-			maps.Keys(q.unacknowledged),
+			maps.Keys(q.acquired),
 		},
 	)
 }
