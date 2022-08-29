@@ -34,7 +34,7 @@ func (q *Queue) Enqueue(ctx context.Context, p parcel.Parcel) error {
 	)
 }
 
-func (e Enqueue) apply(q *Queue) {
+func (q *Queue) applyEnqueue(e Enqueue) {
 	for _, p := range e.Parcels {
 		m := &message{
 			Parcel:   p,
@@ -74,7 +74,7 @@ func (q *Queue) Acquire(ctx context.Context) (p parcel.Parcel, ok bool, err erro
 	)
 }
 
-func (e Acquire) apply(q *Queue) {
+func (q *Queue) applyAcquire(e Acquire) {
 	for _, id := range e.MessageIDs {
 		m := q.messages[id]
 		heap.Remove(&q.queue, m.index)
@@ -97,7 +97,7 @@ func (q *Queue) Ack(ctx context.Context, id string) error {
 	)
 }
 
-func (e Ack) apply(q *Queue) {
+func (q *Queue) applyAck(e Ack) {
 	for _, id := range e.MessageIDs {
 		q.messages[id] = nil
 	}
@@ -118,7 +118,7 @@ func (q *Queue) Nack(ctx context.Context, id string) error {
 	)
 }
 
-func (e Nack) apply(q *Queue) {
+func (q *Queue) applyNack(e Nack) {
 	for _, id := range e.MessageIDs {
 		m := q.messages[id]
 		m.Acquired = false

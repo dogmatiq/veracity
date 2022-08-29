@@ -25,9 +25,17 @@ type Journal interface {
 	) error
 }
 
+// entryVisitor dispatches based on the type of a journal entry.
+type entryVisitor interface {
+	applyEnqueue(Enqueue)
+	applyAcquire(Acquire)
+	applyAck(Ack)
+	applyNack(Nack)
+}
+
 // JournalEntry is an entry in a queue's journal.
 type JournalEntry interface {
-	apply(*Queue)
+	apply(entryVisitor)
 }
 
 // Enqueue is a journal entry that records the enqueuing of some messages.
@@ -35,9 +43,17 @@ type Enqueue struct {
 	Parcels []parcel.Parcel
 }
 
+func (e Enqueue) apply(v entryVisitor) {
+	v.applyEnqueue(e)
+}
+
 // Acquire is a journal entry that records the acquisition of some messages.
 type Acquire struct {
 	MessageIDs []string
+}
+
+func (e Acquire) apply(v entryVisitor) {
+	v.applyAcquire(e)
 }
 
 // Ack is a journal entry that records the acknowledgement of some messages.
@@ -45,8 +61,16 @@ type Ack struct {
 	MessageIDs []string
 }
 
+func (e Ack) apply(v entryVisitor) {
+	v.applyAck(e)
+}
+
 // Nack is a journal entry that records the negative acknowledgement of some
 // messages.
 type Nack struct {
 	MessageIDs []string
+}
+
+func (e Nack) apply(v entryVisitor) {
+	v.applyNack(e)
 }
