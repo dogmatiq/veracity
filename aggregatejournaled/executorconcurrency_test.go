@@ -63,7 +63,7 @@ var _ = Describe("type CommandExecutor (concurrency)", func() {
 				},
 			)
 
-			const eventCount = 10
+			const eventCount = 100
 			var expect []string
 			queue := make(chan parcel.Parcel, eventCount)
 
@@ -78,7 +78,7 @@ var _ = Describe("type CommandExecutor (concurrency)", func() {
 
 			g, ctx := errgroup.WithContext(ctx)
 
-			for i := 0; i < 3; i++ {
+			for i := 0; i < 10; i++ {
 				g.Go(func() error {
 				reload:
 					for {

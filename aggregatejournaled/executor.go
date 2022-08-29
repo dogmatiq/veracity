@@ -31,7 +31,7 @@ func (r commandExecuted) ApplyTo(s *Snapshot) {
 	}
 
 	s.UnacknowledgedCommandIDs[r.CommandID] = struct{}{}
-	s.UnpublishedEvents = append(s.UnpublishedEvents, r.Events...)
+	s.UnpublishedEvents = r.Events
 }
 
 type commandAcknowledged struct {
@@ -40,12 +40,6 @@ type commandAcknowledged struct {
 
 func (r commandAcknowledged) ApplyTo(s *Snapshot) {
 	delete(s.UnacknowledgedCommandIDs, r.CommandID)
-}
-
-type eventsPublished struct{}
-
-func (r eventsPublished) ApplyTo(s *Snapshot) {
-	s.UnpublishedEvents = nil
 }
 
 type CommandExecutor struct {
@@ -127,10 +121,9 @@ func (e *CommandExecutor) Load(ctx context.Context) error {
 		e.streamOffset++
 	}
 
-	return e.writeToJournal(
-		ctx,
-		&eventsPublished{},
-	)
+	e.snapshot.UnpublishedEvents = nil
+
+	return nil
 }
 
 func (e *CommandExecutor) ExecuteCommand(
@@ -163,10 +156,9 @@ func (e *CommandExecutor) ExecuteCommand(
 		e.streamOffset++
 	}
 
-	return e.writeToJournal(
-		ctx,
-		&eventsPublished{},
-	)
+	e.snapshot.UnpublishedEvents = nil
+
+	return nil
 }
 
 func (e *CommandExecutor) handleCommand(
