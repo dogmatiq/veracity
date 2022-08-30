@@ -38,8 +38,8 @@ var _ = Describe("type Queue (parallelism)", func() {
 			id := fmt.Sprintf("<id-%d>", i)
 			expect[id] = struct{}{}
 
-			m := NewParcel(id, MessageM1)
-			err := queue.Enqueue(ctx, m)
+			env := NewEnvelope(id, MessageM1)
+			err := queue.Enqueue(ctx, env)
 			Expect(err).ShouldNot(HaveOccurred())
 		}
 
@@ -48,7 +48,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 				Journal: queue.Journal,
 			}
 
-			m, ok, err := q.Acquire(ctx)
+			env, ok, err := q.Acquire(ctx)
 			if err != nil {
 				return false, err
 			}
@@ -56,11 +56,11 @@ var _ = Describe("type Queue (parallelism)", func() {
 				return true, nil
 			}
 
-			if err = q.Nack(ctx, m.ID()); err != nil {
+			if err = q.Nack(ctx, env.GetMessageId()); err != nil {
 				return false, err
 			}
 
-			m, ok, err = q.Acquire(ctx)
+			env, ok, err = q.Acquire(ctx)
 			if err != nil {
 				return false, err
 			}
@@ -68,12 +68,12 @@ var _ = Describe("type Queue (parallelism)", func() {
 				return true, nil
 			}
 
-			if err = q.Ack(ctx, m.ID()); err != nil {
+			if err = q.Ack(ctx, env.GetMessageId()); err != nil {
 				return false, err
 			}
 
 			mutex.Lock()
-			actual[m.ID()] = struct{}{}
+			actual[env.GetMessageId()] = struct{}{}
 			mutex.Unlock()
 
 			return false, nil

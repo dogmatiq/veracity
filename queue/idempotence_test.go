@@ -50,7 +50,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 				},
 			}
 
-			message := NewParcel("<message>", MessageM1)
+			env := NewEnvelope("<message>", MessageM1)
 			enqueued := false
 
 			tick := func(ctx context.Context) error {
@@ -59,28 +59,28 @@ var _ = Describe("type Queue (idempotence)", func() {
 				}
 
 				if !enqueued {
-					if err := queue.Enqueue(ctx, message); err != nil {
+					if err := queue.Enqueue(ctx, env); err != nil {
 						return err
 					}
 					enqueued = true
 				}
 
-				m, ok, err := queue.Acquire(ctx)
+				env, ok, err := queue.Acquire(ctx)
 				if !ok || err != nil {
 					return err
 				}
 
-				err = queue.Nack(ctx, m.ID())
+				err = queue.Nack(ctx, env.GetMessageId())
 				if err != nil {
 					return err
 				}
 
-				m, ok, err = queue.Acquire(ctx)
+				env, ok, err = queue.Acquire(ctx)
 				if !ok || err != nil {
 					return err
 				}
 
-				return queue.Ack(ctx, m.ID())
+				return queue.Ack(ctx, env.GetMessageId())
 			}
 
 			expectErr := before != nil || after != nil

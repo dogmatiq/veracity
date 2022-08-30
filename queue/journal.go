@@ -1,7 +1,7 @@
 package queue
 
 import (
-	"github.com/dogmatiq/veracity/parcel"
+	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/persistence/occjournal"
 )
 
@@ -17,17 +17,17 @@ type JournalEntry interface {
 
 type (
 	// Enqueue is a journal entry that records the enqueuing of some messages.
-	Enqueue struct{ Parcels []parcel.Parcel }
+	Enqueue struct{ Envelope *envelopespec.Envelope }
 
 	// Acquire is a journal entry that records the acquisition of some messages.
-	Acquire struct{ MessageIDs []string }
+	Acquire struct{ MessageID string }
 
 	// Ack is a journal entry that records the acknowledgement of some messages.
-	Ack struct{ MessageIDs []string }
+	Ack struct{ MessageID string }
 
 	// Nack is a journal entry that records the negative acknowledgement of some
 	// messages.
-	Nack struct{ MessageIDs []string }
+	Nack struct{ MessageID string }
 )
 
 // entryVisitor dispatches based on the type of a journal entry.

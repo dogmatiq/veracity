@@ -4,7 +4,7 @@ import (
 	"container/heap"
 	"context"
 
-	"github.com/dogmatiq/veracity/parcel"
+	"github.com/dogmatiq/interopspec/envelopespec"
 )
 
 // Queue is a durable, ordered queue of messages.
@@ -17,33 +17,31 @@ type Queue struct {
 }
 
 // Enqueue adds a message to the queue.
-func (q *Queue) Enqueue(ctx context.Context, p parcel.Parcel) error {
+func (q *Queue) Enqueue(ctx context.Context, env *envelopespec.Envelope) error {
 	if err := q.load(ctx); err != nil {
 		return err
 	}
 
-	if _, ok := q.messages[p.ID()]; ok {
+	if _, ok := q.messages[env.GetMessageId()]; ok {
 		return nil
 	}
 
 	return q.apply(
 		ctx,
 		Enqueue{
-			Parcels: []parcel.Parcel{p},
+			Envelope: env,
 		},
 	)
 }
 
 func (q *Queue) applyEnqueue(e Enqueue) {
-	for _, p := range e.Parcels {
-		m := &message{
-			Parcel:   p,
-			Priority: q.offset,
-		}
-
-		q.messages[p.ID()] = m
-		heap.Push(&q.queue, m)
+	m := &message{
+		Envelope: e.Envelope,
+		Priority: q.offset,
 	}
+
+	q.messages[e.Envelope.GetMessageId()] = m
+	heap.Push(&q.queue, m)
 }
 
 // Acquire acquires a message from the queue for processing.
@@ -53,33 +51,29 @@ func (q *Queue) applyEnqueue(e Enqueue) {
 //
 // The message must be subsequently removed from the queue or returned to the
 // pool of unacquired messages by calling Ack() or Nack(), respectively.
-func (q *Queue) Acquire(ctx context.Context) (p parcel.Parcel, ok bool, err error) {
+func (q *Queue) Acquire(ctx context.Context) (env *envelopespec.Envelope, ok bool, err error) {
 	if err := q.load(ctx); err != nil {
-		return parcel.Parcel{}, false, err
+		return nil, false, err
 	}
 
 	if q.queue.Len() == 0 {
-		return parcel.Parcel{}, false, nil
+		return nil, false, nil
 	}
 
-	p = q.queue.Peek()
+	env = q.queue.Peek()
 
-	return p, true, q.apply(
+	return env, true, q.apply(
 		ctx,
 		Acquire{
-			MessageIDs: []string{
-				p.ID(),
-			},
+			MessageID: env.GetMessageId(),
 		},
 	)
 }
 
 func (q *Queue) applyAcquire(e Acquire) {
-	for _, id := range e.MessageIDs {
-		m := q.messages[id]
-		heap.Remove(&q.queue, m.index)
-		m.Acquired = true
-	}
+	m := q.messages[e.MessageID]
+	heap.Remove(&q.queue, m.index)
+	m.Acquired = true
 }
 
 // Ack acknowledges a previously acquired message, permanently removing it from
@@ -92,15 +86,13 @@ func (q *Queue) Ack(ctx context.Context, id string) error {
 	return q.apply(
 		ctx,
 		Ack{
-			MessageIDs: []string{id},
+			MessageID: id,
 		},
 	)
 }
 
 func (q *Queue) applyAck(e Ack) {
-	for _, id := range e.MessageIDs {
-		q.messages[id] = nil
-	}
+	q.messages[e.MessageID] = nil
 }
 
 // Nack negatively acknowledges a previously acquired message, returning it to
@@ -113,17 +105,15 @@ func (q *Queue) Nack(ctx context.Context, id string) error {
 	return q.apply(
 		ctx,
 		Nack{
-			MessageIDs: []string{id},
+			MessageID: id,
 		},
 	)
 }
 
 func (q *Queue) applyNack(e Nack) {
-	for _, id := range e.MessageIDs {
-		m := q.messages[id]
-		m.Acquired = false
-		heap.Push(&q.queue, m)
-	}
+	m := q.messages[e.MessageID]
+	m.Acquired = false
+	heap.Push(&q.queue, m)
 }
 
 // load reads all entries from the journal and applies them to the queue.
@@ -150,19 +140,20 @@ func (q *Queue) load(ctx context.Context) error {
 		q.offset = next
 	}
 
-	var acquired []string
-	for _, m := range q.messages {
+	for id, m := range q.messages {
 		if m != nil && m.Acquired {
-			acquired = append(acquired, m.Parcel.ID())
+			if err := q.apply(
+				ctx,
+				Nack{
+					MessageID: id,
+				},
+			); err != nil {
+				return err
+			}
 		}
 	}
 
-	return q.apply(
-		ctx,
-		Nack{
-			MessageIDs: acquired,
-		},
-	)
+	return nil
 }
 
 // apply writes an entry to the journal and applies it to the queue.

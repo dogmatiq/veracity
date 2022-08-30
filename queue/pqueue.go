@@ -1,10 +1,12 @@
 package queue
 
-import "github.com/dogmatiq/veracity/parcel"
+import (
+	"github.com/dogmatiq/interopspec/envelopespec"
+)
 
 // message represents a message on a queue.
 type message struct {
-	Parcel   parcel.Parcel
+	Envelope *envelopespec.Envelope
 	Priority uint64
 	Acquired bool
 
@@ -47,6 +49,6 @@ func (q *pqueue) Pop() any {
 	return m
 }
 
-func (q *pqueue) Peek() parcel.Parcel {
-	return q.messages[0].Parcel
+func (q *pqueue) Peek() *envelopespec.Envelope {
+	return q.messages[0].Envelope
 }
