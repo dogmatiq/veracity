@@ -7,9 +7,14 @@ option go_package = "github.com/dogmatiq/veracity/internal/queue";
 
 message JournalRecord {
   oneof OneOf {
-    dogma.interop.v1.envelope.Envelope enqueue = 1;
-    string acquire = 2;
-    string ack = 3;
-    string nack = 4;
+    EnqueueRecord enqueue = 1;
+    AcquireRecord acquire = 2;
+    AckRecord ack = 3;
+    NackRecord nack = 4;
   }
 }
+
+message EnqueueRecord { dogma.interop.v1.envelope.Envelope envelope = 1; }
+message AcquireRecord { string message_id = 1; }
+message AckRecord { string message_id = 1; }
+message NackRecord { string message_id = 1; }

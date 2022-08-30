@@ -130,7 +130,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"acquire fails before journal record is written",
 			func(rec *JournalRecord) error {
-				if rec.GetAcquire() != "" {
+				if rec.GetAcquire() != nil {
 					return errors.New("<error>")
 				}
 				return nil
@@ -141,7 +141,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"acquire fails after journal record is written",
 			nil,
 			func(rec *JournalRecord) error {
-				if rec.GetAcquire() != "" {
+				if rec.GetAcquire() != nil {
 					return errors.New("<error>")
 				}
 				return nil
@@ -150,7 +150,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"ack fails before journal record is written",
 			func(rec *JournalRecord) error {
-				if rec.GetAck() != "" {
+				if rec.GetAck() != nil {
 					return errors.New("<error>")
 				}
 				return nil
@@ -161,7 +161,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"ack fails after journal record is written",
 			nil,
 			func(rec *JournalRecord) error {
-				if rec.GetAck() != "" {
+				if rec.GetAck() != nil {
 					return errors.New("<error>")
 				}
 				return nil
@@ -170,7 +170,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"nack fails before journal record is written",
 			func(rec *JournalRecord) error {
-				if rec.GetNack() != "" {
+				if rec.GetNack() != nil {
 					return errors.New("<error>")
 				}
 				return nil
@@ -181,7 +181,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"nack fails after journal record is written",
 			nil,
 			func(rec *JournalRecord) error {
-				if rec.GetNack() != "" {
+				if rec.GetNack() != nil {
 					return errors.New("<error>")
 				}
 				return nil

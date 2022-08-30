@@ -74,32 +74,32 @@ func (m *JournalRecord) GetOneOf() isJournalRecord_OneOf {
 	return nil
 }
 
-func (x *JournalRecord) GetEnqueue() *envelopespec.Envelope {
+func (x *JournalRecord) GetEnqueue() *EnqueueRecord {
 	if x, ok := x.GetOneOf().(*JournalRecord_Enqueue); ok {
 		return x.Enqueue
 	}
 	return nil
 }
 
-func (x *JournalRecord) GetAcquire() string {
+func (x *JournalRecord) GetAcquire() *AcquireRecord {
 	if x, ok := x.GetOneOf().(*JournalRecord_Acquire); ok {
 		return x.Acquire
 	}
-	return ""
+	return nil
 }
 
-func (x *JournalRecord) GetAck() string {
+func (x *JournalRecord) GetAck() *AckRecord {
 	if x, ok := x.GetOneOf().(*JournalRecord_Ack); ok {
 		return x.Ack
 	}
-	return ""
+	return nil
 }
 
-func (x *JournalRecord) GetNack() string {
+func (x *JournalRecord) GetNack() *NackRecord {
 	if x, ok := x.GetOneOf().(*JournalRecord_Nack); ok {
 		return x.Nack
 	}
-	return ""
+	return nil
 }
 
 type isJournalRecord_OneOf interface {
@@ -107,19 +107,19 @@ type isJournalRecord_OneOf interface {
 }
 
 type JournalRecord_Enqueue struct {
-	Enqueue *envelopespec.Envelope `protobuf:"bytes,1,opt,name=enqueue,proto3,oneof"`
+	Enqueue *EnqueueRecord `protobuf:"bytes,1,opt,name=enqueue,proto3,oneof"`
 }
 
 type JournalRecord_Acquire struct {
-	Acquire string `protobuf:"bytes,2,opt,name=acquire,proto3,oneof"`
+	Acquire *AcquireRecord `protobuf:"bytes,2,opt,name=acquire,proto3,oneof"`
 }
 
 type JournalRecord_Ack struct {
-	Ack string `protobuf:"bytes,3,opt,name=ack,proto3,oneof"`
+	Ack *AckRecord `protobuf:"bytes,3,opt,name=ack,proto3,oneof"`
 }
 
 type JournalRecord_Nack struct {
-	Nack string `protobuf:"bytes,4,opt,name=nack,proto3,oneof"`
+	Nack *NackRecord `protobuf:"bytes,4,opt,name=nack,proto3,oneof"`
 }
 
 func (*JournalRecord_Enqueue) isJournalRecord_OneOf() {}
@@ -129,6 +129,194 @@ func (*JournalRecord_Acquire) isJournalRecord_OneOf() {}
 func (*JournalRecord_Ack) isJournalRecord_OneOf() {}
 
 func (*JournalRecord_Nack) isJournalRecord_OneOf() {}
+
+type EnqueueRecord struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Envelope *envelopespec.Envelope `protobuf:"bytes,1,opt,name=envelope,proto3" json:"envelope,omitempty"`
+}
+
+func (x *EnqueueRecord) Reset() {
+	*x = EnqueueRecord{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_github_com_dogmatiq_veracity_internal_queue_journal_proto_msgTypes[1]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *EnqueueRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnqueueRecord) ProtoMessage() {}
+
+func (x *EnqueueRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_github_com_dogmatiq_veracity_internal_queue_journal_proto_msgTypes[1]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnqueueRecord.ProtoReflect.Descriptor instead.
+func (*EnqueueRecord) Descriptor() ([]byte, []int) {
+	return file_github_com_dogmatiq_veracity_internal_queue_journal_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *EnqueueRecord) GetEnvelope() *envelopespec.Envelope {
+	if x != nil {
+		return x.Envelope
+	}
+	return nil
+}
+
+type AcquireRecord struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	MessageId string `protobuf:"bytes,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+}
+
+func (x *AcquireRecord) Reset() {
+	*x = AcquireRecord{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_github_com_dogmatiq_veracity_internal_queue_journal_proto_msgTypes[2]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *AcquireRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AcquireRecord) ProtoMessage() {}
+
+func (x *AcquireRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_github_com_dogmatiq_veracity_internal_queue_journal_proto_msgTypes[2]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AcquireRecord.ProtoReflect.Descriptor instead.
+func (*AcquireRecord) Descriptor() ([]byte, []int) {
+	return file_github_com_dogmatiq_veracity_internal_queue_journal_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *AcquireRecord) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+type AckRecord struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	MessageId string `protobuf:"bytes,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+}
+
+func (x *AckRecord) Reset() {
+	*x = AckRecord{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_github_com_dogmatiq_veracity_internal_queue_journal_proto_msgTypes[3]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *AckRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AckRecord) ProtoMessage() {}
+
+func (x *AckRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_github_com_dogmatiq_veracity_internal_queue_journal_proto_msgTypes[3]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AckRecord.ProtoReflect.Descriptor instead.
+func (*AckRecord) Descriptor() ([]byte, []int) {
+	return file_github_com_dogmatiq_veracity_internal_queue_journal_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *AckRecord) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+type NackRecord struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	MessageId string `protobuf:"bytes,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+}
+
+func (x *NackRecord) Reset() {
+	*x = NackRecord{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_github_com_dogmatiq_veracity_internal_queue_journal_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *NackRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NackRecord) ProtoMessage() {}
+
+func (x *NackRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_github_com_dogmatiq_veracity_internal_queue_journal_proto_msgTypes[4]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NackRecord.ProtoReflect.Descriptor instead.
+func (*NackRecord) Descriptor() ([]byte, []int) {
+	return file_github_com_dogmatiq_veracity_internal_queue_journal_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *NackRecord) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
 
 var File_github_com_dogmatiq_veracity_internal_queue_journal_proto protoreflect.FileDescriptor
 
@@ -141,21 +329,39 @@ var file_github_com_dogmatiq_veracity_internal_queue_journal_proto_rawDesc = []b
 	0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x6f, 0x67, 0x6d, 0x61, 0x74, 0x69, 0x71,
 	0x2f, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x6f, 0x70, 0x73, 0x70, 0x65, 0x63, 0x2f, 0x65, 0x6e, 0x76,
 	0x65, 0x6c, 0x6f, 0x70, 0x65, 0x73, 0x70, 0x65, 0x63, 0x2f, 0x65, 0x6e, 0x76, 0x65, 0x6c, 0x6f,
-	0x70, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x9f, 0x01, 0x0a, 0x0d, 0x4a, 0x6f, 0x75,
-	0x72, 0x6e, 0x61, 0x6c, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x12, 0x3f, 0x0a, 0x07, 0x65, 0x6e,
-	0x71, 0x75, 0x65, 0x75, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x23, 0x2e, 0x64, 0x6f,
-	0x67, 0x6d, 0x61, 0x2e, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x6f, 0x70, 0x2e, 0x76, 0x31, 0x2e, 0x65,
-	0x6e, 0x76, 0x65, 0x6c, 0x6f, 0x70, 0x65, 0x2e, 0x45, 0x6e, 0x76, 0x65, 0x6c, 0x6f, 0x70, 0x65,
-	0x48, 0x00, 0x52, 0x07, 0x65, 0x6e, 0x71, 0x75, 0x65, 0x75, 0x65, 0x12, 0x1a, 0x0a, 0x07, 0x61,
-	0x63, 0x71, 0x75, 0x69, 0x72, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x48, 0x00, 0x52, 0x07,
-	0x61, 0x63, 0x71, 0x75, 0x69, 0x72, 0x65, 0x12, 0x12, 0x0a, 0x03, 0x61, 0x63, 0x6b, 0x18, 0x03,
-	0x20, 0x01, 0x28, 0x09, 0x48, 0x00, 0x52, 0x03, 0x61, 0x63, 0x6b, 0x12, 0x14, 0x0a, 0x04, 0x6e,
-	0x61, 0x63, 0x6b, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x48, 0x00, 0x52, 0x04, 0x6e, 0x61, 0x63,
-	0x6b, 0x42, 0x07, 0x0a, 0x05, 0x4f, 0x6e, 0x65, 0x4f, 0x66, 0x42, 0x2d, 0x5a, 0x2b, 0x67, 0x69,
-	0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x6f, 0x67, 0x6d, 0x61, 0x74, 0x69,
-	0x71, 0x2f, 0x76, 0x65, 0x72, 0x61, 0x63, 0x69, 0x74, 0x79, 0x2f, 0x69, 0x6e, 0x74, 0x65, 0x72,
-	0x6e, 0x61, 0x6c, 0x2f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x33,
+	0x70, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0xef, 0x01, 0x0a, 0x0d, 0x4a, 0x6f, 0x75,
+	0x72, 0x6e, 0x61, 0x6c, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x12, 0x39, 0x0a, 0x07, 0x65, 0x6e,
+	0x71, 0x75, 0x65, 0x75, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1d, 0x2e, 0x76, 0x65,
+	0x72, 0x61, 0x63, 0x69, 0x74, 0x79, 0x2e, 0x71, 0x75, 0x65, 0x75, 0x65, 0x2e, 0x45, 0x6e, 0x71,
+	0x75, 0x65, 0x75, 0x65, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x48, 0x00, 0x52, 0x07, 0x65, 0x6e,
+	0x71, 0x75, 0x65, 0x75, 0x65, 0x12, 0x39, 0x0a, 0x07, 0x61, 0x63, 0x71, 0x75, 0x69, 0x72, 0x65,
+	0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1d, 0x2e, 0x76, 0x65, 0x72, 0x61, 0x63, 0x69, 0x74,
+	0x79, 0x2e, 0x71, 0x75, 0x65, 0x75, 0x65, 0x2e, 0x41, 0x63, 0x71, 0x75, 0x69, 0x72, 0x65, 0x52,
+	0x65, 0x63, 0x6f, 0x72, 0x64, 0x48, 0x00, 0x52, 0x07, 0x61, 0x63, 0x71, 0x75, 0x69, 0x72, 0x65,
+	0x12, 0x2d, 0x0a, 0x03, 0x61, 0x63, 0x6b, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x19, 0x2e,
+	0x76, 0x65, 0x72, 0x61, 0x63, 0x69, 0x74, 0x79, 0x2e, 0x71, 0x75, 0x65, 0x75, 0x65, 0x2e, 0x41,
+	0x63, 0x6b, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x48, 0x00, 0x52, 0x03, 0x61, 0x63, 0x6b, 0x12,
+	0x30, 0x0a, 0x04, 0x6e, 0x61, 0x63, 0x6b, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e,
+	0x76, 0x65, 0x72, 0x61, 0x63, 0x69, 0x74, 0x79, 0x2e, 0x71, 0x75, 0x65, 0x75, 0x65, 0x2e, 0x4e,
+	0x61, 0x63, 0x6b, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x48, 0x00, 0x52, 0x04, 0x6e, 0x61, 0x63,
+	0x6b, 0x42, 0x07, 0x0a, 0x05, 0x4f, 0x6e, 0x65, 0x4f, 0x66, 0x22, 0x50, 0x0a, 0x0d, 0x45, 0x6e,
+	0x71, 0x75, 0x65, 0x75, 0x65, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x12, 0x3f, 0x0a, 0x08, 0x65,
+	0x6e, 0x76, 0x65, 0x6c, 0x6f, 0x70, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x23, 0x2e,
+	0x64, 0x6f, 0x67, 0x6d, 0x61, 0x2e, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x6f, 0x70, 0x2e, 0x76, 0x31,
+	0x2e, 0x65, 0x6e, 0x76, 0x65, 0x6c, 0x6f, 0x70, 0x65, 0x2e, 0x45, 0x6e, 0x76, 0x65, 0x6c, 0x6f,
+	0x70, 0x65, 0x52, 0x08, 0x65, 0x6e, 0x76, 0x65, 0x6c, 0x6f, 0x70, 0x65, 0x22, 0x2e, 0x0a, 0x0d,
+	0x41, 0x63, 0x71, 0x75, 0x69, 0x72, 0x65, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x12, 0x1d, 0x0a,
+	0x0a, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x09, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x49, 0x64, 0x22, 0x2a, 0x0a, 0x09,
+	0x41, 0x63, 0x6b, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x6d, 0x65, 0x73,
+	0x73, 0x61, 0x67, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x6d,
+	0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x49, 0x64, 0x22, 0x2b, 0x0a, 0x0a, 0x4e, 0x61, 0x63, 0x6b,
+	0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67,
+	0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x6d, 0x65, 0x73, 0x73,
+	0x61, 0x67, 0x65, 0x49, 0x64, 0x42, 0x2d, 0x5a, 0x2b, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e,
+	0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x6f, 0x67, 0x6d, 0x61, 0x74, 0x69, 0x71, 0x2f, 0x76, 0x65, 0x72,
+	0x61, 0x63, 0x69, 0x74, 0x79, 0x2f, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x2f, 0x71,
+	0x75, 0x65, 0x75, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -170,18 +376,26 @@ func file_github_com_dogmatiq_veracity_internal_queue_journal_proto_rawDescGZIP(
 	return file_github_com_dogmatiq_veracity_internal_queue_journal_proto_rawDescData
 }
 
-var file_github_com_dogmatiq_veracity_internal_queue_journal_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_github_com_dogmatiq_veracity_internal_queue_journal_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_github_com_dogmatiq_veracity_internal_queue_journal_proto_goTypes = []interface{}{
 	(*JournalRecord)(nil),         // 0: veracity.queue.JournalRecord
-	(*envelopespec.Envelope)(nil), // 1: dogma.interop.v1.envelope.Envelope
+	(*EnqueueRecord)(nil),         // 1: veracity.queue.EnqueueRecord
+	(*AcquireRecord)(nil),         // 2: veracity.queue.AcquireRecord
+	(*AckRecord)(nil),             // 3: veracity.queue.AckRecord
+	(*NackRecord)(nil),            // 4: veracity.queue.NackRecord
+	(*envelopespec.Envelope)(nil), // 5: dogma.interop.v1.envelope.Envelope
 }
 var file_github_com_dogmatiq_veracity_internal_queue_journal_proto_depIdxs = []int32{
-	1, // 0: veracity.queue.JournalRecord.enqueue:type_name -> dogma.interop.v1.envelope.Envelope
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	1, // 0: veracity.queue.JournalRecord.enqueue:type_name -> veracity.queue.EnqueueRecord
+	2, // 1: veracity.queue.JournalRecord.acquire:type_name -> veracity.queue.AcquireRecord
+	3, // 2: veracity.queue.JournalRecord.ack:type_name -> veracity.queue.AckRecord
+	4, // 3: veracity.queue.JournalRecord.nack:type_name -> veracity.queue.NackRecord
+	5, // 4: veracity.queue.EnqueueRecord.envelope:type_name -> dogma.interop.v1.envelope.Envelope
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_github_com_dogmatiq_veracity_internal_queue_journal_proto_init() }
@@ -192,6 +406,54 @@ func file_github_com_dogmatiq_veracity_internal_queue_journal_proto_init() {
 	if !protoimpl.UnsafeEnabled {
 		file_github_com_dogmatiq_veracity_internal_queue_journal_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*JournalRecord); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_github_com_dogmatiq_veracity_internal_queue_journal_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*EnqueueRecord); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_github_com_dogmatiq_veracity_internal_queue_journal_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*AcquireRecord); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_github_com_dogmatiq_veracity_internal_queue_journal_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*AckRecord); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_github_com_dogmatiq_veracity_internal_queue_journal_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*NackRecord); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -215,7 +477,7 @@ func file_github_com_dogmatiq_veracity_internal_queue_journal_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_github_com_dogmatiq_veracity_internal_queue_journal_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

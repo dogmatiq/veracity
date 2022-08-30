@@ -31,18 +31,20 @@ func (q *Queue) Enqueue(ctx context.Context, env *envelopespec.Envelope) error {
 	return q.apply(
 		ctx,
 		&JournalRecord_Enqueue{
-			Enqueue: env,
+			Enqueue: &EnqueueRecord{
+				Envelope: env,
+			},
 		},
 	)
 }
 
-func (q *Queue) applyEnqueue(env *envelopespec.Envelope) {
+func (q *Queue) applyEnqueue(rec *EnqueueRecord) {
 	m := &message{
-		Envelope: env,
+		Envelope: rec.GetEnvelope(),
 		Priority: q.offset,
 	}
 
-	q.messages[env.GetMessageId()] = m
+	q.messages[m.Envelope.GetMessageId()] = m
 	heap.Push(&q.queue, m)
 }
 
@@ -67,13 +69,15 @@ func (q *Queue) Acquire(ctx context.Context) (env *envelopespec.Envelope, ok boo
 	return env, true, q.apply(
 		ctx,
 		&JournalRecord_Acquire{
-			Acquire: env.GetMessageId(),
+			Acquire: &AcquireRecord{
+				MessageId: env.GetMessageId(),
+			},
 		},
 	)
 }
 
-func (q *Queue) applyAcquire(id string) {
-	m := q.messages[id]
+func (q *Queue) applyAcquire(rec *AcquireRecord) {
+	m := q.messages[rec.GetMessageId()]
 	heap.Remove(&q.queue, m.index)
 	m.Acquired = true
 }
@@ -88,13 +92,15 @@ func (q *Queue) Ack(ctx context.Context, id string) error {
 	return q.apply(
 		ctx,
 		&JournalRecord_Ack{
-			Ack: id,
+			Ack: &AckRecord{
+				MessageId: id,
+			},
 		},
 	)
 }
 
-func (q *Queue) applyAck(id string) {
-	q.messages[id] = nil
+func (q *Queue) applyAck(rec *AckRecord) {
+	q.messages[rec.GetMessageId()] = nil
 }
 
 // Nack negatively acknowledges a previously acquired message, returning it to
@@ -107,13 +113,15 @@ func (q *Queue) Nack(ctx context.Context, id string) error {
 	return q.apply(
 		ctx,
 		&JournalRecord_Nack{
-			Nack: id,
+			Nack: &NackRecord{
+				MessageId: id,
+			},
 		},
 	)
 }
 
-func (q *Queue) applyNack(id string) {
-	m := q.messages[id]
+func (q *Queue) applyNack(rec *NackRecord) {
+	m := q.messages[rec.GetMessageId()]
 	m.Acquired = false
 	heap.Push(&q.queue, m)
 }
@@ -141,12 +149,7 @@ func (q *Queue) load(ctx context.Context) error {
 
 	for id, m := range q.messages {
 		if m != nil && m.Acquired {
-			if err := q.apply(
-				ctx,
-				&JournalRecord_Nack{
-					Nack: id,
-				},
-			); err != nil {
+			if err := q.Nack(ctx, id); err != nil {
 				return err
 			}
 		}
