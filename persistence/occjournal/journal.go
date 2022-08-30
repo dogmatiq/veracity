@@ -9,9 +9,8 @@ import (
 // is already a record at the given offset.
 var ErrConflict = errors.New("optimistic concurrency conflict")
 
-// Journal is an append-only log with version-based optimistic concurrency
-// control.
+// Journal is an append-only log that stores records of type R.
 type Journal[R any] interface {
-	Read(ctx context.Context, version uint64) ([]R, uint64, error)
-	Write(ctx context.Context, version uint64, entry R) error
+	Read(ctx context.Context, ver uint64) ([]R, uint64, error)
+	Write(ctx context.Context, ver uint64, rec R) error
 }

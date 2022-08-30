@@ -6,41 +6,34 @@ import (
 )
 
 // InMemory is an in-memory journal.
-type InMemory[E any] struct {
+type InMemory[R any] struct {
 	m       sync.RWMutex
-	entries []E
+	records []R
 }
 
-func (j *InMemory[E]) Read(
-	ctx context.Context,
-	offset uint64,
-) ([]E, uint64, error) {
+func (j *InMemory[R]) Read(ctx context.Context, ver uint64) ([]R, uint64, error) {
 	j.m.RLock()
 	defer j.m.RUnlock()
 
-	index := int(offset)
-	size := len(j.entries)
+	index := int(ver)
+	size := len(j.records)
 
 	switch {
 	case index < size:
-		return j.entries[index : index+1], offset + 1, ctx.Err()
+		return j.records[index : index+1], ver + 1, ctx.Err()
 	case index > size:
 		panic("offset out of range")
 	default:
-		return nil, offset, ctx.Err()
+		return nil, ver, ctx.Err()
 	}
 }
 
-func (j *InMemory[E]) Write(
-	ctx context.Context,
-	offset uint64,
-	entry E,
-) error {
+func (j *InMemory[R]) Write(ctx context.Context, ver uint64, rec R) error {
 	j.m.Lock()
 	defer j.m.Unlock()
 
-	index := int(offset)
-	size := len(j.entries)
+	index := int(ver)
+	size := len(j.records)
 
 	switch {
 	case index < size:
@@ -48,7 +41,7 @@ func (j *InMemory[E]) Write(
 	case index > size:
 		panic("offset out of range")
 	default:
-		j.entries = append(j.entries, entry)
+		j.records = append(j.records, rec)
 		return ctx.Err()
 	}
 }
