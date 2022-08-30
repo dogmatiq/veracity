@@ -3,6 +3,7 @@ package queue_test
 import (
 	"context"
 	"errors"
+	"time"
 
 	. "github.com/dogmatiq/dogma/fixtures"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
@@ -16,6 +17,9 @@ var _ = Describe("type Queue (idempotence)", func() {
 	DescribeTable(
 		"it acknowledges the message exactly once",
 		func(before, after func(JournalEntry) error) {
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer cancel()
+
 			impl := &journal.InMemory[JournalEntry]{}
 			stub := &journal.Stub[JournalEntry]{
 				Journal: impl,
@@ -82,7 +86,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			expectErr := before != nil || after != nil
 
 		retry:
-			if err := tick(context.Background()); err != nil {
+			if err := tick(ctx); err != nil {
 				Expect(err).To(MatchError("<error>"))
 				expectErr = false
 				goto retry

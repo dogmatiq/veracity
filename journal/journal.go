@@ -11,6 +11,6 @@ var ErrConflict = errors.New("optimistic concurrency conflict")
 
 // Journal is an append-only log.
 type Journal[E any] interface {
-	Read(ctx context.Context, offset *uint64) ([]E, error)
+	Read(ctx context.Context, offset uint64) ([]E, uint64, error)
 	Write(ctx context.Context, offset uint64, entry E) error
 }

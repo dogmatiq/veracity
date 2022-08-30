@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"time"
 
 	. "github.com/dogmatiq/dogma/fixtures"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
@@ -17,6 +18,9 @@ import (
 
 var _ = Describe("type Queue (parallelism)", func() {
 	It("acknowledges each message exactly once", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
 		queue := &Queue{
 			Journal: &journal.InMemory[JournalEntry]{},
 		}
@@ -35,7 +39,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 			expect[id] = struct{}{}
 
 			m := NewParcel(id, MessageM1)
-			err := queue.Enqueue(context.Background(), m)
+			err := queue.Enqueue(ctx, m)
 			Expect(err).ShouldNot(HaveOccurred())
 		}
 
@@ -80,7 +84,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 		for i := 0; i < parallelism; i++ {
 			g.Go(func() error {
 				for {
-					done, err := tick(context.Background())
+					done, err := tick(ctx)
 					if err == journal.ErrConflict {
 						continue
 					} else if err != nil {

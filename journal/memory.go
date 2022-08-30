@@ -13,25 +13,22 @@ type InMemory[E any] struct {
 
 func (j *InMemory[E]) Read(
 	ctx context.Context,
-	offset *uint64,
-) ([]E, error) {
+	offset uint64,
+) ([]E, uint64, error) {
 	j.m.RLock()
 	defer j.m.RUnlock()
 
-	index := int(*offset)
-	count := len(j.entries)
+	index := int(offset)
+	size := len(j.entries)
 
-	if index > count {
+	switch {
+	case index < size:
+		return j.entries[index : index+1], offset + 1, ctx.Err()
+	case index > size:
 		panic("offset out of range")
+	default:
+		return nil, offset, ctx.Err()
 	}
-
-	if index == count {
-		return nil, nil
-	}
-
-	*offset++
-
-	return j.entries[index : index+1], nil
 }
 
 func (j *InMemory[E]) Write(
@@ -42,16 +39,16 @@ func (j *InMemory[E]) Write(
 	j.m.Lock()
 	defer j.m.Unlock()
 
-	count := uint64(len(j.entries))
+	index := int(offset)
+	size := len(j.entries)
 
-	if offset == count {
-		j.entries = append(j.entries, entry)
-		return nil
-	}
-
-	if offset < count {
+	switch {
+	case index < size:
 		return ErrConflict
+	case index > size:
+		panic("offset out of range")
+	default:
+		j.entries = append(j.entries, entry)
+		return ctx.Err()
 	}
-
-	panic("offset out of range")
 }

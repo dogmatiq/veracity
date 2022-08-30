@@ -8,11 +8,11 @@ import (
 type Stub[E any] struct {
 	Journal[E]
 
-	ReadFunc  func(ctx context.Context, offset *uint64) ([]E, error)
+	ReadFunc  func(ctx context.Context, offset uint64) ([]E, uint64, error)
 	WriteFunc func(ctx context.Context, offset uint64, entry E) error
 }
 
-func (j *Stub[E]) Read(ctx context.Context, offset *uint64) ([]E, error) {
+func (j *Stub[E]) Read(ctx context.Context, offset uint64) (entries []E, next uint64, err error) {
 	if j.ReadFunc != nil {
 		return j.ReadFunc(ctx, offset)
 	}
@@ -21,10 +21,10 @@ func (j *Stub[E]) Read(ctx context.Context, offset *uint64) ([]E, error) {
 		return j.Journal.Read(ctx, offset)
 	}
 
-	return nil, nil
+	return nil, offset, nil
 }
 
-func (j *Stub[E]) Write(ctx context.Context, offset uint64, entry E) error {
+func (j *Stub[E]) Write(ctx context.Context, offset uint64, entry E) (err error) {
 	if j.WriteFunc != nil {
 		return j.WriteFunc(ctx, offset, entry)
 	}

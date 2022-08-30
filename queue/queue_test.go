@@ -17,13 +17,12 @@ import (
 
 var _ = Describe("type Queue", func() {
 	var (
-		ctx    context.Context
-		cancel context.CancelFunc
-
+		ctx   context.Context
 		queue *Queue
 	)
 
 	BeforeEach(func() {
+		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 		DeferCleanup(cancel)
 
