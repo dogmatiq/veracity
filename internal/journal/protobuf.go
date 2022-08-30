@@ -1,4 +1,4 @@
-package occjournal
+package journal
 
 import (
 	"context"

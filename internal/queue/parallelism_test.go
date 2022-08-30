@@ -9,7 +9,7 @@ import (
 
 	. "github.com/dogmatiq/dogma/fixtures"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
-	"github.com/dogmatiq/veracity/internal/occjournal"
+	"github.com/dogmatiq/veracity/internal/journal"
 	. "github.com/dogmatiq/veracity/internal/queue"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -22,7 +22,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 		defer cancel()
 
 		queue := &Queue{
-			Journal: &occjournal.InMemory[*JournalRecord]{},
+			Journal: &journal.InMemory[*JournalRecord]{},
 		}
 
 		var (
@@ -85,7 +85,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 			g.Go(func() error {
 				for {
 					done, err := tick(ctx)
-					if err == occjournal.ErrConflict {
+					if err == journal.ErrConflict {
 						continue
 					} else if err != nil {
 						return err

@@ -5,12 +5,12 @@ import (
 	"context"
 
 	"github.com/dogmatiq/interopspec/envelopespec"
-	"github.com/dogmatiq/veracity/internal/occjournal"
+	"github.com/dogmatiq/veracity/internal/journal"
 )
 
 // Queue is a durable, ordered queue of messages.
 type Queue struct {
-	Journal occjournal.Journal[*JournalRecord]
+	Journal journal.Journal[*JournalRecord]
 
 	offset   uint64
 	messages map[string]*message
