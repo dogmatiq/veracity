@@ -1,11 +1,11 @@
-package journal
+package occjournal
 
 import (
 	"context"
 	"sync"
 )
 
-// InMemory is an in-memory append-only log.
+// InMemory is an in-memory journal.
 type InMemory[E any] struct {
 	m       sync.RWMutex
 	entries []E

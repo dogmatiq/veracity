@@ -7,7 +7,7 @@ import (
 
 	. "github.com/dogmatiq/dogma/fixtures"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
-	"github.com/dogmatiq/veracity/journal"
+	"github.com/dogmatiq/veracity/persistence/occjournal"
 	. "github.com/dogmatiq/veracity/queue"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -20,8 +20,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 
-			impl := &journal.InMemory[JournalEntry]{}
-			stub := &journal.Stub[JournalEntry]{
+			impl := &occjournal.InMemory[JournalEntry]{}
+			journal := &occjournal.Stub[JournalEntry]{
 				Journal: impl,
 				WriteFunc: func(
 					ctx context.Context,
@@ -55,7 +55,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 
 			tick := func(ctx context.Context) error {
 				queue := &Queue{
-					Journal: stub,
+					Journal: journal,
 				}
 
 				if !enqueued {
@@ -95,7 +95,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			Expect(expectErr).To(BeFalse(), "process should fail at least once")
 
 			queue := &Queue{
-				Journal: stub,
+				Journal: journal,
 			}
 			_, ok, err := queue.Acquire(context.Background())
 			Expect(err).ShouldNot(HaveOccurred())

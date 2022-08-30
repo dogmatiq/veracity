@@ -7,8 +7,8 @@ import (
 
 	. "github.com/dogmatiq/dogma/fixtures"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
-	"github.com/dogmatiq/veracity/journal"
 	"github.com/dogmatiq/veracity/parcel"
+	"github.com/dogmatiq/veracity/persistence/occjournal"
 	. "github.com/dogmatiq/veracity/queue"
 	. "github.com/jmalloc/gomegax"
 	. "github.com/onsi/ginkgo/v2"
@@ -27,7 +27,7 @@ var _ = Describe("type Queue", func() {
 		DeferCleanup(cancel)
 
 		queue = &Queue{
-			Journal: &journal.InMemory[JournalEntry]{},
+			Journal: &occjournal.InMemory[JournalEntry]{},
 		}
 	})
 

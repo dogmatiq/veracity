@@ -1,13 +1,13 @@
 package queue
 
 import (
-	"github.com/dogmatiq/veracity/journal"
 	"github.com/dogmatiq/veracity/parcel"
+	"github.com/dogmatiq/veracity/persistence/occjournal"
 )
 
 // Journal is an append-only log used by a queue to persist its state.
 type Journal interface {
-	journal.Journal[JournalEntry]
+	occjournal.Journal[JournalEntry]
 }
 
 // JournalEntry is an entry in a queue's journal.
