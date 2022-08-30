@@ -5,7 +5,7 @@ import (
 	"context"
 
 	"github.com/dogmatiq/interopspec/envelopespec"
-	"github.com/dogmatiq/veracity/persistence/occjournal"
+	"github.com/dogmatiq/veracity/internal/occjournal"
 )
 
 // Queue is a durable, ordered queue of messages.
