@@ -28,10 +28,10 @@ func (j *PB[R]) Read(ctx context.Context, ver uint64) (R, bool, error) {
 	return rec, true, proto.Unmarshal(data, rec)
 }
 
-func (j *PB[R]) Write(ctx context.Context, ver uint64, rec R) error {
+func (j *PB[R]) Write(ctx context.Context, ver uint64, rec R) (bool, error) {
 	data, err := proto.Marshal(rec)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	return j.Journal.Write(ctx, ver, data)

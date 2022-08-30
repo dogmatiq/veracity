@@ -3,7 +3,7 @@ package veracity.queue;
 
 import "github.com/dogmatiq/interopspec/envelopespec/envelope.proto";
 
-option go_package = "github.com/dogmatiq/veracity/queue";
+option go_package = "github.com/dogmatiq/veracity/internal/queue";
 
 message JournalRecord {
   oneof OneOf {

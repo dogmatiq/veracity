@@ -26,7 +26,7 @@ func (j *InMemory[R]) Read(ctx context.Context, ver uint64) (R, bool, error) {
 	return zero, false, ctx.Err()
 }
 
-func (j *InMemory[R]) Write(ctx context.Context, ver uint64, rec R) error {
+func (j *InMemory[R]) Write(ctx context.Context, ver uint64, rec R) (bool, error) {
 	j.m.Lock()
 	defer j.m.Unlock()
 
@@ -35,10 +35,10 @@ func (j *InMemory[R]) Write(ctx context.Context, ver uint64, rec R) error {
 
 	switch {
 	case index < size:
-		return ErrConflict
+		return false, ctx.Err()
 	case index == size:
 		j.records = append(j.records, rec)
-		return ctx.Err()
+		return true, ctx.Err()
 	default:
 		panic("offset out of range, this behavior would be undefined in a real journal implementation")
 	}

@@ -85,10 +85,8 @@ var _ = Describe("type Queue (parallelism)", func() {
 			g.Go(func() error {
 				for {
 					done, err := tick(ctx)
-					if err == journal.ErrConflict {
+					if err != nil {
 						continue
-					} else if err != nil {
-						return err
 					} else if done {
 						return nil
 					}

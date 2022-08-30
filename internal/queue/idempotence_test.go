@@ -27,26 +27,27 @@ var _ = Describe("type Queue (idempotence)", func() {
 					ctx context.Context,
 					offset uint64,
 					rec *JournalRecord,
-				) error {
+				) (bool, error) {
 					if before != nil {
 						if err := before(rec); err != nil {
 							before = nil
-							return err
+							return false, err
 						}
 					}
 
-					if err := impl.Write(ctx, offset, rec); err != nil {
-						return err
+					ok, err := impl.Write(ctx, offset, rec)
+					if !ok || err != nil {
+						return false, err
 					}
 
 					if after != nil {
 						if err := after(rec); err != nil {
 							after = nil
-							return err
+							return false, err
 						}
 					}
 
-					return nil
+					return true, nil
 				},
 			}
 

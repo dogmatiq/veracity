@@ -2,14 +2,11 @@ package journal
 
 import (
 	"context"
-	"errors"
 )
 
-// ErrConflict indicates that a journal record cannot be written because there
-// is already a record at the given offset.
-var ErrConflict = errors.New("optimistic concurrency conflict")
-
 // Journal is an append-only log that stores records of type R.
+//
+// Journals may be safely used concurrently.
 type Journal[R any] interface {
 	// Read returns the record that was written to produce the given version of
 	// the journal.
@@ -19,9 +16,13 @@ type Journal[R any] interface {
 
 	// Write appends a new record to the journal.
 	//
-	// ver must be the current version of the journal. If ver < current then
-	// ErrConflict is returned. If ver > current then the behavior is undefined.
-	Write(ctx context.Context, ver uint64, rec R) error
+	// ver must be the current version of the journal.
+	//
+	// If ver < current then the record is not persisted; ok is false indicating
+	// an optimistic concurrency conflict.
+	//
+	// If ver > current then the behavior is undefined.
+	Write(ctx context.Context, ver uint64, rec R) (ok bool, err error)
 }
 
 // BinaryJournal is an append-only log that stores binary records.

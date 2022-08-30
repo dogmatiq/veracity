@@ -7,7 +7,7 @@ type Stub[R any] struct {
 	Journal[R]
 
 	ReadFunc  func(ctx context.Context, version uint64) (R, bool, error)
-	WriteFunc func(ctx context.Context, version uint64, rec R) error
+	WriteFunc func(ctx context.Context, version uint64, rec R) (bool, error)
 }
 
 func (j *Stub[R]) Read(ctx context.Context, ver uint64) (R, bool, error) {
@@ -23,7 +23,7 @@ func (j *Stub[R]) Read(ctx context.Context, ver uint64) (R, bool, error) {
 	return zero, false, nil
 }
 
-func (j *Stub[R]) Write(ctx context.Context, ver uint64, rec R) error {
+func (j *Stub[R]) Write(ctx context.Context, ver uint64, rec R) (bool, error) {
 	if j.WriteFunc != nil {
 		return j.WriteFunc(ctx, ver, rec)
 	}
@@ -32,5 +32,5 @@ func (j *Stub[R]) Write(ctx context.Context, ver uint64, rec R) error {
 		return j.Journal.Write(ctx, ver, rec)
 	}
 
-	return nil
+	return false, nil
 }

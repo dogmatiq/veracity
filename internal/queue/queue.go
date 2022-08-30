@@ -3,6 +3,7 @@ package queue
 import (
 	"container/heap"
 	"context"
+	"errors"
 
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/internal/journal"
@@ -159,14 +160,18 @@ func (q *Queue) apply(
 	ctx context.Context,
 	rec journalRecord,
 ) error {
-	if err := q.Journal.Write(
+	ok, err := q.Journal.Write(
 		ctx,
 		q.offset,
 		&JournalRecord{
 			OneOf: rec,
 		},
-	); err != nil {
+	)
+	if err != nil {
 		return err
+	}
+	if !ok {
+		return errors.New("optimistic concurrency conflict")
 	}
 
 	rec.apply(q)
