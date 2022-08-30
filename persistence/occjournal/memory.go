@@ -11,7 +11,7 @@ type InMemory[R any] struct {
 	records []R
 }
 
-func (j *InMemory[R]) Read(ctx context.Context, ver uint64) ([]R, uint64, error) {
+func (j *InMemory[R]) Read(ctx context.Context, ver uint64) (R, uint64, error) {
 	j.m.RLock()
 	defer j.m.RUnlock()
 
@@ -20,11 +20,12 @@ func (j *InMemory[R]) Read(ctx context.Context, ver uint64) ([]R, uint64, error)
 
 	switch {
 	case index < size:
-		return j.records[index : index+1], ver + 1, ctx.Err()
+		return j.records[index], ver + 1, ctx.Err()
 	case index > size:
 		panic("offset out of range")
 	default:
-		return nil, ver, ctx.Err()
+		var zero R
+		return zero, ver, ctx.Err()
 	}
 }
 
