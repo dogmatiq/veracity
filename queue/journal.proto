@@ -1,0 +1,15 @@
+syntax = "proto3";
+package veracity.queue;
+
+import "github.com/dogmatiq/interopspec/envelopespec/envelope.proto";
+
+option go_package = "github.com/dogmatiq/veracity/queue";
+
+message JournalRecord {
+  oneof OneOf {
+    dogma.interop.v1.envelope.Envelope enqueue = 1;
+    string acquire = 2;
+    string ack = 3;
+    string nack = 4;
+  }
+}

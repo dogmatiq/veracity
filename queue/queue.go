@@ -5,11 +5,12 @@ import (
 	"context"
 
 	"github.com/dogmatiq/interopspec/envelopespec"
+	"github.com/dogmatiq/veracity/persistence/occjournal"
 )
 
 // Queue is a durable, ordered queue of messages.
 type Queue struct {
-	Journal Journal
+	Journal occjournal.Journal[*JournalRecord]
 
 	offset   uint64
 	messages map[string]*message
@@ -28,19 +29,19 @@ func (q *Queue) Enqueue(ctx context.Context, env *envelopespec.Envelope) error {
 
 	return q.apply(
 		ctx,
-		Enqueue{
-			Envelope: env,
+		&JournalRecord_Enqueue{
+			Enqueue: env,
 		},
 	)
 }
 
-func (q *Queue) applyEnqueue(e Enqueue) {
+func (q *Queue) applyEnqueue(env *envelopespec.Envelope) {
 	m := &message{
-		Envelope: e.Envelope,
+		Envelope: env,
 		Priority: q.offset,
 	}
 
-	q.messages[e.Envelope.GetMessageId()] = m
+	q.messages[env.GetMessageId()] = m
 	heap.Push(&q.queue, m)
 }
 
@@ -64,14 +65,14 @@ func (q *Queue) Acquire(ctx context.Context) (env *envelopespec.Envelope, ok boo
 
 	return env, true, q.apply(
 		ctx,
-		Acquire{
-			MessageID: env.GetMessageId(),
+		&JournalRecord_Acquire{
+			Acquire: env.GetMessageId(),
 		},
 	)
 }
 
-func (q *Queue) applyAcquire(e Acquire) {
-	m := q.messages[e.MessageID]
+func (q *Queue) applyAcquire(id string) {
+	m := q.messages[id]
 	heap.Remove(&q.queue, m.index)
 	m.Acquired = true
 }
@@ -85,14 +86,14 @@ func (q *Queue) Ack(ctx context.Context, id string) error {
 
 	return q.apply(
 		ctx,
-		Ack{
-			MessageID: id,
+		&JournalRecord_Ack{
+			Ack: id,
 		},
 	)
 }
 
-func (q *Queue) applyAck(e Ack) {
-	q.messages[e.MessageID] = nil
+func (q *Queue) applyAck(id string) {
+	q.messages[id] = nil
 }
 
 // Nack negatively acknowledges a previously acquired message, returning it to
@@ -104,14 +105,14 @@ func (q *Queue) Nack(ctx context.Context, id string) error {
 
 	return q.apply(
 		ctx,
-		Nack{
-			MessageID: id,
+		&JournalRecord_Nack{
+			Nack: id,
 		},
 	)
 }
 
-func (q *Queue) applyNack(e Nack) {
-	m := q.messages[e.MessageID]
+func (q *Queue) applyNack(id string) {
+	m := q.messages[id]
 	m.Acquired = false
 	heap.Push(&q.queue, m)
 }
@@ -125,16 +126,16 @@ func (q *Queue) load(ctx context.Context) error {
 	q.messages = map[string]*message{}
 
 	for {
-		entries, next, err := q.Journal.Read(ctx, q.offset)
+		records, next, err := q.Journal.Read(ctx, q.offset)
 		if err != nil {
 			return err
 		}
-		if len(entries) == 0 {
+		if len(records) == 0 {
 			break
 		}
 
-		for _, e := range entries {
-			e.apply(q)
+		for _, rec := range records {
+			rec.GetOneOf().(journalRecord).apply(q)
 		}
 
 		q.offset = next
@@ -144,8 +145,8 @@ func (q *Queue) load(ctx context.Context) error {
 		if m != nil && m.Acquired {
 			if err := q.apply(
 				ctx,
-				Nack{
-					MessageID: id,
+				&JournalRecord_Nack{
+					Nack: id,
 				},
 			); err != nil {
 				return err
@@ -156,17 +157,33 @@ func (q *Queue) load(ctx context.Context) error {
 	return nil
 }
 
-// apply writes an entry to the journal and applies it to the queue.
+// apply writes a record to the journal and applies it to the queue.
 func (q *Queue) apply(
 	ctx context.Context,
-	e JournalEntry,
+	rec journalRecord,
 ) error {
-	if err := q.Journal.Write(ctx, q.offset, e); err != nil {
+	if err := q.Journal.Write(
+		ctx,
+		q.offset,
+		&JournalRecord{
+			OneOf: rec,
+		},
+	); err != nil {
 		return err
 	}
 
-	e.apply(q)
+	rec.apply(q)
 	q.offset++
 
 	return nil
 }
+
+type journalRecord interface {
+	isJournalRecord_OneOf
+	apply(q *Queue)
+}
+
+func (x *JournalRecord_Enqueue) apply(q *Queue) { q.applyEnqueue(x.Enqueue) }
+func (x *JournalRecord_Acquire) apply(q *Queue) { q.applyAcquire(x.Acquire) }
+func (x *JournalRecord_Ack) apply(q *Queue)     { q.applyAck(x.Ack) }
+func (x *JournalRecord_Nack) apply(q *Queue)    { q.applyNack(x.Nack) }

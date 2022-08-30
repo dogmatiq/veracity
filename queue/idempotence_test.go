@@ -16,31 +16,31 @@ import (
 var _ = Describe("type Queue (idempotence)", func() {
 	DescribeTable(
 		"it acknowledges the message exactly once",
-		func(before, after func(JournalEntry) error) {
+		func(before, after func(*JournalRecord) error) {
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 
-			impl := &occjournal.InMemory[JournalEntry]{}
-			journal := &occjournal.Stub[JournalEntry]{
+			impl := &occjournal.InMemory[*JournalRecord]{}
+			journal := &occjournal.Stub[*JournalRecord]{
 				Journal: impl,
 				WriteFunc: func(
 					ctx context.Context,
 					offset uint64,
-					entry JournalEntry,
+					rec *JournalRecord,
 				) error {
 					if before != nil {
-						if err := before(entry); err != nil {
+						if err := before(rec); err != nil {
 							before = nil
 							return err
 						}
 					}
 
-					if err := impl.Write(ctx, offset, entry); err != nil {
+					if err := impl.Write(ctx, offset, rec); err != nil {
 						return err
 					}
 
 					if after != nil {
-						if err := after(entry); err != nil {
+						if err := after(rec); err != nil {
 							after = nil
 							return err
 						}
@@ -107,9 +107,9 @@ var _ = Describe("type Queue (idempotence)", func() {
 			nil,
 		),
 		Entry(
-			"enqueue fails before journal entry is written",
-			func(e JournalEntry) error {
-				if _, ok := e.(Enqueue); ok {
+			"enqueue fails before journal record is written",
+			func(rec *JournalRecord) error {
+				if rec.GetEnqueue() != nil {
 					return errors.New("<error>")
 				}
 				return nil
@@ -117,39 +117,19 @@ var _ = Describe("type Queue (idempotence)", func() {
 			nil,
 		),
 		Entry(
-			"enqueue fails after journal entry is written",
+			"enqueue fails after journal record is written",
 			nil,
-			func(e JournalEntry) error {
-				if _, ok := e.(Enqueue); ok {
+			func(rec *JournalRecord) error {
+				if rec.GetEnqueue() != nil {
 					return errors.New("<error>")
 				}
 				return nil
 			},
 		),
 		Entry(
-			"acquire fails before journal entry is written",
-			func(e JournalEntry) error {
-				if _, ok := e.(Acquire); ok {
-					return errors.New("<error>")
-				}
-				return nil
-			},
-			nil,
-		),
-		Entry(
-			"acquire fails after journal entry is written",
-			nil,
-			func(e JournalEntry) error {
-				if _, ok := e.(Acquire); ok {
-					return errors.New("<error>")
-				}
-				return nil
-			},
-		),
-		Entry(
-			"ack fails before journal entry is written",
-			func(e JournalEntry) error {
-				if _, ok := e.(Ack); ok {
+			"acquire fails before journal record is written",
+			func(rec *JournalRecord) error {
+				if rec.GetAcquire() != "" {
 					return errors.New("<error>")
 				}
 				return nil
@@ -157,19 +137,19 @@ var _ = Describe("type Queue (idempotence)", func() {
 			nil,
 		),
 		Entry(
-			"ack fails after journal entry is written",
+			"acquire fails after journal record is written",
 			nil,
-			func(e JournalEntry) error {
-				if _, ok := e.(Ack); ok {
+			func(rec *JournalRecord) error {
+				if rec.GetAcquire() != "" {
 					return errors.New("<error>")
 				}
 				return nil
 			},
 		),
 		Entry(
-			"nack fails before journal entry is written",
-			func(e JournalEntry) error {
-				if _, ok := e.(Nack); ok {
+			"ack fails before journal record is written",
+			func(rec *JournalRecord) error {
+				if rec.GetAck() != "" {
 					return errors.New("<error>")
 				}
 				return nil
@@ -177,10 +157,30 @@ var _ = Describe("type Queue (idempotence)", func() {
 			nil,
 		),
 		Entry(
-			"nack fails after journal entry is written",
+			"ack fails after journal record is written",
 			nil,
-			func(e JournalEntry) error {
-				if _, ok := e.(Nack); ok {
+			func(rec *JournalRecord) error {
+				if rec.GetAck() != "" {
+					return errors.New("<error>")
+				}
+				return nil
+			},
+		),
+		Entry(
+			"nack fails before journal record is written",
+			func(rec *JournalRecord) error {
+				if rec.GetNack() != "" {
+					return errors.New("<error>")
+				}
+				return nil
+			},
+			nil,
+		),
+		Entry(
+			"nack fails after journal record is written",
+			nil,
+			func(rec *JournalRecord) error {
+				if rec.GetNack() != "" {
 					return errors.New("<error>")
 				}
 				return nil

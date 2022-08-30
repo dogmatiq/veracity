@@ -22,7 +22,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 		defer cancel()
 
 		queue := &Queue{
-			Journal: &occjournal.InMemory[JournalEntry]{},
+			Journal: &occjournal.InMemory[*JournalRecord]{},
 		}
 
 		var (
