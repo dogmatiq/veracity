@@ -126,16 +126,16 @@ func (q *Queue) load(ctx context.Context) error {
 	q.messages = map[string]*message{}
 
 	for {
-		rec, next, err := q.Journal.Read(ctx, q.offset)
+		rec, ok, err := q.Journal.Read(ctx, q.offset)
 		if err != nil {
 			return err
 		}
-		if next == q.offset {
+		if !ok {
 			break
 		}
 
 		rec.GetOneOf().(journalRecord).apply(q)
-		q.offset = next
+		q.offset++
 	}
 
 	for id, m := range q.messages {
