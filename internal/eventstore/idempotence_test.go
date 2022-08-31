@@ -45,7 +45,7 @@ var _ = Describe("type EventStore (idempotence)", func() {
 				}
 
 				if !appended {
-					if err := store.Append(ctx, expect); err != nil {
+					if err := store.Write(ctx, expect); err != nil {
 						return err
 					}
 					appended = true
@@ -69,12 +69,12 @@ var _ = Describe("type EventStore (idempotence)", func() {
 			store := &EventStore{
 				Journal: journ,
 			}
-			env, ok, err := store.GetByOffset(ctx, 0)
+			env, ok, err := store.Read(ctx, 0)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeTrue(), "event should be written to event store")
 			Expect(env).To(EqualX(expect))
 
-			_, ok, err = store.GetByOffset(ctx, 1)
+			_, ok, err = store.Read(ctx, 1)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeFalse(), "event should only be written to the event store once")
 		},

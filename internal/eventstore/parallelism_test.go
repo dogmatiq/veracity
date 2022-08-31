@@ -43,7 +43,7 @@ var _ = Describe("type EventStore (parallelism)", func() {
 			}
 
 			for _, env := range expect {
-				if err := s.Append(ctx, env); err != nil {
+				if err := s.Write(ctx, env); err != nil {
 					return err
 				}
 			}
@@ -71,7 +71,7 @@ var _ = Describe("type EventStore (parallelism)", func() {
 
 		var offset uint64
 		for {
-			env, ok, err := store.GetByOffset(ctx, offset)
+			env, ok, err := store.Read(ctx, offset)
 			Expect(err).ShouldNot(HaveOccurred())
 			if !ok {
 				break

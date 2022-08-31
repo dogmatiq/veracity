@@ -16,8 +16,8 @@ type EventStore struct {
 	version uint64
 }
 
-// GetByOffset returns the event at the given offset.
-func (s *EventStore) GetByOffset(
+// Read returns the event at the given offset.
+func (s *EventStore) Read(
 	ctx context.Context,
 	offset uint64,
 ) (*envelopespec.Envelope, bool, error) {
@@ -29,8 +29,8 @@ func (s *EventStore) GetByOffset(
 	return rec.GetAppend().GetEnvelope(), true, nil
 }
 
-// Append appends an event to the store.
-func (s *EventStore) Append(
+// Write appends an event to the store.
+func (s *EventStore) Write(
 	ctx context.Context,
 	env *envelopespec.Envelope,
 ) error {
