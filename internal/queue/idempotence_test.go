@@ -14,42 +14,26 @@ import (
 )
 
 var _ = Describe("type Queue (idempotence)", func() {
+	var (
+		ctx   context.Context
+		journ *journal.Stub[*JournalRecord]
+	)
+
+	BeforeEach(func() {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+		DeferCleanup(cancel)
+
+		journ = &journal.Stub[*JournalRecord]{
+			Journal: &journal.InMemory[*JournalRecord]{},
+		}
+	})
+
 	DescribeTable(
 		"it acknowledges the message exactly once",
-		func(before, after func(*JournalRecord) error) {
-			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-			defer cancel()
-
-			impl := &journal.InMemory[*JournalRecord]{}
-			journ := &journal.Stub[*JournalRecord]{
-				Journal: impl,
-				WriteFunc: func(
-					ctx context.Context,
-					offset uint64,
-					rec *JournalRecord,
-				) (bool, error) {
-					if before != nil {
-						if err := before(rec); err != nil {
-							before = nil
-							return false, err
-						}
-					}
-
-					ok, err := impl.Write(ctx, offset, rec)
-					if !ok || err != nil {
-						return false, err
-					}
-
-					if after != nil {
-						if err := after(rec); err != nil {
-							after = nil
-							return false, err
-						}
-					}
-
-					return true, nil
-				},
-			}
+		func(setup func()) {
+			setup()
+			expectErr := journ.WriteFunc != nil
 
 			env := NewEnvelope("<message>", MessageM1)
 			enqueued := false
@@ -84,16 +68,17 @@ var _ = Describe("type Queue (idempotence)", func() {
 				return queue.Ack(ctx, env.GetMessageId())
 			}
 
-			expectErr := before != nil || after != nil
+			for {
+				err := tick(ctx)
+				if err == nil {
+					break
+				}
 
-		retry:
-			if err := tick(ctx); err != nil {
 				Expect(err).To(MatchError("<error>"))
 				expectErr = false
-				goto retry
 			}
 
-			Expect(expectErr).To(BeFalse(), "process should fail at least once")
+			Expect(expectErr).To(BeFalse(), "at least one error must have occurred")
 
 			queue := &Queue{
 				Journal: journ,
@@ -104,87 +89,158 @@ var _ = Describe("type Queue (idempotence)", func() {
 		},
 		Entry(
 			"no faults",
-			nil,
-			nil,
+			func() {},
 		),
 		Entry(
 			"enqueue fails before journal record is written",
-			func(rec *JournalRecord) error {
-				if rec.GetEnqueue() != nil {
-					return errors.New("<error>")
+			func() {
+				journ.WriteFunc = func(
+					ctx context.Context,
+					ver uint64,
+					rec *JournalRecord,
+				) (bool, error) {
+					if rec.GetEnqueue() != nil {
+						journ.WriteFunc = nil
+						return false, errors.New("<error>")
+					}
+					return journ.Journal.Write(ctx, ver, rec)
 				}
-				return nil
 			},
-			nil,
 		),
 		Entry(
 			"enqueue fails after journal record is written",
-			nil,
-			func(rec *JournalRecord) error {
-				if rec.GetEnqueue() != nil {
-					return errors.New("<error>")
+			func() {
+				journ.WriteFunc = func(
+					ctx context.Context,
+					ver uint64,
+					rec *JournalRecord,
+				) (bool, error) {
+					ok, err := journ.Journal.Write(ctx, ver, rec)
+					if !ok || err != nil {
+						return false, err
+					}
+
+					if rec.GetEnqueue() != nil {
+						journ.WriteFunc = nil
+						return false, errors.New("<error>")
+					}
+
+					return true, nil
 				}
-				return nil
 			},
 		),
 		Entry(
 			"acquire fails before journal record is written",
-			func(rec *JournalRecord) error {
-				if rec.GetAcquire() != nil {
-					return errors.New("<error>")
+			func() {
+				journ.WriteFunc = func(
+					ctx context.Context,
+					ver uint64,
+					rec *JournalRecord,
+				) (bool, error) {
+					if rec.GetAcquire() != nil {
+						journ.WriteFunc = nil
+						return false, errors.New("<error>")
+					}
+					return journ.Journal.Write(ctx, ver, rec)
 				}
-				return nil
 			},
-			nil,
 		),
 		Entry(
 			"acquire fails after journal record is written",
-			nil,
-			func(rec *JournalRecord) error {
-				if rec.GetAcquire() != nil {
-					return errors.New("<error>")
+			func() {
+				journ.WriteFunc = func(
+					ctx context.Context,
+					ver uint64,
+					rec *JournalRecord,
+				) (bool, error) {
+					ok, err := journ.Journal.Write(ctx, ver, rec)
+					if !ok || err != nil {
+						return false, err
+					}
+
+					if rec.GetAcquire() != nil {
+						journ.WriteFunc = nil
+						return false, errors.New("<error>")
+					}
+
+					return true, nil
 				}
-				return nil
 			},
 		),
 		Entry(
 			"ack fails before journal record is written",
-			func(rec *JournalRecord) error {
-				if rec.GetAck() != nil {
-					return errors.New("<error>")
+			func() {
+				journ.WriteFunc = func(
+					ctx context.Context,
+					ver uint64,
+					rec *JournalRecord,
+				) (bool, error) {
+					if rec.GetAck() != nil {
+						journ.WriteFunc = nil
+						return false, errors.New("<error>")
+					}
+					return journ.Journal.Write(ctx, ver, rec)
 				}
-				return nil
 			},
-			nil,
 		),
 		Entry(
 			"ack fails after journal record is written",
-			nil,
-			func(rec *JournalRecord) error {
-				if rec.GetAck() != nil {
-					return errors.New("<error>")
+			func() {
+				journ.WriteFunc = func(
+					ctx context.Context,
+					ver uint64,
+					rec *JournalRecord,
+				) (bool, error) {
+					ok, err := journ.Journal.Write(ctx, ver, rec)
+					if !ok || err != nil {
+						return false, err
+					}
+
+					if rec.GetAck() != nil {
+						journ.WriteFunc = nil
+						return false, errors.New("<error>")
+					}
+
+					return true, nil
 				}
-				return nil
 			},
 		),
 		Entry(
 			"nack fails before journal record is written",
-			func(rec *JournalRecord) error {
-				if rec.GetNack() != nil {
-					return errors.New("<error>")
+			func() {
+				journ.WriteFunc = func(
+					ctx context.Context,
+					ver uint64,
+					rec *JournalRecord,
+				) (bool, error) {
+					if rec.GetNack() != nil {
+						journ.WriteFunc = nil
+						return false, errors.New("<error>")
+					}
+					return journ.Journal.Write(ctx, ver, rec)
 				}
-				return nil
 			},
-			nil,
 		),
 		Entry(
 			"nack fails after journal record is written",
-			nil,
-			func(rec *JournalRecord) error {
-				if rec.GetNack() != nil {
-					return errors.New("<error>")
+			func() {
+				journ.WriteFunc = func(
+					ctx context.Context,
+					ver uint64,
+					rec *JournalRecord,
+				) (bool, error) {
+					ok, err := journ.Journal.Write(ctx, ver, rec)
+					if !ok || err != nil {
+						return false, err
+					}
+
+					if rec.GetNack() != nil {
+						journ.WriteFunc = nil
+						return false, errors.New("<error>")
+					}
+
+					return true, nil
 				}
-				return nil
 			},
 		),
 	)

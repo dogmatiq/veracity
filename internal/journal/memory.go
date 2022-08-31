@@ -40,6 +40,6 @@ func (j *InMemory[R]) Write(ctx context.Context, ver uint64, rec R) (bool, error
 		j.records = append(j.records, rec)
 		return true, ctx.Err()
 	default:
-		panic("offset out of range, this behavior would be undefined in a real journal implementation")
+		panic("version out of range, this behavior would be undefined in a real journal implementation")
 	}
 }

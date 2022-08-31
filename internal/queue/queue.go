@@ -13,7 +13,7 @@ import (
 type Queue struct {
 	Journal journal.Journal[*JournalRecord]
 
-	offset   uint64
+	version  uint64
 	messages map[string]*message
 	queue    pqueue
 }
@@ -41,7 +41,7 @@ func (q *Queue) Enqueue(ctx context.Context, env *envelopespec.Envelope) error {
 func (q *Queue) applyEnqueue(rec *EnqueueRecord) {
 	m := &message{
 		Envelope: rec.GetEnvelope(),
-		Priority: q.offset,
+		Priority: q.version,
 	}
 
 	q.messages[m.Envelope.GetMessageId()] = m
@@ -135,7 +135,7 @@ func (q *Queue) load(ctx context.Context) error {
 	q.messages = map[string]*message{}
 
 	for {
-		rec, ok, err := q.Journal.Read(ctx, q.offset)
+		rec, ok, err := q.Journal.Read(ctx, q.version)
 		if err != nil {
 			return err
 		}
@@ -144,7 +144,7 @@ func (q *Queue) load(ctx context.Context) error {
 		}
 
 		rec.GetOneOf().(journalRecord).apply(q)
-		q.offset++
+		q.version++
 	}
 
 	for id, m := range q.messages {
@@ -165,7 +165,7 @@ func (q *Queue) apply(
 ) error {
 	ok, err := q.Journal.Write(
 		ctx,
-		q.offset,
+		q.version,
 		&JournalRecord{
 			OneOf: rec,
 		},
@@ -178,7 +178,7 @@ func (q *Queue) apply(
 	}
 
 	rec.apply(q)
-	q.offset++
+	q.version++
 
 	return nil
 }
