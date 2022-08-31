@@ -1,0 +1,24 @@
+syntax = "proto3";
+package veracity.aggregate;
+
+import "github.com/dogmatiq/interopspec/envelopespec/envelope.proto";
+
+option go_package = "github.com/dogmatiq/veracity/internal/aggregate";
+
+message JournalRecord {
+  oneof OneOf {
+    RevisionRecord revision = 1;
+    // AcquireRecord acquire = 2;
+    // AckRecord ack = 3;
+    // NackRecord nack = 4;
+  }
+}
+
+message RevisionRecord {
+  string command_id = 1;
+  repeated dogma.interop.v1.envelope.Envelope event_envelopes = 2;
+}
+
+// message AcquireRecord { string message_id = 1; }
+// message AckRecord { string message_id = 1; }
+// message NackRecord { string message_id = 1; }

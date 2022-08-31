@@ -78,7 +78,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 				expectErr = false
 			}
 
-			Expect(expectErr).To(BeFalse(), "at least one error must have occurred")
+			Expect(expectErr).To(BeFalse(), "process should fail at least once")
 
 			queue := &Queue{
 				Journal: journ,
