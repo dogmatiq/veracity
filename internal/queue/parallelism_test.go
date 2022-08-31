@@ -8,6 +8,7 @@ import (
 	"time"
 
 	. "github.com/dogmatiq/dogma/fixtures"
+	"github.com/dogmatiq/interopspec/envelopespec"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
 	"github.com/dogmatiq/veracity/internal/journal"
 	. "github.com/dogmatiq/veracity/internal/queue"
@@ -31,21 +32,23 @@ var _ = Describe("type Queue (parallelism)", func() {
 		)
 
 		var mutex sync.Mutex
-		actual := map[string]struct{}{}
-		expect := map[string]struct{}{}
+		actual := map[string]*envelopespec.Envelope{}
+		expect := map[string]*envelopespec.Envelope{}
 
 		for i := 0; i < messages; i++ {
 			id := fmt.Sprintf("<id-%d>", i)
-			expect[id] = struct{}{}
-
-			env := NewEnvelope(id, MessageM1)
-			err := queue.Enqueue(ctx, env)
-			Expect(err).ShouldNot(HaveOccurred())
+			expect[id] = NewEnvelope(id, MessageM1)
 		}
 
 		tick := func(ctx context.Context) (bool, error) {
 			q := &Queue{
 				Journal: queue.Journal,
+			}
+
+			for _, env := range expect {
+				if err := q.Enqueue(ctx, env); err != nil {
+					return false, err
+				}
 			}
 
 			env, ok, err := q.Acquire(ctx)
@@ -73,7 +76,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 			}
 
 			mutex.Lock()
-			actual[env.GetMessageId()] = struct{}{}
+			actual[env.GetMessageId()] = env
 			mutex.Unlock()
 
 			return false, nil

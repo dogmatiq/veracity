@@ -83,7 +83,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			queue := &Queue{
 				Journal: journ,
 			}
-			_, ok, err := queue.Acquire(context.Background())
+			_, ok, err := queue.Acquire(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeFalse(), "message should be acknowledged")
 		},

@@ -101,7 +101,7 @@ var _ = Describe("type Instance (idempotence)", func() {
 
 			Expect(expectErr).To(BeFalse(), "process should fail at least once")
 
-			_, ok, err := commands.Acquire(context.Background())
+			_, ok, err := commands.Acquire(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeFalse(), "command should be acknowledged")
 		},
