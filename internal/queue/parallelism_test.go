@@ -10,7 +10,7 @@ import (
 	. "github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/interopspec/envelopespec"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
-	"github.com/dogmatiq/veracity/internal/journal"
+	"github.com/dogmatiq/veracity/internal/persistence/journal"
 	. "github.com/dogmatiq/veracity/internal/queue"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

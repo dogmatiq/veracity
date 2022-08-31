@@ -7,7 +7,7 @@ import (
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/internal/envelope"
-	"github.com/dogmatiq/veracity/internal/journal"
+	"github.com/dogmatiq/veracity/internal/persistence/journal"
 )
 
 // Acknowledger is a function that acknowledges a queued message.

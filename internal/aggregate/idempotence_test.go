@@ -11,7 +11,7 @@ import (
 	. "github.com/dogmatiq/veracity/internal/aggregate"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
-	"github.com/dogmatiq/veracity/internal/journal"
+	"github.com/dogmatiq/veracity/internal/persistence/journal"
 	"github.com/dogmatiq/veracity/internal/queue"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

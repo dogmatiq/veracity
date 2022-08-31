@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/dogmatiq/interopspec/envelopespec"
-	"github.com/dogmatiq/veracity/internal/journal"
+	"github.com/dogmatiq/veracity/internal/persistence/journal"
 )
 
 // EventStore is a durable, ordered event store.
