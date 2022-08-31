@@ -32,12 +32,14 @@ var _ = Describe("type Queue (parallelism)", func() {
 		)
 
 		var mutex sync.Mutex
-		actual := map[string]*envelopespec.Envelope{}
-		expect := map[string]*envelopespec.Envelope{}
+		actual := map[string]int{}
+		expect := map[string]int{}
+		var envelopes []*envelopespec.Envelope
 
 		for i := 0; i < messages; i++ {
 			id := fmt.Sprintf("<id-%d>", i)
-			expect[id] = NewEnvelope(id, MessageM1)
+			expect[id] = 1
+			envelopes = append(envelopes, NewEnvelope(id, MessageM1))
 		}
 
 		tick := func(ctx context.Context) (bool, error) {
@@ -45,7 +47,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 				Journal: queue.Journal,
 			}
 
-			for _, env := range expect {
+			for _, env := range envelopes {
 				if err := q.Enqueue(ctx, env); err != nil {
 					return false, err
 				}
@@ -76,7 +78,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 			}
 
 			mutex.Lock()
-			actual[env.GetMessageId()] = env
+			actual[env.GetMessageId()]++
 			mutex.Unlock()
 
 			return false, nil
