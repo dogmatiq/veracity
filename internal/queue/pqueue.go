@@ -8,7 +8,6 @@ import (
 type message struct {
 	Envelope *envelopespec.Envelope
 	Priority uint64
-	Acquired bool
 
 	index int
 }

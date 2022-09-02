@@ -13,6 +13,7 @@ import (
 	. "github.com/jmalloc/gomegax"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/zap"
 )
 
 var _ = Describe("type Queue", func() {
@@ -28,6 +29,7 @@ var _ = Describe("type Queue", func() {
 
 		queue = &Queue{
 			Journal: &journal.InMemory[*JournalRecord]{},
+			Logger:  zap.NewExample(),
 		}
 	})
 

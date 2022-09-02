@@ -14,6 +14,7 @@ import (
 	. "github.com/dogmatiq/veracity/internal/queue"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -24,6 +25,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 
 		queue := &Queue{
 			Journal: &journal.InMemory[*JournalRecord]{},
+			Logger:  zap.NewExample(),
 		}
 
 		var (
@@ -45,6 +47,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 		tick := func(ctx context.Context) (bool, error) {
 			q := &Queue{
 				Journal: queue.Journal,
+				Logger:  zap.NewNop(),
 			}
 
 			for _, env := range envelopes {

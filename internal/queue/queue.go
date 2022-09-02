@@ -7,14 +7,17 @@ import (
 
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/internal/persistence/journal"
+	"go.uber.org/zap"
 )
 
 // Queue is a durable, ordered queue of messages.
 type Queue struct {
 	Journal journal.Journal[*JournalRecord]
+	Logger  *zap.Logger
 
 	version  uint64
 	messages map[string]*message
+	acquired map[string]*message
 	queue    pqueue
 }
 
@@ -44,8 +47,15 @@ func (q *Queue) applyEnqueue(rec *EnqueueRecord) {
 		Priority: q.version,
 	}
 
-	q.messages[m.Envelope.GetMessageId()] = m
+	id := m.Envelope.GetMessageId()
+	q.messages[id] = m
 	heap.Push(&q.queue, m)
+
+	q.Logger.Debug(
+		"message added to queue",
+		zap.String("id", id),
+		zap.String("type", m.Envelope.GetPortableName()),
+	)
 }
 
 // Acquire acquires a message from the queue for processing.
@@ -77,15 +87,22 @@ func (q *Queue) Acquire(ctx context.Context) (env *envelopespec.Envelope, ok boo
 }
 
 func (q *Queue) applyAcquire(rec *AcquireRecord) {
-	m := q.messages[rec.GetMessageId()]
+	id := rec.GetMessageId()
+	m := q.messages[id]
+	q.acquired[id] = m
 	heap.Remove(&q.queue, m.index)
-	m.Acquired = true
+
+	q.Logger.Debug(
+		"message acquired from queue",
+		zap.String("id", id),
+		zap.String("type", m.Envelope.GetPortableName()),
+	)
 }
 
 // Ack acknowledges a previously acquired message, permanently removing it from
 // the queue.
 func (q *Queue) Ack(ctx context.Context, id string) error {
-	if !q.messages[id].Acquired {
+	if _, ok := q.acquired[id]; !ok {
 		panic("message has not been acquired")
 	}
 
@@ -100,13 +117,20 @@ func (q *Queue) Ack(ctx context.Context, id string) error {
 }
 
 func (q *Queue) applyAck(rec *AckRecord) {
-	q.messages[rec.GetMessageId()] = nil
+	id := rec.GetMessageId()
+	q.messages[id] = nil
+	delete(q.acquired, id)
+
+	q.Logger.Debug(
+		"message removed from queue (ack)",
+		zap.String("id", id),
+	)
 }
 
 // Nack negatively acknowledges a previously acquired message, returning it to
 // the queue so that it may be re-acquired.
 func (q *Queue) Nack(ctx context.Context, id string) error {
-	if !q.messages[id].Acquired {
+	if _, ok := q.acquired[id]; !ok {
 		panic("message has not been acquired")
 	}
 
@@ -121,9 +145,15 @@ func (q *Queue) Nack(ctx context.Context, id string) error {
 }
 
 func (q *Queue) applyNack(rec *NackRecord) {
-	m := q.messages[rec.GetMessageId()]
-	m.Acquired = false
+	id := rec.GetMessageId()
+	m := q.acquired[id]
+	delete(q.acquired, id)
 	heap.Push(&q.queue, m)
+
+	q.Logger.Debug(
+		"message returned to queue (nack)",
+		zap.String("id", id),
+	)
 }
 
 // load reads all entries from the journal and applies them to the queue.
@@ -133,6 +163,7 @@ func (q *Queue) load(ctx context.Context) error {
 	}
 
 	q.messages = map[string]*message{}
+	q.acquired = map[string]*message{}
 
 	for {
 		rec, ok, err := q.Journal.Read(ctx, q.version)
@@ -147,13 +178,16 @@ func (q *Queue) load(ctx context.Context) error {
 		q.version++
 	}
 
-	for id, m := range q.messages {
-		if m != nil && m.Acquired {
-			if err := q.Nack(ctx, id); err != nil {
-				return err
-			}
+	for id := range q.acquired {
+		if err := q.Nack(ctx, id); err != nil {
+			return err
 		}
 	}
+
+	q.Logger.Debug(
+		"loaded queue from journal",
+		zap.Int("size", q.queue.Len()),
+	)
 
 	return nil
 }

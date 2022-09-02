@@ -11,6 +11,7 @@ import (
 	. "github.com/dogmatiq/veracity/internal/queue"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/zap"
 )
 
 var _ = Describe("type Queue (idempotence)", func() {
@@ -41,6 +42,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			tick := func(ctx context.Context) error {
 				queue := &Queue{
 					Journal: journ,
+					Logger:  zap.NewExample(),
 				}
 
 				if !enqueued {
@@ -82,6 +84,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 
 			queue := &Queue{
 				Journal: journ,
+				Logger:  zap.NewExample(),
 			}
 			_, ok, err := queue.Acquire(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
