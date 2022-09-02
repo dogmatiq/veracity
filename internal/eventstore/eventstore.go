@@ -6,11 +6,13 @@ import (
 
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/internal/persistence/journal"
+	"go.uber.org/zap"
 )
 
 // EventStore is a durable, ordered event store.
 type EventStore struct {
 	Journal journal.Journal[*JournalRecord]
+	Logger  *zap.Logger
 
 	events  map[string]struct{}
 	version uint64
@@ -53,7 +55,15 @@ func (s *EventStore) Write(
 }
 
 func (s *EventStore) applyAppend(rec *AppendRecord) {
-	s.events[rec.GetEnvelope().GetMessageId()] = struct{}{}
+	id := rec.GetEnvelope().GetMessageId()
+	s.events[id] = struct{}{}
+
+	s.Logger.Debug(
+		"event written to event store",
+		zap.String("id", id),
+		zap.String("type", rec.GetEnvelope().GetPortableName()),
+		zap.Uint64("version", s.version),
+	)
 }
 
 // load reads all entries from the journal and applies them to the store.
@@ -73,9 +83,14 @@ func (s *EventStore) load(ctx context.Context) error {
 			break
 		}
 
-		rec.GetOneOf().(journalRecord).apply(s)
 		s.version++
+		rec.GetOneOf().(journalRecord).apply(s)
 	}
+
+	s.Logger.Debug(
+		"loaded event store from journal",
+		zap.Uint64("version", s.version),
+	)
 
 	return nil
 }

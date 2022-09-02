@@ -55,6 +55,7 @@ func (q *Queue) applyEnqueue(rec *EnqueueRecord) {
 		"message added to queue",
 		zap.String("id", id),
 		zap.String("type", m.Envelope.GetPortableName()),
+		zap.Uint64("version", q.version),
 	)
 }
 
@@ -96,6 +97,7 @@ func (q *Queue) applyAcquire(rec *AcquireRecord) {
 		"message acquired from queue",
 		zap.String("id", id),
 		zap.String("type", m.Envelope.GetPortableName()),
+		zap.Uint64("version", q.version),
 	)
 }
 
@@ -124,6 +126,7 @@ func (q *Queue) applyAck(rec *AckRecord) {
 	q.Logger.Debug(
 		"message removed from queue (ack)",
 		zap.String("id", id),
+		zap.Uint64("version", q.version),
 	)
 }
 
@@ -153,6 +156,7 @@ func (q *Queue) applyNack(rec *NackRecord) {
 	q.Logger.Debug(
 		"message returned to queue (nack)",
 		zap.String("id", id),
+		zap.Uint64("version", q.version),
 	)
 }
 
@@ -174,8 +178,8 @@ func (q *Queue) load(ctx context.Context) error {
 			break
 		}
 
-		rec.GetOneOf().(journalRecord).apply(q)
 		q.version++
+		rec.GetOneOf().(journalRecord).apply(q)
 	}
 
 	for id := range q.acquired {
@@ -187,6 +191,7 @@ func (q *Queue) load(ctx context.Context) error {
 	q.Logger.Debug(
 		"loaded queue from journal",
 		zap.Int("size", q.queue.Len()),
+		zap.Uint64("version", q.version),
 	)
 
 	return nil

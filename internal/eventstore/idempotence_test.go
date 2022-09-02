@@ -12,6 +12,7 @@ import (
 	. "github.com/jmalloc/gomegax"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/zap"
 )
 
 var _ = Describe("type EventStore (idempotence)", func() {
@@ -42,6 +43,7 @@ var _ = Describe("type EventStore (idempotence)", func() {
 			tick := func(ctx context.Context) error {
 				store := &EventStore{
 					Journal: journ,
+					Logger:  zap.NewExample(),
 				}
 
 				if !appended {

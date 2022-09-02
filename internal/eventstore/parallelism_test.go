@@ -13,6 +13,7 @@ import (
 	"github.com/dogmatiq/veracity/internal/persistence/journal"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -23,6 +24,7 @@ var _ = Describe("type EventStore (parallelism)", func() {
 
 		store := &EventStore{
 			Journal: &journal.InMemory[*JournalRecord]{},
+			Logger:  zap.NewExample(),
 		}
 
 		var (
@@ -40,6 +42,7 @@ var _ = Describe("type EventStore (parallelism)", func() {
 		tick := func(ctx context.Context) error {
 			s := &EventStore{
 				Journal: store.Journal,
+				Logger:  zap.NewNop(),
 			}
 
 			for _, env := range expect {
