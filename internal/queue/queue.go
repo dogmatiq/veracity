@@ -4,8 +4,11 @@ import (
 	"container/heap"
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/dogmatiq/interopspec/envelopespec"
+	"github.com/dogmatiq/veracity/internal/filter"
+	"github.com/dogmatiq/veracity/internal/logging"
 	"github.com/dogmatiq/veracity/internal/persistence/journal"
 	"go.uber.org/zap"
 )
@@ -27,43 +30,35 @@ func (q *Queue) Enqueue(ctx context.Context, envelopes ...*envelopespec.Envelope
 		return err
 	}
 
-	rec := &JournalRecord_Enqueue{
-		Enqueue: &EnqueueRecord{},
-	}
+	envelopes = filter.Slice(
+		envelopes,
+		func(env *envelopespec.Envelope) bool {
+			if _, ok := q.messages[env.GetMessageId()]; ok {
+				q.log("message ignored because it is already enqueued", env)
+				return false
+			}
 
-	for _, env := range envelopes {
-		if _, ok := q.messages[env.GetMessageId()]; ok {
-			q.Logger.Debug(
-				"message ignored because it is already enqueued",
-				zap.Uint64("queue_version", q.version),
-				zap.Int("queue_size", q.len()),
-				zap.String("message_id", env.GetMessageId()),
-				zap.String("message_type", env.GetPortableName()),
-				zap.String("message_desc", env.GetDescription()),
-			)
-			continue
-		}
+			return true
+		},
+	)
 
-		rec.Enqueue.Envelopes = append(rec.Enqueue.Envelopes, env)
-	}
-
-	if len(rec.Enqueue.Envelopes) == 0 {
+	if len(envelopes) == 0 {
 		return nil
 	}
 
-	if err := q.apply(ctx, rec); err != nil {
-		return err
+	if err := q.apply(
+		ctx,
+		&JournalRecord_Enqueue{
+			Enqueue: &EnqueueRecord{
+				Envelopes: envelopes,
+			},
+		},
+	); err != nil {
+		return fmt.Errorf("unable to enqueue messages: %w", err)
 	}
 
-	for _, env := range rec.Enqueue.GetEnvelopes() {
-		q.Logger.Debug(
-			"message enqueued",
-			zap.Uint64("queue_version", q.version),
-			zap.Int("queue_size", q.len()),
-			zap.String("message_id", env.GetMessageId()),
-			zap.String("message_type", env.GetPortableName()),
-			zap.String("message_desc", env.GetDescription()),
-		)
+	for _, env := range envelopes {
+		q.log("message enqueued", env)
 	}
 
 	return nil
@@ -108,17 +103,10 @@ func (q *Queue) Acquire(ctx context.Context) (env *envelopespec.Envelope, ok boo
 			},
 		},
 	); err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("unable to acquire message: %w", err)
 	}
 
-	q.Logger.Debug(
-		"message acquired",
-		zap.Uint64("queue_version", q.version),
-		zap.Int("queue_size", q.len()),
-		zap.String("message_id", env.GetMessageId()),
-		zap.String("message_type", env.GetPortableName()),
-		zap.String("message_desc", env.GetDescription()),
-	)
+	q.log("message acquired", env)
 
 	return env, true, nil
 }
@@ -146,17 +134,10 @@ func (q *Queue) Ack(ctx context.Context, id string) error {
 			},
 		},
 	); err != nil {
-		return err
+		return fmt.Errorf("unable to acknowledge message: %w", err)
 	}
 
-	q.Logger.Debug(
-		"message acknowledged",
-		zap.Uint64("queue_version", q.version),
-		zap.Int("queue_size", q.len()),
-		zap.String("message_id", m.Envelope.GetMessageId()),
-		zap.String("message_type", m.Envelope.GetPortableName()),
-		zap.String("message_desc", m.Envelope.GetDescription()),
-	)
+	q.log("message acknowledged", m.Envelope)
 
 	return nil
 }
@@ -183,17 +164,10 @@ func (q *Queue) Reject(ctx context.Context, id string) error {
 			},
 		},
 	); err != nil {
-		return err
+		return fmt.Errorf("unable to reject message: %w", err)
 	}
 
-	q.Logger.Debug(
-		"message rejected",
-		zap.Uint64("queue_version", q.version),
-		zap.Int("queue_size", q.len()),
-		zap.String("message_id", id),
-		zap.String("message_type", m.Envelope.GetPortableName()),
-		zap.String("message_desc", m.Envelope.GetDescription()),
-	)
+	q.log("message rejected", m.Envelope)
 
 	return nil
 }
@@ -203,11 +177,6 @@ func (q *Queue) applyReject(rec *RejectRecord) {
 	m := q.acquired[id]
 	delete(q.acquired, id)
 	heap.Push(&q.queue, m)
-}
-
-// len returns the number of messages on the queue.
-func (q *Queue) len() int {
-	return q.queue.Len() + len(q.acquired)
 }
 
 // load reads all entries from the journal and applies them to the queue.
@@ -222,14 +191,14 @@ func (q *Queue) load(ctx context.Context) error {
 	for {
 		rec, ok, err := q.Journal.Read(ctx, q.version)
 		if err != nil {
-			return err
+			return fmt.Errorf("unable to load queue: %w", err)
 		}
 		if !ok {
 			break
 		}
 
-		q.version++
 		rec.GetOneOf().(journalRecord).apply(q)
+		q.version++
 	}
 
 	n := len(q.acquired)
@@ -239,11 +208,10 @@ func (q *Queue) load(ctx context.Context) error {
 		}
 	}
 
-	q.Logger.Debug(
+	q.log(
 		"loaded queue from journal",
-		zap.Uint64("queue_version", q.version),
-		zap.Int("queue_size", q.len()),
-		zap.Int("requeue_count", n),
+		nil,
+		zap.Int("unacknowledged_count", n),
 	)
 
 	return nil
@@ -272,6 +240,25 @@ func (q *Queue) apply(
 	q.version++
 
 	return nil
+}
+
+func (q *Queue) log(
+	m string,
+	env *envelopespec.Envelope,
+	fields ...zap.Field,
+) {
+	if x := q.Logger.Check(zap.DebugLevel, m); x != nil {
+		f := []zap.Field{
+			zap.Namespace("queue"),
+			zap.Uint64("version", q.version),
+			zap.Int("size", q.queue.Len()+len(q.acquired)),
+		}
+
+		f = append(f, fields...)
+		f = append(f, logging.EnvelopeFields(env)...)
+
+		x.Write(f...)
+	}
 }
 
 type journalRecord interface {

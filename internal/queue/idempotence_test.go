@@ -6,6 +6,7 @@ import (
 	"time"
 
 	. "github.com/dogmatiq/dogma/fixtures"
+	"github.com/dogmatiq/interopspec/envelopespec"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
 	"github.com/dogmatiq/veracity/internal/logging"
 	"github.com/dogmatiq/veracity/internal/persistence/journal"
@@ -36,7 +37,10 @@ var _ = Describe("type Queue (idempotence)", func() {
 			setup()
 			expectErr := journ.WriteFunc != nil
 
-			env := NewEnvelope("<message>", MessageM1)
+			envelopes := []*envelopespec.Envelope{
+				NewEnvelope("<message-1>", MessageM1),
+				NewEnvelope("<message-2>", MessageM2),
+			}
 			enqueued := false
 
 			tick := func(ctx context.Context) error {
@@ -46,7 +50,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 				}
 
 				if !enqueued {
-					if err := queue.Enqueue(ctx, env); err != nil {
+					if err := queue.Enqueue(ctx, envelopes...); err != nil {
 						return err
 					}
 					enqueued = true
@@ -70,13 +74,15 @@ var _ = Describe("type Queue (idempotence)", func() {
 				return queue.Ack(ctx, env.GetMessageId())
 			}
 
-			for {
+			acks := 0
+			for acks < len(envelopes) {
 				err := tick(ctx)
 				if err == nil {
-					break
+					acks++
+					continue
 				}
 
-				Expect(err).To(MatchError("<error>"))
+				Expect(err).To(MatchError(ContainSubstring("<error>")))
 				expectErr = false
 			}
 

@@ -185,4 +185,30 @@ var _ = Describe("type Queue", func() {
 			"acquired messages should be in the same order as they enqueued",
 		)
 	})
+
+	It("allows enqueuing multiple messages", func() {
+		expect := []*envelopespec.Envelope{
+			NewEnvelope("<id-1>", MessageM1),
+			NewEnvelope("<id-2>", MessageM2),
+		}
+
+		err := queue.Enqueue(ctx, expect...)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		var actual []*envelopespec.Envelope
+		for {
+			env, ok, err := queue.Acquire(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+			if !ok {
+				break
+			}
+			actual = append(actual, env)
+		}
+
+		var matchers []any
+		for _, env := range expect {
+			matchers = append(matchers, EqualX(env))
+		}
+		Expect(actual).To(ConsistOf(matchers...))
+	})
 })
