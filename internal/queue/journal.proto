@@ -10,11 +10,11 @@ message JournalRecord {
     EnqueueRecord enqueue = 1;
     AcquireRecord acquire = 2;
     AckRecord ack = 3;
-    NackRecord nack = 4;
+    RejectRecord reject = 4;
   }
 }
 
-message EnqueueRecord { dogma.interop.v1.envelope.Envelope envelope = 1; }
+message EnqueueRecord { repeated dogma.interop.v1.envelope.Envelope envelopes = 1; }
 message AcquireRecord { string message_id = 1; }
 message AckRecord { string message_id = 1; }
-message NackRecord { string message_id = 1; }
+message RejectRecord { string message_id = 1; }

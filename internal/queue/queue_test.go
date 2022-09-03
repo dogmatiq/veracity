@@ -8,12 +8,12 @@ import (
 	. "github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/interopspec/envelopespec"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
+	"github.com/dogmatiq/veracity/internal/logging"
 	"github.com/dogmatiq/veracity/internal/persistence/journal"
 	. "github.com/dogmatiq/veracity/internal/queue"
 	. "github.com/jmalloc/gomegax"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/zap"
 )
 
 var _ = Describe("type Queue", func() {
@@ -29,7 +29,7 @@ var _ = Describe("type Queue", func() {
 
 		queue = &Queue{
 			Journal: &journal.InMemory[*JournalRecord]{},
-			Logger:  zap.NewExample(),
+			Logger:  logging.NewTesting(),
 		}
 	})
 
@@ -57,7 +57,7 @@ var _ = Describe("type Queue", func() {
 		Expect(ok).To(BeFalse(), "queue should be empty")
 	})
 
-	It("removes a message from the queue when it is ack'd", func() {
+	It("removes a message from the queue when it is acknowledged", func() {
 		err := queue.Enqueue(ctx, NewEnvelope("<id>", MessageM1))
 		Expect(err).ShouldNot(HaveOccurred())
 
@@ -73,7 +73,7 @@ var _ = Describe("type Queue", func() {
 		Expect(ok).To(BeFalse(), "queue should be empty")
 	})
 
-	It("allows re-acquiring a message that has been nack'd", func() {
+	It("allows re-acquiring a message that has been rejected", func() {
 		err := queue.Enqueue(ctx, NewEnvelope("<id>", MessageM1))
 		Expect(err).ShouldNot(HaveOccurred())
 
@@ -81,7 +81,7 @@ var _ = Describe("type Queue", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(ok).To(BeTrue(), "queue should not be empty")
 
-		err = queue.Nack(ctx, expect.GetMessageId())
+		err = queue.Reject(ctx, expect.GetMessageId())
 		Expect(err).ShouldNot(HaveOccurred())
 
 		actual, ok, err := queue.Acquire(ctx)
@@ -125,7 +125,7 @@ var _ = Describe("type Queue", func() {
 		)
 	})
 
-	It("acquires nack'd messages in the order they were enqueued", func() {
+	It("acquires rejected messages in the order they were enqueued", func() {
 		var expect []string
 		By("enqueueing several messages", func() {
 			envelopes := []*envelopespec.Envelope{
@@ -153,7 +153,7 @@ var _ = Describe("type Queue", func() {
 			}
 		})
 
-		By("nack'ing the messages in a random order", func() {
+		By("rejecting the messages in a random order", func() {
 			rand.Shuffle(
 				len(acquired),
 				func(i, j int) {
@@ -162,7 +162,7 @@ var _ = Describe("type Queue", func() {
 			)
 
 			for _, id := range acquired {
-				err := queue.Nack(ctx, id)
+				err := queue.Reject(ctx, id)
 				Expect(err).ShouldNot(HaveOccurred())
 			}
 		})

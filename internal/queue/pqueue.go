@@ -1,8 +1,6 @@
 package queue
 
-import (
-	"github.com/dogmatiq/interopspec/envelopespec"
-)
+import "github.com/dogmatiq/interopspec/envelopespec"
 
 // message represents a message on a queue.
 type message struct {

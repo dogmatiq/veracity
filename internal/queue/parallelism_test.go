@@ -10,6 +10,7 @@ import (
 	. "github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/interopspec/envelopespec"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
+	"github.com/dogmatiq/veracity/internal/logging"
 	"github.com/dogmatiq/veracity/internal/persistence/journal"
 	. "github.com/dogmatiq/veracity/internal/queue"
 	. "github.com/onsi/ginkgo/v2"
@@ -25,7 +26,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 
 		queue := &Queue{
 			Journal: &journal.InMemory[*JournalRecord]{},
-			Logger:  zap.NewExample(),
+			Logger:  logging.NewTesting(),
 		}
 
 		var (
@@ -64,7 +65,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 				return true, nil
 			}
 
-			if err = q.Nack(ctx, env.GetMessageId()); err != nil {
+			if err = q.Reject(ctx, env.GetMessageId()); err != nil {
 				return false, err
 			}
 

@@ -7,11 +7,11 @@ import (
 
 	. "github.com/dogmatiq/dogma/fixtures"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
+	"github.com/dogmatiq/veracity/internal/logging"
 	"github.com/dogmatiq/veracity/internal/persistence/journal"
 	. "github.com/dogmatiq/veracity/internal/queue"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/zap"
 )
 
 var _ = Describe("type Queue (idempotence)", func() {
@@ -42,7 +42,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			tick := func(ctx context.Context) error {
 				queue := &Queue{
 					Journal: journ,
-					Logger:  zap.NewExample(),
+					Logger:  logging.NewTesting(),
 				}
 
 				if !enqueued {
@@ -57,7 +57,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 					return err
 				}
 
-				err = queue.Nack(ctx, env.GetMessageId())
+				err = queue.Reject(ctx, env.GetMessageId())
 				if err != nil {
 					return err
 				}
@@ -84,7 +84,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 
 			queue := &Queue{
 				Journal: journ,
-				Logger:  zap.NewExample(),
+				Logger:  logging.NewTesting(),
 			}
 			_, ok, err := queue.Acquire(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -171,7 +171,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			},
 		),
 		Entry(
-			"ack fails before journal record is written",
+			"acknowledge fails before journal record is written",
 			func() {
 				journ.WriteFunc = func(
 					ctx context.Context,
@@ -187,7 +187,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			},
 		),
 		Entry(
-			"ack fails after journal record is written",
+			"acknowledge fails after journal record is written",
 			func() {
 				journ.WriteFunc = func(
 					ctx context.Context,
@@ -209,14 +209,14 @@ var _ = Describe("type Queue (idempotence)", func() {
 			},
 		),
 		Entry(
-			"nack fails before journal record is written",
+			"reject fails before journal record is written",
 			func() {
 				journ.WriteFunc = func(
 					ctx context.Context,
 					ver uint64,
 					rec *JournalRecord,
 				) (bool, error) {
-					if rec.GetNack() != nil {
+					if rec.GetReject() != nil {
 						journ.WriteFunc = nil
 						return false, errors.New("<error>")
 					}
@@ -225,7 +225,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			},
 		),
 		Entry(
-			"nack fails after journal record is written",
+			"reject fails after journal record is written",
 			func() {
 				journ.WriteFunc = func(
 					ctx context.Context,
@@ -237,7 +237,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 						return false, err
 					}
 
-					if rec.GetNack() != nil {
+					if rec.GetReject() != nil {
 						journ.WriteFunc = nil
 						return false, errors.New("<error>")
 					}

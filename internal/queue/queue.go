@@ -21,51 +21,74 @@ type Queue struct {
 	queue    pqueue
 }
 
-// Enqueue adds a message to the queue.
-func (q *Queue) Enqueue(ctx context.Context, env *envelopespec.Envelope) error {
+// Enqueue adds messages to the queue.
+func (q *Queue) Enqueue(ctx context.Context, envelopes ...*envelopespec.Envelope) error {
 	if err := q.load(ctx); err != nil {
 		return err
 	}
 
-	if _, ok := q.messages[env.GetMessageId()]; ok {
+	rec := &JournalRecord_Enqueue{
+		Enqueue: &EnqueueRecord{},
+	}
+
+	for _, env := range envelopes {
+		if _, ok := q.messages[env.GetMessageId()]; ok {
+			q.Logger.Debug(
+				"message ignored because it is already enqueued",
+				zap.Uint64("queue_version", q.version),
+				zap.Int("queue_size", q.len()),
+				zap.String("message_id", env.GetMessageId()),
+				zap.String("message_type", env.GetPortableName()),
+				zap.String("message_desc", env.GetDescription()),
+			)
+			continue
+		}
+
+		rec.Enqueue.Envelopes = append(rec.Enqueue.Envelopes, env)
+	}
+
+	if len(rec.Enqueue.Envelopes) == 0 {
 		return nil
 	}
 
-	return q.apply(
-		ctx,
-		&JournalRecord_Enqueue{
-			Enqueue: &EnqueueRecord{
-				Envelope: env,
-			},
-		},
-	)
+	if err := q.apply(ctx, rec); err != nil {
+		return err
+	}
+
+	for _, env := range rec.Enqueue.GetEnvelopes() {
+		q.Logger.Debug(
+			"message enqueued",
+			zap.Uint64("queue_version", q.version),
+			zap.Int("queue_size", q.len()),
+			zap.String("message_id", env.GetMessageId()),
+			zap.String("message_type", env.GetPortableName()),
+			zap.String("message_desc", env.GetDescription()),
+		)
+	}
+
+	return nil
 }
 
 func (q *Queue) applyEnqueue(rec *EnqueueRecord) {
-	m := &message{
-		Envelope: rec.GetEnvelope(),
-		Priority: q.version,
+	for _, env := range rec.GetEnvelopes() {
+		m := &message{
+			Envelope: env,
+			Priority: q.version,
+		}
+
+		id := m.Envelope.GetMessageId()
+		q.messages[id] = m
+		heap.Push(&q.queue, m)
 	}
-
-	id := m.Envelope.GetMessageId()
-	q.messages[id] = m
-	heap.Push(&q.queue, m)
-
-	q.Logger.Debug(
-		"message added to queue",
-		zap.String("id", id),
-		zap.String("type", m.Envelope.GetPortableName()),
-		zap.Uint64("version", q.version),
-	)
 }
 
 // Acquire acquires a message from the queue for processing.
 //
-// If the queue is empty ok is false; otherwise, p is the next unacquired
+// If the queue is empty ok is false; otherwise, env is the next unacquired
 // message in the queue.
 //
 // The message must be subsequently removed from the queue or returned to the
-// pool of unacquired messages by calling Ack() or Nack(), respectively.
+// pool of unacquired messages by calling Ack() or Reject(), respectively.
 func (q *Queue) Acquire(ctx context.Context) (env *envelopespec.Envelope, ok bool, err error) {
 	if err := q.load(ctx); err != nil {
 		return nil, false, err
@@ -77,14 +100,27 @@ func (q *Queue) Acquire(ctx context.Context) (env *envelopespec.Envelope, ok boo
 
 	env = q.queue.Peek()
 
-	return env, true, q.apply(
+	if err := q.apply(
 		ctx,
 		&JournalRecord_Acquire{
 			Acquire: &AcquireRecord{
 				MessageId: env.GetMessageId(),
 			},
 		},
+	); err != nil {
+		return nil, false, err
+	}
+
+	q.Logger.Debug(
+		"message acquired",
+		zap.Uint64("queue_version", q.version),
+		zap.Int("queue_size", q.len()),
+		zap.String("message_id", env.GetMessageId()),
+		zap.String("message_type", env.GetPortableName()),
+		zap.String("message_desc", env.GetDescription()),
 	)
+
+	return env, true, nil
 }
 
 func (q *Queue) applyAcquire(rec *AcquireRecord) {
@@ -92,72 +128,86 @@ func (q *Queue) applyAcquire(rec *AcquireRecord) {
 	m := q.messages[id]
 	q.acquired[id] = m
 	heap.Remove(&q.queue, m.index)
-
-	q.Logger.Debug(
-		"message acquired from queue",
-		zap.String("id", id),
-		zap.String("type", m.Envelope.GetPortableName()),
-		zap.Uint64("version", q.version),
-	)
 }
 
 // Ack acknowledges a previously acquired message, permanently removing it from
 // the queue.
 func (q *Queue) Ack(ctx context.Context, id string) error {
-	if _, ok := q.acquired[id]; !ok {
+	m, ok := q.acquired[id]
+	if !ok {
 		panic("message has not been acquired")
 	}
 
-	return q.apply(
+	if err := q.apply(
 		ctx,
 		&JournalRecord_Ack{
 			Ack: &AckRecord{
 				MessageId: id,
 			},
 		},
+	); err != nil {
+		return err
+	}
+
+	q.Logger.Debug(
+		"message acknowledged",
+		zap.Uint64("queue_version", q.version),
+		zap.Int("queue_size", q.len()),
+		zap.String("message_id", m.Envelope.GetMessageId()),
+		zap.String("message_type", m.Envelope.GetPortableName()),
+		zap.String("message_desc", m.Envelope.GetDescription()),
 	)
+
+	return nil
 }
 
 func (q *Queue) applyAck(rec *AckRecord) {
 	id := rec.GetMessageId()
 	q.messages[id] = nil
 	delete(q.acquired, id)
-
-	q.Logger.Debug(
-		"message removed from queue (ack)",
-		zap.String("id", id),
-		zap.Uint64("version", q.version),
-	)
 }
 
-// Nack negatively acknowledges a previously acquired message, returning it to
-// the queue so that it may be re-acquired.
-func (q *Queue) Nack(ctx context.Context, id string) error {
-	if _, ok := q.acquired[id]; !ok {
+// Reject returns previously acquired message to the queue so that it may be
+// re-acquired.
+func (q *Queue) Reject(ctx context.Context, id string) error {
+	m, ok := q.acquired[id]
+	if !ok {
 		panic("message has not been acquired")
 	}
 
-	return q.apply(
+	if err := q.apply(
 		ctx,
-		&JournalRecord_Nack{
-			Nack: &NackRecord{
+		&JournalRecord_Reject{
+			Reject: &RejectRecord{
 				MessageId: id,
 			},
 		},
+	); err != nil {
+		return err
+	}
+
+	q.Logger.Debug(
+		"message rejected",
+		zap.Uint64("queue_version", q.version),
+		zap.Int("queue_size", q.len()),
+		zap.String("message_id", id),
+		zap.String("message_type", m.Envelope.GetPortableName()),
+		zap.String("message_desc", m.Envelope.GetDescription()),
 	)
+
+	return nil
 }
 
-func (q *Queue) applyNack(rec *NackRecord) {
+func (q *Queue) applyReject(rec *RejectRecord) {
 	id := rec.GetMessageId()
 	m := q.acquired[id]
 	delete(q.acquired, id)
 	heap.Push(&q.queue, m)
+}
 
-	q.Logger.Debug(
-		"message returned to queue (nack)",
-		zap.String("id", id),
-		zap.Uint64("version", q.version),
-	)
+// len returns the number of messages on the queue.
+func (q *Queue) len() int {
+	return q.queue.Len() + len(q.acquired)
 }
 
 // load reads all entries from the journal and applies them to the queue.
@@ -182,16 +232,18 @@ func (q *Queue) load(ctx context.Context) error {
 		rec.GetOneOf().(journalRecord).apply(q)
 	}
 
+	n := len(q.acquired)
 	for id := range q.acquired {
-		if err := q.Nack(ctx, id); err != nil {
+		if err := q.Reject(ctx, id); err != nil {
 			return err
 		}
 	}
 
 	q.Logger.Debug(
 		"loaded queue from journal",
-		zap.Int("size", q.queue.Len()),
-		zap.Uint64("version", q.version),
+		zap.Uint64("queue_version", q.version),
+		zap.Int("queue_size", q.len()),
+		zap.Int("requeue_count", n),
 	)
 
 	return nil
@@ -230,4 +282,4 @@ type journalRecord interface {
 func (x *JournalRecord_Enqueue) apply(q *Queue) { q.applyEnqueue(x.Enqueue) }
 func (x *JournalRecord_Acquire) apply(q *Queue) { q.applyAcquire(x.Acquire) }
 func (x *JournalRecord_Ack) apply(q *Queue)     { q.applyAck(x.Ack) }
-func (x *JournalRecord_Nack) apply(q *Queue)    { q.applyNack(x.Nack) }
+func (x *JournalRecord_Reject) apply(q *Queue)  { q.applyReject(x.Reject) }
