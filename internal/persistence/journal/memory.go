@@ -11,11 +11,11 @@ type InMemory[R any] struct {
 	records []R
 }
 
-func (j *InMemory[R]) Read(ctx context.Context, ver uint64) (R, bool, error) {
+func (j *InMemory[R]) Read(ctx context.Context, v uint32) (R, bool, error) {
 	j.m.RLock()
 	defer j.m.RUnlock()
 
-	index := int(ver)
+	index := int(v)
 	size := len(j.records)
 
 	if index < size {
@@ -26,18 +26,18 @@ func (j *InMemory[R]) Read(ctx context.Context, ver uint64) (R, bool, error) {
 	return zero, false, ctx.Err()
 }
 
-func (j *InMemory[R]) Write(ctx context.Context, ver uint64, rec R) (bool, error) {
+func (j *InMemory[R]) Write(ctx context.Context, v uint32, r R) (bool, error) {
 	j.m.Lock()
 	defer j.m.Unlock()
 
-	index := int(ver)
+	index := int(v)
 	size := len(j.records)
 
 	switch {
 	case index < size:
 		return false, ctx.Err()
 	case index == size:
-		j.records = append(j.records, rec)
+		j.records = append(j.records, r)
 		return true, ctx.Err()
 	default:
 		panic("version out of range, this behavior would be undefined in a real journal implementation")

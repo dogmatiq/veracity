@@ -6,30 +6,30 @@ import "context"
 type Stub[R any] struct {
 	Journal[R]
 
-	ReadFunc  func(ctx context.Context, ver uint64) (R, bool, error)
-	WriteFunc func(ctx context.Context, ver uint64, rec R) (bool, error)
+	ReadFunc  func(ctx context.Context, v uint32) (R, bool, error)
+	WriteFunc func(ctx context.Context, v uint32, r R) (bool, error)
 }
 
-func (j *Stub[R]) Read(ctx context.Context, ver uint64) (R, bool, error) {
+func (j *Stub[R]) Read(ctx context.Context, v uint32) (R, bool, error) {
 	if j.ReadFunc != nil {
-		return j.ReadFunc(ctx, ver)
+		return j.ReadFunc(ctx, v)
 	}
 
 	if j.Journal != nil {
-		return j.Journal.Read(ctx, ver)
+		return j.Journal.Read(ctx, v)
 	}
 
 	var zero R
 	return zero, false, nil
 }
 
-func (j *Stub[R]) Write(ctx context.Context, ver uint64, rec R) (bool, error) {
+func (j *Stub[R]) Write(ctx context.Context, v uint32, r R) (bool, error) {
 	if j.WriteFunc != nil {
-		return j.WriteFunc(ctx, ver, rec)
+		return j.WriteFunc(ctx, v, r)
 	}
 
 	if j.Journal != nil {
-		return j.Journal.Write(ctx, ver, rec)
+		return j.Journal.Write(ctx, v, r)
 	}
 
 	return false, nil
