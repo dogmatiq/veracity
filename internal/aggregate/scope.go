@@ -1,38 +1,95 @@
 package aggregate
 
 import (
+	"fmt"
+
 	"github.com/dogmatiq/dogma"
+	envelopespec "github.com/dogmatiq/interopspec/envelopespec"
+	"github.com/dogmatiq/veracity/internal/envelope"
+	"github.com/dogmatiq/veracity/internal/zapx"
+	"go.uber.org/zap"
 )
 
 // scope is an implementation of dogma.AggregateCommandScope.
 type scope struct {
-	ID          string
-	Root        dogma.AggregateRoot
-	Events      []dogma.Message
-	IsDestroyed bool
-	Logger      func(f string, v ...interface{})
+	HandlerIdentity *envelopespec.Identity
+	InstID          string
+	Root            dogma.AggregateRoot
+	Packer          *envelope.Packer
+	Logger          *zap.Logger
+	CommandEnvelope *envelopespec.Envelope
+	Revision        *RevisionRecord
+
+	destroy *DestroyAction
 }
 
-// InstanceID returns the ID of the targeted aggregate instance.
 func (s *scope) InstanceID() string {
-	return s.ID
+	return s.InstID
 }
 
-// Destroy destroys the targeted instance.
 func (s *scope) Destroy() {
-	s.IsDestroyed = true
+	if s.destroy != nil {
+		return
+	}
+
+	s.destroy = &DestroyAction{}
+	s.Revision.Actions = append(
+		s.Revision.Actions,
+		&RevisionAction{
+			OneOf: &RevisionAction_Destroy{
+				Destroy: s.destroy,
+			},
+		},
+	)
+
+	s.Logger.Info("instance destroyed")
 }
 
-// RecordEvent records the occurrence of an event as a result of the command
-// message that is being handled.
 func (s *scope) RecordEvent(m dogma.Message) {
+	if s.destroy != nil {
+		s.destroy.IsCancelled = true
+		s.destroy = nil
+		s.Logger.Info("instance destruction canceled")
+	}
+
+	env := s.Packer.Pack(
+		m,
+		envelope.WithCause(s.CommandEnvelope),
+		envelope.WithHandler(s.HandlerIdentity),
+		envelope.WithInstanceID(s.InstID),
+	)
+
 	s.Root.ApplyEvent(m)
-	s.Events = append(s.Events, m)
-	s.IsDestroyed = false
+	s.Revision.Actions = append(
+		s.Revision.Actions,
+		&RevisionAction{
+			OneOf: &RevisionAction_RecordEvent{
+				RecordEvent: &RecordEventAction{
+					Envelope: env,
+				},
+			},
+		},
+	)
+
+	s.Logger.Info(
+		"event recorded",
+		zapx.Envelope("event", env),
+	)
 }
 
-// Log records an informational message within the context of the message
-// that is being handled.
 func (s *scope) Log(f string, v ...interface{}) {
-	s.Logger(f, v...)
+	message := fmt.Sprintf(f, v...)
+
+	s.Revision.Actions = append(
+		s.Revision.Actions,
+		&RevisionAction{
+			OneOf: &RevisionAction_Log{
+				Log: &LogAction{
+					Message: message,
+				},
+			},
+		},
+	)
+
+	s.Logger.Info(message)
 }

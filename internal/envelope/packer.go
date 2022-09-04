@@ -1,11 +1,14 @@
 package envelope
 
 import (
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/marshalkit"
+	"github.com/dogmatiq/marshalkit/fixtures"
 	"github.com/google/uuid"
 )
 
@@ -32,6 +35,49 @@ type Packer struct {
 	// Now is a function used to get the current time. If it is nil, time.Now()
 	// is used.
 	Now func() time.Time
+}
+
+// NewTestPacker returns an envelope packer that uses a deterministic ID
+// sequence and clock.
+//
+// MessageID is a monotonically increasing integer, starting at 0. CreatedAt
+// starts at 2000-01-01 00:00:00 UTC and increases by 1 second for each message.
+func NewTestPacker() *Packer {
+	var (
+		m   sync.Mutex
+		id  int64
+		now = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	)
+
+	return &Packer{
+		Site: &envelopespec.Identity{
+			Name: "<site-name>",
+			Key:  "<site-key>",
+		},
+		Application: &envelopespec.Identity{
+			Name: "<app-name>",
+			Key:  "<app-key>",
+		},
+		Marshaler: fixtures.Marshaler,
+		GenerateID: func() string {
+			m.Lock()
+			defer m.Unlock()
+
+			v := strconv.FormatInt(id, 10)
+			id++
+
+			return v
+		},
+		Now: func() time.Time {
+			m.Lock()
+			defer m.Unlock()
+
+			v := now
+			now = now.Add(1 * time.Second)
+
+			return v
+		},
+	}
 }
 
 // Pack returns an envelope containing the given message.
