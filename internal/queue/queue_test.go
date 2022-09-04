@@ -14,6 +14,7 @@ import (
 	. "github.com/jmalloc/gomegax"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 var _ = Describe("type Queue", func() {
@@ -63,6 +64,28 @@ var _ = Describe("type Queue", func() {
 				actual = append(actual, m.Envelope)
 			}
 			Expect(actual).To(ConsistOf(matchers...))
+		})
+
+		It("allows associating meta-data with each message", func() {
+			expect := Message{
+				Envelope: NewEnvelope("<id-1>", MessageM1),
+				MetaData: wrapperspb.Int32(123),
+			}
+
+			err := queue.Enqueue(ctx, expect)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			By("re-reading the queue state from the journal", func() {
+				queue = &Queue{
+					Journal: queue.Journal,
+					Logger:  zapx.NewTesting(),
+				}
+			})
+
+			actual, ok, err := queue.Acquire(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeTrue(), "queue should not be empty")
+			Expect(actual.MetaData).To(EqualX(expect.MetaData))
 		})
 	})
 
@@ -165,7 +188,7 @@ var _ = Describe("type Queue", func() {
 
 			By("re-reading the queue state from the journal", func() {
 				queue = &Queue{
-					Journal: &journal.InMemory[*JournalRecord]{},
+					Journal: queue.Journal,
 					Logger:  zapx.NewTesting(),
 				}
 			})

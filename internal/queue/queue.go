@@ -12,6 +12,8 @@ import (
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"google.golang.org/protobuf/proto"
+	anypb "google.golang.org/protobuf/types/known/anypb"
 )
 
 // Queue is a durable priority queue of messages.
@@ -29,11 +31,13 @@ type Queue struct {
 // Message is a container for a message on a queue.
 type Message struct {
 	Envelope *envelopespec.Envelope
+	MetaData proto.Message
 }
 
 // AcquiredMessage is a message that was acquired from a queue.
 type AcquiredMessage struct {
 	Envelope *envelopespec.Envelope
+	MetaData proto.Message
 
 	queue   *Queue
 	element *elem
@@ -121,12 +125,22 @@ func (q *Queue) marshalMessages(messages []Message) []*JournalMessage {
 			panic(err)
 		}
 
+		var md *anypb.Any
+		if m.MetaData != nil {
+			var err error
+			md, err = anypb.New(m.MetaData)
+			if err != nil {
+				panic(err)
+			}
+		}
+
 		result = append(
 			result,
 			&JournalMessage{
 				Envelope: m.Envelope,
 				Key:      key,
 				Priority: t.UnixNano(),
+				MetaData: md,
 			},
 		)
 	}
@@ -155,6 +169,20 @@ func (q *Queue) Acquire(ctx context.Context) (m AcquiredMessage, ok bool, err er
 		return AcquiredMessage{}, false, nil
 	}
 
+	m = AcquiredMessage{
+		Envelope: e.Envelope,
+		queue:    q,
+		element:  e,
+	}
+
+	if e.MetaData != nil {
+		md, err := e.MetaData.UnmarshalNew()
+		if err != nil {
+			return AcquiredMessage{}, false, fmt.Errorf("unable to unmarshal meta-data: %w", err)
+		}
+		m.MetaData = md
+	}
+
 	r := &JournalRecord_Acquire{
 		Acquire: &AcquireRecord{
 			Key: e.Key,
@@ -174,11 +202,7 @@ func (q *Queue) Acquire(ctx context.Context) (m AcquiredMessage, ok bool, err er
 		zap.Object("queue", (*logAdaptor)(q)),
 	)
 
-	return AcquiredMessage{
-		Envelope: e.Envelope,
-		queue:    q,
-		element:  e,
-	}, true, nil
+	return m, true, nil
 }
 
 func (q *Queue) loadAcquire(r *AcquireRecord) {
@@ -307,8 +331,8 @@ func (q *Queue) load(ctx context.Context) error {
 
 	q.Logger.Debug(
 		"loaded queue from journal",
+		zap.Int("dangling_count", len(q.dangling)),
 		zap.Object("queue", (*logAdaptor)(q)),
-		zap.Int("unacknowledged_count", len(q.dangling)),
 	)
 
 	q.dangling = nil
