@@ -23,6 +23,7 @@ type Queue struct {
 	version  uint32
 	elements map[string]*elem
 	queue    pqueue
+	dangling map[string]*elem // acquired but unacknowledged messages, only used during load
 }
 
 // Message is a container for a message on a queue.
@@ -183,6 +184,7 @@ func (q *Queue) Acquire(ctx context.Context) (m AcquiredMessage, ok bool, err er
 func (q *Queue) loadAcquire(r *AcquireRecord) {
 	e := q.elements[r.Key]
 	q.applyAcquire(e)
+	q.dangling[r.Key] = e
 }
 
 func (q *Queue) applyAcquire(e *elem) {
@@ -222,6 +224,7 @@ func (q *Queue) Ack(ctx context.Context, m AcquiredMessage) error {
 func (q *Queue) loadAck(r *AckRecord) {
 	e := q.elements[r.Key]
 	q.applyAck(e)
+	delete(q.dangling, r.Key)
 }
 
 func (q *Queue) applyAck(e *elem) {
@@ -275,6 +278,7 @@ func (q *Queue) load(ctx context.Context) error {
 	}
 
 	q.elements = map[string]*elem{}
+	q.dangling = map[string]*elem{}
 
 	for {
 		r, ok, err := q.Journal.Read(ctx, q.version)
@@ -289,12 +293,7 @@ func (q *Queue) load(ctx context.Context) error {
 		q.version++
 	}
 
-	unacknowledged := 0
-	for _, e := range q.elements {
-		if e == nil || !e.acquired {
-			continue
-		}
-
+	for _, e := range q.dangling {
 		r := &JournalRecord_Reject{
 			Reject: &RejectRecord{
 				Key: e.Key,
@@ -304,15 +303,15 @@ func (q *Queue) load(ctx context.Context) error {
 		if err := q.write(ctx, r); err != nil {
 			return fmt.Errorf("unable to load queue: %w", err)
 		}
-
-		unacknowledged++
 	}
 
 	q.Logger.Debug(
 		"loaded queue from journal",
 		zap.Object("queue", (*logAdaptor)(q)),
-		zap.Int("unacknowledged_count", unacknowledged),
+		zap.Int("unacknowledged_count", len(q.dangling)),
 	)
+
+	q.dangling = nil
 
 	return nil
 }
