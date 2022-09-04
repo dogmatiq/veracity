@@ -1,4 +1,4 @@
-package eventstore_test
+package eventstream_test
 
 import (
 	"context"
@@ -6,16 +6,17 @@ import (
 	"time"
 
 	. "github.com/dogmatiq/dogma/fixtures"
-	. "github.com/dogmatiq/veracity/internal/eventstore"
+	"github.com/dogmatiq/interopspec/envelopespec"
+	. "github.com/dogmatiq/veracity/internal/eventstream"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
+	"github.com/dogmatiq/veracity/internal/logging"
 	"github.com/dogmatiq/veracity/internal/persistence/journal"
 	. "github.com/jmalloc/gomegax"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go.uber.org/zap"
 )
 
-var _ = Describe("type EventStore (idempotence)", func() {
+var _ = Describe("type EventStream (idempotence)", func() {
 	var (
 		ctx   context.Context
 		journ *journal.Stub[*JournalRecord]
@@ -41,13 +42,13 @@ var _ = Describe("type EventStore (idempotence)", func() {
 			appended := false
 
 			tick := func(ctx context.Context) error {
-				store := &EventStore{
+				stream := &EventStream{
 					Journal: journ,
-					Logger:  zap.NewExample(),
+					Logger:  logging.NewTesting(),
 				}
 
 				if !appended {
-					if err := store.Write(ctx, expect); err != nil {
+					if err := stream.Append(ctx, expect); err != nil {
 						return err
 					}
 					appended = true
@@ -62,23 +63,34 @@ var _ = Describe("type EventStore (idempotence)", func() {
 					break
 				}
 
-				Expect(err).To(MatchError("<error>"))
+				Expect(err).To(MatchError(ContainSubstring("<error>")))
 				expectErr = false
 			}
 
 			Expect(expectErr).To(BeFalse(), "process should fail at least once")
 
-			store := &EventStore{
+			stream := &EventStream{
 				Journal: journ,
+				Logger:  logging.NewTesting(),
 			}
-			env, ok, err := store.Read(ctx, 0)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(ok).To(BeTrue(), "event should be written to event store")
-			Expect(env).To(EqualX(expect))
 
-			_, ok, err = store.Read(ctx, 1)
+			var envelopes []*envelopespec.Envelope
+			err := stream.Range(
+				ctx,
+				0,
+				func(
+					ctx context.Context,
+					env *envelopespec.Envelope,
+				) (bool, error) {
+					envelopes = append(envelopes, env)
+					return true, nil
+				},
+			)
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(ok).To(BeFalse(), "event should only be written to the event store once")
+			Expect(envelopes).To(
+				ConsistOf(EqualX(expect)),
+				"event should only be written to the event stream once",
+			)
 		},
 		Entry(
 			"no faults",
@@ -89,14 +101,14 @@ var _ = Describe("type EventStore (idempotence)", func() {
 			func() {
 				journ.WriteFunc = func(
 					ctx context.Context,
-					ver uint64,
-					rec *JournalRecord,
+					v uint32,
+					r *JournalRecord,
 				) (bool, error) {
-					if rec.GetAppend() != nil {
+					if r.GetAppend() != nil {
 						journ.WriteFunc = nil
 						return false, errors.New("<error>")
 					}
-					return journ.Journal.Write(ctx, ver, rec)
+					return journ.Journal.Write(ctx, v, r)
 				}
 			},
 		),
@@ -105,15 +117,15 @@ var _ = Describe("type EventStore (idempotence)", func() {
 			func() {
 				journ.WriteFunc = func(
 					ctx context.Context,
-					ver uint64,
-					rec *JournalRecord,
+					v uint32,
+					r *JournalRecord,
 				) (bool, error) {
-					ok, err := journ.Journal.Write(ctx, ver, rec)
+					ok, err := journ.Journal.Write(ctx, v, r)
 					if !ok || err != nil {
 						return false, err
 					}
 
-					if rec.GetAppend() != nil {
+					if r.GetAppend() != nil {
 						journ.WriteFunc = nil
 						return false, errors.New("<error>")
 					}

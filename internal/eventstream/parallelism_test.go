@@ -1,4 +1,4 @@
-package eventstore_test
+package eventstream_test
 
 import (
 	"context"
@@ -8,8 +8,9 @@ import (
 
 	. "github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/interopspec/envelopespec"
-	. "github.com/dogmatiq/veracity/internal/eventstore"
+	. "github.com/dogmatiq/veracity/internal/eventstream"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
+	"github.com/dogmatiq/veracity/internal/logging"
 	"github.com/dogmatiq/veracity/internal/persistence/journal"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -17,14 +18,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var _ = Describe("type EventStore (parallelism)", func() {
+var _ = Describe("type EventStream (parallelism)", func() {
 	It("appends each event exactly once", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 
-		store := &EventStore{
+		stream := &EventStream{
 			Journal: &journal.InMemory[*JournalRecord]{},
-			Logger:  zap.NewExample(),
+			Logger:  logging.NewTesting(),
 		}
 
 		var (
@@ -40,13 +41,13 @@ var _ = Describe("type EventStore (parallelism)", func() {
 		}
 
 		tick := func(ctx context.Context) error {
-			s := &EventStore{
-				Journal: store.Journal,
+			s := &EventStream{
+				Journal: stream.Journal,
 				Logger:  zap.NewNop(),
 			}
 
 			for _, env := range expect {
-				if err := s.Write(ctx, env); err != nil {
+				if err := s.Append(ctx, env); err != nil {
 					return err
 				}
 			}
@@ -71,18 +72,18 @@ var _ = Describe("type EventStore (parallelism)", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		actual := map[string]*envelopespec.Envelope{}
-
-		var offset uint64
-		for {
-			env, ok, err := store.Read(ctx, offset)
-			Expect(err).ShouldNot(HaveOccurred())
-			if !ok {
-				break
-			}
-			offset++
-			actual[env.GetMessageId()] = env
-		}
-
+		err = stream.Range(
+			ctx,
+			0,
+			func(
+				ctx context.Context,
+				env *envelopespec.Envelope,
+			) (bool, error) {
+				actual[env.GetMessageId()] = env
+				return true, nil
+			},
+		)
+		Expect(err).ShouldNot(HaveOccurred())
 		Expect(actual).To(Equal(expect))
 	})
 })
