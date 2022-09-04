@@ -1,19 +1,18 @@
 package queue
 
 import (
-	"container/heap"
 	"context"
 	"errors"
 	"fmt"
 
 	"github.com/dogmatiq/interopspec/envelopespec"
-	"github.com/dogmatiq/veracity/internal/filter"
+	"github.com/dogmatiq/marshalkit"
 	"github.com/dogmatiq/veracity/internal/logging"
 	"github.com/dogmatiq/veracity/internal/persistence/journal"
 	"go.uber.org/zap"
 )
 
-// Queue is a durable, ordered queue of messages.
+// Queue is a durable priority queue of messages.
 type Queue struct {
 	Journal journal.Journal[*JournalRecord]
 	Logger  *zap.Logger
@@ -30,34 +29,34 @@ func (q *Queue) Enqueue(ctx context.Context, envelopes ...*envelopespec.Envelope
 		return err
 	}
 
-	envelopes = filter.Slice(
-		envelopes,
-		func(env *envelopespec.Envelope) bool {
-			if _, ok := q.messages[env.GetMessageId()]; ok {
-				q.log("message ignored because it is already enqueued", env)
-				return false
-			}
+	rec := &JournalRecord_Enqueue{
+		Enqueue: &EnqueueRecord{},
+	}
 
-			return true
-		},
-	)
+	for _, env := range envelopes {
+		if err := env.Validate(); err != nil {
+			panic(err)
+		}
 
-	if len(envelopes) == 0 {
+		if _, ok := q.messages[env.GetMessageId()]; ok {
+			q.log("message ignored because it is already enqueued", env)
+		} else {
+			rec.Enqueue.Envelopes = append(rec.Enqueue.Envelopes, env)
+		}
+	}
+
+	if len(rec.Enqueue.Envelopes) == 0 {
 		return nil
 	}
 
 	if err := q.apply(
 		ctx,
-		&JournalRecord_Enqueue{
-			Enqueue: &EnqueueRecord{
-				Envelopes: envelopes,
-			},
-		},
+		rec,
 	); err != nil {
 		return fmt.Errorf("unable to enqueue messages: %w", err)
 	}
 
-	for _, env := range envelopes {
+	for _, env := range rec.Enqueue.Envelopes {
 		q.log("message enqueued", env)
 	}
 
@@ -66,14 +65,19 @@ func (q *Queue) Enqueue(ctx context.Context, envelopes ...*envelopespec.Envelope
 
 func (q *Queue) applyEnqueue(rec *EnqueueRecord) {
 	for _, env := range rec.GetEnvelopes() {
+		t, err := marshalkit.UnmarshalEnvelopeTime(env.GetCreatedAt())
+		if err != nil {
+			panic(err)
+		}
+
 		m := &message{
-			Envelope: env,
-			Priority: q.version,
+			Envelope:  env,
+			CreatedAt: t,
 		}
 
 		id := m.Envelope.GetMessageId()
 		q.messages[id] = m
-		heap.Push(&q.queue, m)
+		q.queue.PushMessage(m)
 	}
 }
 
@@ -93,29 +97,29 @@ func (q *Queue) Acquire(ctx context.Context) (env *envelopespec.Envelope, ok boo
 		return nil, false, nil
 	}
 
-	env = q.queue.Peek()
+	m := q.queue.PeekMessage()
 
 	if err := q.apply(
 		ctx,
 		&JournalRecord_Acquire{
 			Acquire: &AcquireRecord{
-				MessageId: env.GetMessageId(),
+				MessageId: m.Envelope.GetMessageId(),
 			},
 		},
 	); err != nil {
 		return nil, false, fmt.Errorf("unable to acquire message: %w", err)
 	}
 
-	q.log("message acquired", env)
+	q.log("message acquired", m.Envelope)
 
-	return env, true, nil
+	return m.Envelope, true, nil
 }
 
 func (q *Queue) applyAcquire(rec *AcquireRecord) {
 	id := rec.GetMessageId()
 	m := q.messages[id]
 	q.acquired[id] = m
-	heap.Remove(&q.queue, m.index)
+	q.queue.RemoveMessage(m)
 }
 
 // Ack acknowledges a previously acquired message, permanently removing it from
@@ -176,7 +180,7 @@ func (q *Queue) applyReject(rec *RejectRecord) {
 	id := rec.GetMessageId()
 	m := q.acquired[id]
 	delete(q.acquired, id)
-	heap.Push(&q.queue, m)
+	q.queue.PushMessage(m)
 }
 
 // load reads all entries from the journal and applies them to the queue.

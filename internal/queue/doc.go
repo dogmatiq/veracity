@@ -1,2 +1,2 @@
-// Package queue provides a durable ordered message queue.
+// Package queue provides a durable priority queue of messages.
 package queue

@@ -90,24 +90,21 @@ var _ = Describe("type Queue", func() {
 		Expect(actual).To(EqualX(expect))
 	})
 
-	It("acquires messages in the order they are enqueued", func() {
+	It("prioritizes messages by their creation time", func() {
 		var expect []string
 		By("enqueueing several messages", func() {
-			envelopes := []*envelopespec.Envelope{
-				NewEnvelope("<id-1>", MessageM1),
-				NewEnvelope("<id-2>", MessageM2),
-				NewEnvelope("<id-3>", MessageM3),
-			}
+			now := time.Now()
+			env1 := NewEnvelope("<id-1>", MessageM1, now.Add(1*time.Second))
+			env2 := NewEnvelope("<id-2>", MessageM2, now.Add(2*time.Second))
+			env3 := NewEnvelope("<id-3>", MessageM3, now.Add(3*time.Second))
 
-			for _, env := range envelopes {
-				err := queue.Enqueue(ctx, env)
-				Expect(err).ShouldNot(HaveOccurred())
-				expect = append(expect, env.GetMessageId())
-			}
+			err := queue.Enqueue(ctx, env2, env3, env1)
+			Expect(err).ShouldNot(HaveOccurred())
+			expect = append(expect, "<id-1>", "<id-2>", "<id-3>")
 		})
 
 		var actual []string
-		By("re-acquiring the messages", func() {
+		By("acquiring the messages", func() {
 			for {
 				env, ok, err := queue.Acquire(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
@@ -121,7 +118,7 @@ var _ = Describe("type Queue", func() {
 
 		Expect(actual).To(
 			EqualX(expect),
-			"acquired messages should be in the same order as they enqueued",
+			"messages should be prioritized by their creation time",
 		)
 	})
 
