@@ -8,9 +8,9 @@ import (
 	. "github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/interopspec/envelopespec"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
-	"github.com/dogmatiq/veracity/internal/logging"
 	"github.com/dogmatiq/veracity/internal/persistence/journal"
 	. "github.com/dogmatiq/veracity/internal/queue"
+	"github.com/dogmatiq/veracity/internal/zapx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -46,7 +46,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			tick := func(ctx context.Context) error {
 				queue := &Queue{
 					Journal: journ,
-					Logger:  logging.NewTesting(),
+					Logger:  zapx.NewTesting(),
 				}
 
 				if !enqueued {
@@ -90,7 +90,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 
 			queue := &Queue{
 				Journal: journ,
-				Logger:  logging.NewTesting(),
+				Logger:  zapx.NewTesting(),
 			}
 			_, ok, err := queue.Acquire(ctx)
 			Expect(err).ShouldNot(HaveOccurred())

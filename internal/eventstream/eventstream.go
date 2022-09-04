@@ -6,9 +6,10 @@ import (
 	"fmt"
 
 	"github.com/dogmatiq/interopspec/envelopespec"
-	"github.com/dogmatiq/veracity/internal/logging"
 	"github.com/dogmatiq/veracity/internal/persistence/journal"
+	"github.com/dogmatiq/veracity/internal/zapx"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // EventStream is a durable, chronologically ordered stream of events.
@@ -38,7 +39,11 @@ func (s *EventStream) Append(
 
 	for _, env := range envelopes {
 		if _, ok := s.events[env.GetMessageId()]; ok {
-			s.log("event ignored because it is already in the stream", env)
+			s.Logger.Debug(
+				"event ignored because it is already in the stream",
+				zap.Object("eventstream", (*logAdaptor)(s)),
+				zapx.Envelope("event", env),
+			)
 		} else {
 			r.Append.Envelopes = append(r.Append.Envelopes, env)
 		}
@@ -53,7 +58,11 @@ func (s *EventStream) Append(
 	}
 
 	for _, env := range r.Append.Envelopes {
-		s.log("event appended to stream", env)
+		s.Logger.Debug(
+			"event appended to stream",
+			zap.Object("eventstream", (*logAdaptor)(s)),
+			zapx.Envelope("event", env),
+		)
 	}
 
 	return nil
@@ -177,7 +186,10 @@ func (s *EventStream) load(ctx context.Context) error {
 		s.version++
 	}
 
-	s.log("loaded event stream from journal", nil)
+	s.Logger.Debug(
+		"loaded event stream from journal",
+		zap.Object("eventstream", (*logAdaptor)(s)),
+	)
 
 	return nil
 }
@@ -207,28 +219,17 @@ func (s *EventStream) apply(
 	return nil
 }
 
-func (s *EventStream) log(
-	m string,
-	env *envelopespec.Envelope,
-	fields ...zap.Field,
-) {
-	if x := s.Logger.Check(zap.DebugLevel, m); x != nil {
-		f := []zap.Field{
-			zap.Namespace("eventstream"),
-			zap.Uint32("version", s.version),
-			zap.Int("size", len(s.events)),
-		}
-
-		f = append(f, fields...)
-		f = append(f, logging.EnvelopeFields(env)...)
-
-		x.Write(f...)
-	}
-}
-
 type journalRecord interface {
 	isJournalRecord_OneOf
 	apply(s *EventStream)
 }
 
 func (x *JournalRecord_Append) apply(s *EventStream) { s.applyAppend(x.Append) }
+
+type logAdaptor EventStream
+
+func (a *logAdaptor) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddUint32("version", a.version)
+	enc.AddInt("size", len(a.events))
+	return nil
+}

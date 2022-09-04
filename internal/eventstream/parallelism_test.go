@@ -10,8 +10,8 @@ import (
 	"github.com/dogmatiq/interopspec/envelopespec"
 	. "github.com/dogmatiq/veracity/internal/eventstream"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
-	"github.com/dogmatiq/veracity/internal/logging"
 	"github.com/dogmatiq/veracity/internal/persistence/journal"
+	"github.com/dogmatiq/veracity/internal/zapx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap"
@@ -25,7 +25,7 @@ var _ = Describe("type EventStream (parallelism)", func() {
 
 		stream := &EventStream{
 			Journal: &journal.InMemory[*JournalRecord]{},
-			Logger:  logging.NewTesting(),
+			Logger:  zapx.NewTesting(),
 		}
 
 		var (

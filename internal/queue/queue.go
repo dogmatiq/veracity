@@ -7,9 +7,10 @@ import (
 
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/marshalkit"
-	"github.com/dogmatiq/veracity/internal/logging"
 	"github.com/dogmatiq/veracity/internal/persistence/journal"
+	"github.com/dogmatiq/veracity/internal/zapx"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // Queue is a durable priority queue of messages.
@@ -42,7 +43,11 @@ func (q *Queue) Enqueue(
 		}
 
 		if _, ok := q.messages[env.GetMessageId()]; ok {
-			q.log("message ignored because it is already enqueued", env)
+			q.Logger.Debug(
+				"message ignored because it is already enqueued",
+				zap.Object("queue", (*logAdaptor)(q)),
+				zapx.Envelope("message", env),
+			)
 		} else {
 			r.Enqueue.Envelopes = append(r.Enqueue.Envelopes, env)
 		}
@@ -60,7 +65,11 @@ func (q *Queue) Enqueue(
 	}
 
 	for _, env := range r.Enqueue.Envelopes {
-		q.log("message enqueued", env)
+		q.Logger.Debug(
+			"message enqueued",
+			zap.Object("queue", (*logAdaptor)(q)),
+			zapx.Envelope("message", env),
+		)
 	}
 
 	return nil
@@ -113,7 +122,11 @@ func (q *Queue) Acquire(ctx context.Context) (env *envelopespec.Envelope, ok boo
 		return nil, false, fmt.Errorf("unable to acquire message: %w", err)
 	}
 
-	q.log("message acquired", m.Envelope)
+	q.Logger.Debug(
+		"message acquired",
+		zap.Object("queue", (*logAdaptor)(q)),
+		zapx.Envelope("message", m.Envelope),
+	)
 
 	return m.Envelope, true, nil
 }
@@ -144,7 +157,11 @@ func (q *Queue) Ack(ctx context.Context, id string) error {
 		return fmt.Errorf("unable to acknowledge message: %w", err)
 	}
 
-	q.log("message acknowledged", m.Envelope)
+	q.Logger.Debug(
+		"message acknowledged",
+		zap.Object("queue", (*logAdaptor)(q)),
+		zapx.Envelope("message", m.Envelope),
+	)
 
 	return nil
 }
@@ -174,7 +191,11 @@ func (q *Queue) Reject(ctx context.Context, id string) error {
 		return fmt.Errorf("unable to reject message: %w", err)
 	}
 
-	q.log("message rejected", m.Envelope)
+	q.Logger.Debug(
+		"message rejected",
+		zap.Object("queue", (*logAdaptor)(q)),
+		zapx.Envelope("message", m.Envelope),
+	)
 
 	return nil
 }
@@ -215,9 +236,9 @@ func (q *Queue) load(ctx context.Context) error {
 		}
 	}
 
-	q.log(
+	q.Logger.Debug(
 		"loaded queue from journal",
-		nil,
+		zap.Object("queue", (*logAdaptor)(q)),
 		zap.Int("unacknowledged_count", n),
 	)
 
@@ -249,25 +270,6 @@ func (q *Queue) apply(
 	return nil
 }
 
-func (q *Queue) log(
-	m string,
-	env *envelopespec.Envelope,
-	fields ...zap.Field,
-) {
-	if x := q.Logger.Check(zap.DebugLevel, m); x != nil {
-		f := []zap.Field{
-			zap.Namespace("queue"),
-			zap.Uint32("version", q.version),
-			zap.Int("size", q.queue.Len()+len(q.acquired)),
-		}
-
-		f = append(f, fields...)
-		f = append(f, logging.EnvelopeFields(env)...)
-
-		x.Write(f...)
-	}
-}
-
 type journalRecord interface {
 	isJournalRecord_OneOf
 	apply(q *Queue)
@@ -277,3 +279,11 @@ func (x *JournalRecord_Enqueue) apply(q *Queue) { q.applyEnqueue(x.Enqueue) }
 func (x *JournalRecord_Acquire) apply(q *Queue) { q.applyAcquire(x.Acquire) }
 func (x *JournalRecord_Ack) apply(q *Queue)     { q.applyAck(x.Ack) }
 func (x *JournalRecord_Reject) apply(q *Queue)  { q.applyReject(x.Reject) }
+
+type logAdaptor Queue
+
+func (a *logAdaptor) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddUint32("version", a.version)
+	enc.AddInt("size", a.queue.Len()+len(a.acquired))
+	return nil
+}
