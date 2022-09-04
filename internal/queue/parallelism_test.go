@@ -52,12 +52,17 @@ var _ = Describe("type Queue (parallelism)", func() {
 			}
 
 			for _, env := range envelopes {
-				if err := q.Enqueue(ctx, env); err != nil {
+				if err := q.Enqueue(
+					ctx,
+					Message{
+						Envelope: env,
+					},
+				); err != nil {
 					return false, err
 				}
 			}
 
-			env, ok, err := q.Acquire(ctx)
+			m, ok, err := q.Acquire(ctx)
 			if err != nil {
 				return false, err
 			}
@@ -65,11 +70,11 @@ var _ = Describe("type Queue (parallelism)", func() {
 				return true, nil
 			}
 
-			if err = q.Reject(ctx, env.GetMessageId()); err != nil {
+			if err = q.Reject(ctx, m.Envelope.GetMessageId()); err != nil {
 				return false, err
 			}
 
-			env, ok, err = q.Acquire(ctx)
+			m, ok, err = q.Acquire(ctx)
 			if err != nil {
 				return false, err
 			}
@@ -77,12 +82,12 @@ var _ = Describe("type Queue (parallelism)", func() {
 				return true, nil
 			}
 
-			if err = q.Ack(ctx, env.GetMessageId()); err != nil {
+			if err = q.Ack(ctx, m.Envelope.GetMessageId()); err != nil {
 				return false, err
 			}
 
 			mutex.Lock()
-			actual[env.GetMessageId()]++
+			actual[m.Envelope.GetMessageId()]++
 			mutex.Unlock()
 
 			return false, nil

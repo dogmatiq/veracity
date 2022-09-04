@@ -1,6 +1,7 @@
 syntax = "proto3";
 package veracity.queue;
 
+import "google/protobuf/any.proto";
 import "github.com/dogmatiq/interopspec/envelopespec/envelope.proto";
 
 option go_package = "github.com/dogmatiq/veracity/internal/queue";
@@ -14,7 +15,14 @@ message JournalRecord {
   }
 }
 
-message EnqueueRecord { repeated dogma.interop.v1.envelope.Envelope envelopes = 1; }
-message AcquireRecord { string message_id = 1; }
-message AckRecord { string message_id = 1; }
-message RejectRecord { string message_id = 1; }
+message JournalMessage {
+  dogma.interop.v1.envelope.Envelope envelope = 1;
+  string key = 2;
+  int64 priority = 3;
+  google.protobuf.Any meta_data = 4;
+}
+
+message EnqueueRecord { repeated JournalMessage messages = 1; }
+message AcquireRecord { string key = 1; }
+message AckRecord { string key = 1; }
+message RejectRecord { string key = 1; }
