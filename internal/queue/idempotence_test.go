@@ -105,14 +105,14 @@ var _ = Describe("type Queue (idempotence)", func() {
 			func() {
 				journ.WriteFunc = func(
 					ctx context.Context,
-					ver uint64,
-					rec *JournalRecord,
+					v uint32,
+					r *JournalRecord,
 				) (bool, error) {
-					if rec.GetEnqueue() != nil {
+					if r.GetEnqueue() != nil {
 						journ.WriteFunc = nil
 						return false, errors.New("<error>")
 					}
-					return journ.Journal.Write(ctx, ver, rec)
+					return journ.Journal.Write(ctx, v, r)
 				}
 			},
 		),
@@ -121,15 +121,15 @@ var _ = Describe("type Queue (idempotence)", func() {
 			func() {
 				journ.WriteFunc = func(
 					ctx context.Context,
-					ver uint64,
-					rec *JournalRecord,
+					v uint32,
+					r *JournalRecord,
 				) (bool, error) {
-					ok, err := journ.Journal.Write(ctx, ver, rec)
+					ok, err := journ.Journal.Write(ctx, v, r)
 					if !ok || err != nil {
 						return false, err
 					}
 
-					if rec.GetEnqueue() != nil {
+					if r.GetEnqueue() != nil {
 						journ.WriteFunc = nil
 						return false, errors.New("<error>")
 					}
@@ -143,14 +143,14 @@ var _ = Describe("type Queue (idempotence)", func() {
 			func() {
 				journ.WriteFunc = func(
 					ctx context.Context,
-					ver uint64,
-					rec *JournalRecord,
+					v uint32,
+					r *JournalRecord,
 				) (bool, error) {
-					if rec.GetAcquire() != nil {
+					if r.GetAcquire() != nil {
 						journ.WriteFunc = nil
 						return false, errors.New("<error>")
 					}
-					return journ.Journal.Write(ctx, ver, rec)
+					return journ.Journal.Write(ctx, v, r)
 				}
 			},
 		),
@@ -159,15 +159,15 @@ var _ = Describe("type Queue (idempotence)", func() {
 			func() {
 				journ.WriteFunc = func(
 					ctx context.Context,
-					ver uint64,
-					rec *JournalRecord,
+					v uint32,
+					r *JournalRecord,
 				) (bool, error) {
-					ok, err := journ.Journal.Write(ctx, ver, rec)
+					ok, err := journ.Journal.Write(ctx, v, r)
 					if !ok || err != nil {
 						return false, err
 					}
 
-					if rec.GetAcquire() != nil {
+					if r.GetAcquire() != nil {
 						journ.WriteFunc = nil
 						return false, errors.New("<error>")
 					}
@@ -181,14 +181,14 @@ var _ = Describe("type Queue (idempotence)", func() {
 			func() {
 				journ.WriteFunc = func(
 					ctx context.Context,
-					ver uint64,
-					rec *JournalRecord,
+					v uint32,
+					r *JournalRecord,
 				) (bool, error) {
-					if rec.GetAck() != nil {
+					if r.GetAck() != nil {
 						journ.WriteFunc = nil
 						return false, errors.New("<error>")
 					}
-					return journ.Journal.Write(ctx, ver, rec)
+					return journ.Journal.Write(ctx, v, r)
 				}
 			},
 		),
@@ -197,15 +197,15 @@ var _ = Describe("type Queue (idempotence)", func() {
 			func() {
 				journ.WriteFunc = func(
 					ctx context.Context,
-					ver uint64,
-					rec *JournalRecord,
+					v uint32,
+					r *JournalRecord,
 				) (bool, error) {
-					ok, err := journ.Journal.Write(ctx, ver, rec)
+					ok, err := journ.Journal.Write(ctx, v, r)
 					if !ok || err != nil {
 						return false, err
 					}
 
-					if rec.GetAck() != nil {
+					if r.GetAck() != nil {
 						journ.WriteFunc = nil
 						return false, errors.New("<error>")
 					}
@@ -219,14 +219,14 @@ var _ = Describe("type Queue (idempotence)", func() {
 			func() {
 				journ.WriteFunc = func(
 					ctx context.Context,
-					ver uint64,
-					rec *JournalRecord,
+					v uint32,
+					r *JournalRecord,
 				) (bool, error) {
-					if rec.GetReject() != nil {
+					if r.GetReject() != nil {
 						journ.WriteFunc = nil
 						return false, errors.New("<error>")
 					}
-					return journ.Journal.Write(ctx, ver, rec)
+					return journ.Journal.Write(ctx, v, r)
 				}
 			},
 		),
@@ -235,15 +235,15 @@ var _ = Describe("type Queue (idempotence)", func() {
 			func() {
 				journ.WriteFunc = func(
 					ctx context.Context,
-					ver uint64,
-					rec *JournalRecord,
+					v uint32,
+					r *JournalRecord,
 				) (bool, error) {
-					ok, err := journ.Journal.Write(ctx, ver, rec)
+					ok, err := journ.Journal.Write(ctx, v, r)
 					if !ok || err != nil {
 						return false, err
 					}
 
-					if rec.GetReject() != nil {
+					if r.GetReject() != nil {
 						journ.WriteFunc = nil
 						return false, errors.New("<error>")
 					}

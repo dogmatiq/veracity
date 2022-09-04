@@ -17,19 +17,22 @@ type Queue struct {
 	Journal journal.Journal[*JournalRecord]
 	Logger  *zap.Logger
 
-	version  uint64
+	version  uint32
 	messages map[string]*message
 	acquired map[string]*message
 	queue    pqueue
 }
 
 // Enqueue adds messages to the queue.
-func (q *Queue) Enqueue(ctx context.Context, envelopes ...*envelopespec.Envelope) error {
+func (q *Queue) Enqueue(
+	ctx context.Context,
+	envelopes ...*envelopespec.Envelope,
+) error {
 	if err := q.load(ctx); err != nil {
 		return err
 	}
 
-	rec := &JournalRecord_Enqueue{
+	r := &JournalRecord_Enqueue{
 		Enqueue: &EnqueueRecord{},
 	}
 
@@ -41,30 +44,30 @@ func (q *Queue) Enqueue(ctx context.Context, envelopes ...*envelopespec.Envelope
 		if _, ok := q.messages[env.GetMessageId()]; ok {
 			q.log("message ignored because it is already enqueued", env)
 		} else {
-			rec.Enqueue.Envelopes = append(rec.Enqueue.Envelopes, env)
+			r.Enqueue.Envelopes = append(r.Enqueue.Envelopes, env)
 		}
 	}
 
-	if len(rec.Enqueue.Envelopes) == 0 {
+	if len(r.Enqueue.Envelopes) == 0 {
 		return nil
 	}
 
 	if err := q.apply(
 		ctx,
-		rec,
+		r,
 	); err != nil {
 		return fmt.Errorf("unable to enqueue messages: %w", err)
 	}
 
-	for _, env := range rec.Enqueue.Envelopes {
+	for _, env := range r.Enqueue.Envelopes {
 		q.log("message enqueued", env)
 	}
 
 	return nil
 }
 
-func (q *Queue) applyEnqueue(rec *EnqueueRecord) {
-	for _, env := range rec.GetEnvelopes() {
+func (q *Queue) applyEnqueue(r *EnqueueRecord) {
+	for _, env := range r.GetEnvelopes() {
 		t, err := marshalkit.UnmarshalEnvelopeTime(env.GetCreatedAt())
 		if err != nil {
 			panic(err)
@@ -115,8 +118,8 @@ func (q *Queue) Acquire(ctx context.Context) (env *envelopespec.Envelope, ok boo
 	return m.Envelope, true, nil
 }
 
-func (q *Queue) applyAcquire(rec *AcquireRecord) {
-	id := rec.GetMessageId()
+func (q *Queue) applyAcquire(r *AcquireRecord) {
+	id := r.GetMessageId()
 	m := q.messages[id]
 	q.acquired[id] = m
 	q.queue.RemoveMessage(m)
@@ -146,8 +149,8 @@ func (q *Queue) Ack(ctx context.Context, id string) error {
 	return nil
 }
 
-func (q *Queue) applyAck(rec *AckRecord) {
-	id := rec.GetMessageId()
+func (q *Queue) applyAck(r *AckRecord) {
+	id := r.GetMessageId()
 	q.messages[id] = nil
 	delete(q.acquired, id)
 }
@@ -176,8 +179,8 @@ func (q *Queue) Reject(ctx context.Context, id string) error {
 	return nil
 }
 
-func (q *Queue) applyReject(rec *RejectRecord) {
-	id := rec.GetMessageId()
+func (q *Queue) applyReject(r *RejectRecord) {
+	id := r.GetMessageId()
 	m := q.acquired[id]
 	delete(q.acquired, id)
 	q.queue.PushMessage(m)
@@ -193,7 +196,7 @@ func (q *Queue) load(ctx context.Context) error {
 	q.acquired = map[string]*message{}
 
 	for {
-		rec, ok, err := q.Journal.Read(ctx, q.version)
+		r, ok, err := q.Journal.Read(ctx, q.version)
 		if err != nil {
 			return fmt.Errorf("unable to load queue: %w", err)
 		}
@@ -201,7 +204,7 @@ func (q *Queue) load(ctx context.Context) error {
 			break
 		}
 
-		rec.GetOneOf().(journalRecord).apply(q)
+		r.GetOneOf().(journalRecord).apply(q)
 		q.version++
 	}
 
@@ -224,13 +227,13 @@ func (q *Queue) load(ctx context.Context) error {
 // apply writes a record to the journal and applies it to the queue.
 func (q *Queue) apply(
 	ctx context.Context,
-	rec journalRecord,
+	r journalRecord,
 ) error {
 	ok, err := q.Journal.Write(
 		ctx,
 		q.version,
 		&JournalRecord{
-			OneOf: rec,
+			OneOf: r,
 		},
 	)
 	if err != nil {
@@ -240,7 +243,7 @@ func (q *Queue) apply(
 		return errors.New("optimistic concurrency conflict")
 	}
 
-	rec.apply(q)
+	r.apply(q)
 	q.version++
 
 	return nil
@@ -254,7 +257,7 @@ func (q *Queue) log(
 	if x := q.Logger.Check(zap.DebugLevel, m); x != nil {
 		f := []zap.Field{
 			zap.Namespace("queue"),
-			zap.Uint64("version", q.version),
+			zap.Uint32("version", q.version),
 			zap.Int("size", q.queue.Len()+len(q.acquired)),
 		}
 

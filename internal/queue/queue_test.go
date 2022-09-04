@@ -33,179 +33,201 @@ var _ = Describe("type Queue", func() {
 		}
 	})
 
-	It("allows acquiring messages from the queue", func() {
-		expect := NewEnvelope("<id>", MessageM1)
-		err := queue.Enqueue(ctx, expect)
-		Expect(err).ShouldNot(HaveOccurred())
-
-		actual, ok, err := queue.Acquire(ctx)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(ok).To(BeTrue(), "queue should not be empty")
-		Expect(actual).To(EqualX(expect))
-	})
-
-	It("does not allow acquiring a message that has already been acquired", func() {
-		err := queue.Enqueue(ctx, NewEnvelope("<id>", MessageM1))
-		Expect(err).ShouldNot(HaveOccurred())
-
-		_, ok, err := queue.Acquire(ctx)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(ok).To(BeTrue(), "queue should not be empty")
-
-		_, ok, err = queue.Acquire(ctx)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(ok).To(BeFalse(), "queue should be empty")
-	})
-
-	It("removes a message from the queue when it is acknowledged", func() {
-		err := queue.Enqueue(ctx, NewEnvelope("<id>", MessageM1))
-		Expect(err).ShouldNot(HaveOccurred())
-
-		env, ok, err := queue.Acquire(ctx)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(ok).To(BeTrue(), "queue should not be empty")
-
-		err = queue.Ack(ctx, env.GetMessageId())
-		Expect(err).ShouldNot(HaveOccurred())
-
-		_, ok, err = queue.Acquire(ctx)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(ok).To(BeFalse(), "queue should be empty")
-	})
-
-	It("allows re-acquiring a message that has been rejected", func() {
-		err := queue.Enqueue(ctx, NewEnvelope("<id>", MessageM1))
-		Expect(err).ShouldNot(HaveOccurred())
-
-		expect, ok, err := queue.Acquire(ctx)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(ok).To(BeTrue(), "queue should not be empty")
-
-		err = queue.Reject(ctx, expect.GetMessageId())
-		Expect(err).ShouldNot(HaveOccurred())
-
-		actual, ok, err := queue.Acquire(ctx)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(ok).To(BeTrue(), "queue should not be empty")
-		Expect(actual).To(EqualX(expect))
-	})
-
-	It("prioritizes messages by their creation time", func() {
-		var expect []string
-		By("enqueueing several messages", func() {
-			now := time.Now()
-			env1 := NewEnvelope("<id-1>", MessageM1, now.Add(1*time.Second))
-			env2 := NewEnvelope("<id-2>", MessageM2, now.Add(2*time.Second))
-			env3 := NewEnvelope("<id-3>", MessageM3, now.Add(3*time.Second))
-
-			err := queue.Enqueue(ctx, env2, env3, env1)
-			Expect(err).ShouldNot(HaveOccurred())
-			expect = append(expect, "<id-1>", "<id-2>", "<id-3>")
-		})
-
-		var actual []string
-		By("acquiring the messages", func() {
-			for {
-				env, ok, err := queue.Acquire(ctx)
-				Expect(err).ShouldNot(HaveOccurred())
-				if !ok {
-					break
-				}
-
-				actual = append(actual, env.GetMessageId())
-			}
-		})
-
-		Expect(actual).To(
-			EqualX(expect),
-			"messages should be prioritized by their creation time",
-		)
-	})
-
-	It("acquires rejected messages in the order they were enqueued", func() {
-		var expect []string
-		By("enqueueing several messages", func() {
-			envelopes := []*envelopespec.Envelope{
+	Describe("func Enqueue()", func() {
+		It("allows enqueuing multiple messages", func() {
+			expect := []*envelopespec.Envelope{
 				NewEnvelope("<id-1>", MessageM1),
 				NewEnvelope("<id-2>", MessageM2),
-				NewEnvelope("<id-3>", MessageM3),
 			}
 
-			for _, m := range envelopes {
-				err := queue.Enqueue(ctx, m)
-				Expect(err).ShouldNot(HaveOccurred())
-				expect = append(expect, m.GetMessageId())
-			}
-		})
+			err := queue.Enqueue(ctx, expect...)
+			Expect(err).ShouldNot(HaveOccurred())
 
-		var acquired []string
-		By("acquiring the messages", func() {
+			var actual []*envelopespec.Envelope
 			for {
 				env, ok, err := queue.Acquire(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
 				if !ok {
 					break
 				}
-				acquired = append(acquired, env.GetMessageId())
+				actual = append(actual, env)
 			}
-		})
 
-		By("rejecting the messages in a random order", func() {
-			rand.Shuffle(
-				len(acquired),
-				func(i, j int) {
-					acquired[i], acquired[j] = acquired[j], acquired[i]
-				},
-			)
-
-			for _, id := range acquired {
-				err := queue.Reject(ctx, id)
-				Expect(err).ShouldNot(HaveOccurred())
+			var matchers []any
+			for _, env := range expect {
+				matchers = append(matchers, EqualX(env))
 			}
+			Expect(actual).To(ConsistOf(matchers...))
 		})
-
-		var actual []string
-		By("re-acquiring the messages", func() {
-			for {
-				env, ok, err := queue.Acquire(ctx)
-				Expect(err).ShouldNot(HaveOccurred())
-				if !ok {
-					break
-				}
-
-				actual = append(actual, env.GetMessageId())
-			}
-		})
-
-		Expect(actual).To(
-			EqualX(expect),
-			"acquired messages should be in the same order as they enqueued",
-		)
 	})
 
-	It("allows enqueuing multiple messages", func() {
-		expect := []*envelopespec.Envelope{
-			NewEnvelope("<id-1>", MessageM1),
-			NewEnvelope("<id-2>", MessageM2),
-		}
+	Describe("func Acquire()", func() {
+		It("returns a message from the queue", func() {
+			expect := NewEnvelope("<id>", MessageM1)
+			err := queue.Enqueue(ctx, expect)
+			Expect(err).ShouldNot(HaveOccurred())
 
-		err := queue.Enqueue(ctx, expect...)
-		Expect(err).ShouldNot(HaveOccurred())
+			actual, ok, err := queue.Acquire(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeTrue(), "queue should not be empty")
+			Expect(actual).To(EqualX(expect))
+		})
 
-		var actual []*envelopespec.Envelope
-		for {
+		It("returns false if the queue is empty", func() {
+			_, ok, err := queue.Acquire(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeFalse(), "queue should be empty")
+		})
+
+		It("does not return a message that has already been acquired", func() {
+			err := queue.Enqueue(ctx, NewEnvelope("<id>", MessageM1))
+			Expect(err).ShouldNot(HaveOccurred())
+
+			_, ok, err := queue.Acquire(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeTrue(), "queue should not be empty")
+
+			_, ok, err = queue.Acquire(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeFalse(), "queue should be empty")
+		})
+
+		It("prioritizes messages by their creation time", func() {
+			var expect []string
+			By("enqueueing several messages", func() {
+				now := time.Now()
+				env1 := NewEnvelope("<id-1>", MessageM1, now.Add(1*time.Second))
+				env2 := NewEnvelope("<id-2>", MessageM2, now.Add(2*time.Second))
+				env3 := NewEnvelope("<id-3>", MessageM3, now.Add(3*time.Second))
+
+				err := queue.Enqueue(ctx, env2, env3, env1)
+				Expect(err).ShouldNot(HaveOccurred())
+				expect = append(expect, "<id-1>", "<id-2>", "<id-3>")
+			})
+
+			var actual []string
+			By("acquiring the messages", func() {
+				for {
+					env, ok, err := queue.Acquire(ctx)
+					Expect(err).ShouldNot(HaveOccurred())
+					if !ok {
+						break
+					}
+
+					actual = append(actual, env.GetMessageId())
+				}
+			})
+
+			Expect(actual).To(
+				EqualX(expect),
+				"messages should be prioritized by their creation time",
+			)
+		})
+	})
+
+	Describe("func Ack()", func() {
+		It("removes the message from the queue", func() {
+			err := queue.Enqueue(ctx, NewEnvelope("<id>", MessageM1))
+			Expect(err).ShouldNot(HaveOccurred())
+
 			env, ok, err := queue.Acquire(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
-			if !ok {
-				break
-			}
-			actual = append(actual, env)
-		}
+			Expect(ok).To(BeTrue(), "queue should not be empty")
 
-		var matchers []any
-		for _, env := range expect {
-			matchers = append(matchers, EqualX(env))
-		}
-		Expect(actual).To(ConsistOf(matchers...))
+			err = queue.Ack(ctx, env.GetMessageId())
+			Expect(err).ShouldNot(HaveOccurred())
+
+			By("re-reading the queue state from the journal", func() {
+				queue = &Queue{
+					Journal: &journal.InMemory[*JournalRecord]{},
+					Logger:  logging.NewTesting(),
+				}
+			})
+
+			_, ok, err = queue.Acquire(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeFalse(), "queue should be empty")
+		})
+	})
+
+	Describe("func Reject()", func() {
+		It("allows the message to be re-acquired", func() {
+			err := queue.Enqueue(ctx, NewEnvelope("<id>", MessageM1))
+			Expect(err).ShouldNot(HaveOccurred())
+
+			expect, ok, err := queue.Acquire(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeTrue(), "queue should not be empty")
+
+			err = queue.Reject(ctx, expect.GetMessageId())
+			Expect(err).ShouldNot(HaveOccurred())
+
+			actual, ok, err := queue.Acquire(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeTrue(), "queue should not be empty")
+			Expect(actual).To(EqualX(expect))
+		})
+
+		It("does not affect the queue priority", func() {
+			var expect []string
+			By("enqueueing several messages", func() {
+				now := time.Now()
+				envelopes := []*envelopespec.Envelope{
+					NewEnvelope("<id-1>", MessageM1, now.Add(1*time.Second)),
+					NewEnvelope("<id-2>", MessageM2, now.Add(2*time.Second)),
+					NewEnvelope("<id-3>", MessageM3, now.Add(3*time.Second)),
+				}
+
+				for _, m := range envelopes {
+					err := queue.Enqueue(ctx, m)
+					Expect(err).ShouldNot(HaveOccurred())
+					expect = append(expect, m.GetMessageId())
+				}
+			})
+
+			var acquired []string
+			By("acquiring the messages", func() {
+				for {
+					env, ok, err := queue.Acquire(ctx)
+					Expect(err).ShouldNot(HaveOccurred())
+					if !ok {
+						break
+					}
+					acquired = append(acquired, env.GetMessageId())
+				}
+			})
+
+			By("rejecting the messages in a random order", func() {
+				rand.Shuffle(
+					len(acquired),
+					func(i, j int) {
+						acquired[i], acquired[j] = acquired[j], acquired[i]
+					},
+				)
+
+				for _, id := range acquired {
+					err := queue.Reject(ctx, id)
+					Expect(err).ShouldNot(HaveOccurred())
+				}
+			})
+
+			var actual []string
+			By("re-acquiring the messages", func() {
+				for {
+					env, ok, err := queue.Acquire(ctx)
+					Expect(err).ShouldNot(HaveOccurred())
+					if !ok {
+						break
+					}
+
+					actual = append(actual, env.GetMessageId())
+				}
+			})
+
+			Expect(actual).To(
+				EqualX(expect),
+				"rejected messages should still be prioritized by creation time",
+			)
+		})
 	})
 })
