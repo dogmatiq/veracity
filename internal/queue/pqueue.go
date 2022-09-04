@@ -5,7 +5,9 @@ package queue
 // It contains the queued message and additional internal meta-data.
 type elem struct {
 	*JournalMessage
-	index int
+
+	index    int
+	acquired bool
 }
 
 // pqueue is an in-memory priority queue. It implements heap.Interface.

@@ -45,7 +45,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 			envelopes = append(envelopes, NewEnvelope(id, MessageM1))
 		}
 
-		tick := func(ctx context.Context) (bool, error) {
+		tick := func(ctx context.Context) error {
 			q := &Queue{
 				Journal: queue.Journal,
 				Logger:  zap.NewNop(),
@@ -58,39 +58,33 @@ var _ = Describe("type Queue (parallelism)", func() {
 						Envelope: env,
 					},
 				); err != nil {
-					return false, err
+					return err
 				}
 			}
 
 			m, ok, err := q.Acquire(ctx)
-			if err != nil {
-				return false, err
-			}
-			if !ok {
-				return true, nil
+			if !ok || err != nil {
+				return err
 			}
 
-			if err = q.Reject(ctx, m.Envelope.GetMessageId()); err != nil {
-				return false, err
+			if err = q.Reject(ctx, m); err != nil {
+				return err
 			}
 
 			m, ok, err = q.Acquire(ctx)
-			if err != nil {
-				return false, err
-			}
-			if !ok {
-				return true, nil
+			if !ok || err != nil {
+				return err
 			}
 
-			if err = q.Ack(ctx, m.Envelope.GetMessageId()); err != nil {
-				return false, err
+			if err = q.Ack(ctx, m); err != nil {
+				return err
 			}
 
 			mutex.Lock()
 			actual[m.Envelope.GetMessageId()]++
 			mutex.Unlock()
 
-			return false, nil
+			return nil
 		}
 
 		var g errgroup.Group
@@ -98,10 +92,16 @@ var _ = Describe("type Queue (parallelism)", func() {
 		for i := 0; i < parallelism; i++ {
 			g.Go(func() error {
 				for {
-					done, err := tick(ctx)
+					err := tick(ctx)
 					if err != nil {
 						continue
-					} else if done {
+					}
+
+					mutex.Lock()
+					count := len(actual)
+					mutex.Unlock()
+
+					if count == len(expect) {
 						return nil
 					}
 				}

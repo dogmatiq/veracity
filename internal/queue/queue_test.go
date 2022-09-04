@@ -35,31 +35,32 @@ var _ = Describe("type Queue", func() {
 
 	Describe("func Enqueue()", func() {
 		It("allows enqueuing multiple messages", func() {
-			expect := []Message{
-				{
-					Envelope: NewEnvelope("<id-1>", MessageM1),
-				},
-				{
-					Envelope: NewEnvelope("<id-2>", MessageM2),
-				},
+			expect := []*envelopespec.Envelope{
+				NewEnvelope("<id-1>", MessageM1),
+				NewEnvelope("<id-2>", MessageM2),
 			}
 
-			err := queue.Enqueue(ctx, expect...)
+			var (
+				messages []Message
+				matchers []any
+			)
+			for _, env := range expect {
+				messages = append(messages, Message{Envelope: env})
+				matchers = append(matchers, EqualX(env))
+			}
+
+			err := queue.Enqueue(ctx, messages...)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			var actual []Message
+			var actual []*envelopespec.Envelope
 			for {
 				m, ok, err := queue.Acquire(ctx)
 				Expect(err).ShouldNot(HaveOccurred())
 				if !ok {
 					break
 				}
-				actual = append(actual, m)
-			}
 
-			var matchers []any
-			for _, env := range expect {
-				matchers = append(matchers, EqualX(env))
+				actual = append(actual, m.Envelope)
 			}
 			Expect(actual).To(ConsistOf(matchers...))
 		})
@@ -76,7 +77,7 @@ var _ = Describe("type Queue", func() {
 			actual, ok, err := queue.Acquire(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeTrue(), "queue should not be empty")
-			Expect(actual).To(EqualX(expect))
+			Expect(actual.Envelope).To(EqualX(expect.Envelope))
 		})
 
 		It("returns false if the queue is empty", func() {
@@ -159,7 +160,7 @@ var _ = Describe("type Queue", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeTrue(), "queue should not be empty")
 
-			err = queue.Ack(ctx, m.Envelope.GetMessageId())
+			err = queue.Ack(ctx, m)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			By("re-reading the queue state from the journal", func() {
@@ -189,13 +190,13 @@ var _ = Describe("type Queue", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeTrue(), "queue should not be empty")
 
-			err = queue.Reject(ctx, expect.Envelope.GetMessageId())
+			err = queue.Reject(ctx, expect)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			actual, ok, err := queue.Acquire(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeTrue(), "queue should not be empty")
-			Expect(actual).To(EqualX(expect))
+			Expect(actual.Envelope).To(EqualX(expect.Envelope))
 		})
 
 		It("does not affect the queue priority", func() {
@@ -220,7 +221,7 @@ var _ = Describe("type Queue", func() {
 				}
 			})
 
-			var acquired []string
+			var acquired []AcquiredMessage
 			By("acquiring the messages", func() {
 				for {
 					m, ok, err := queue.Acquire(ctx)
@@ -228,7 +229,7 @@ var _ = Describe("type Queue", func() {
 					if !ok {
 						break
 					}
-					acquired = append(acquired, m.Envelope.GetMessageId())
+					acquired = append(acquired, m)
 				}
 			})
 
@@ -240,8 +241,8 @@ var _ = Describe("type Queue", func() {
 					},
 				)
 
-				for _, id := range acquired {
-					err := queue.Reject(ctx, id)
+				for _, m := range acquired {
+					err := queue.Reject(ctx, m)
 					Expect(err).ShouldNot(HaveOccurred())
 				}
 			})

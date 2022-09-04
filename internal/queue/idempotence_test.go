@@ -64,7 +64,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 					return err
 				}
 
-				err = queue.Reject(ctx, m.Envelope.GetMessageId())
+				err = queue.Reject(ctx, m)
 				if err != nil {
 					return err
 				}
@@ -74,7 +74,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 					return err
 				}
 
-				return queue.Ack(ctx, m.Envelope.GetMessageId())
+				return queue.Ack(ctx, m)
 			}
 
 			acks := 0

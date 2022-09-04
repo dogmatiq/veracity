@@ -18,16 +18,25 @@ import (
 type Queue struct {
 	Journal journal.Journal[*JournalRecord]
 	Logger  *zap.Logger
+	Key     func(m Message) string
 
 	version  uint32
 	elements map[string]*elem
-	acquired map[string]*elem
+	size     int
 	queue    pqueue
 }
 
 // Message is a container for a message on a queue.
 type Message struct {
 	Envelope *envelopespec.Envelope
+}
+
+// AcquiredMessage is a message that was acquired from a queue.
+type AcquiredMessage struct {
+	Envelope *envelopespec.Envelope
+
+	queue   *Queue
+	element *elem
 }
 
 // Enqueue adds messages to the queue.
@@ -37,6 +46,13 @@ func (q *Queue) Enqueue(
 ) error {
 	if err := q.load(ctx); err != nil {
 		return err
+	}
+
+	makeKey := q.Key
+	if makeKey == nil {
+		makeKey = func(m Message) string {
+			return m.Envelope.MessageId
+		}
 	}
 
 	r := &JournalRecord_Enqueue{
@@ -50,15 +66,15 @@ func (q *Queue) Enqueue(
 			panic(err)
 		}
 
-		key := m.Envelope.MessageId
+		key := makeKey(m)
 
 		if _, ok := q.elements[key]; ok {
-			q.Logger.Debug(
-				"message ignored because it is already enqueued",
-				zap.Object("queue", (*logAdaptor)(q)),
-				zap.String("key", key),
-				zapx.Envelope("message", m.Envelope),
-			)
+			// q.Logger.Debug(
+			// 	"message ignored because it is already enqueued",
+			// 	zap.String("key", key),
+			// 	zapx.Envelope("message", m.Envelope),
+			// 	zap.Object("queue", (*logAdaptor)(q)),
+			// )
 		} else {
 			t, err := marshalkit.UnmarshalEnvelopeTime(m.Envelope.CreatedAt)
 			if err != nil {
@@ -68,9 +84,9 @@ func (q *Queue) Enqueue(
 			r.Enqueue.Messages = append(
 				r.Enqueue.Messages,
 				&JournalMessage{
+					Envelope: m.Envelope,
 					Key:      key,
 					Priority: t.UnixNano(),
-					Envelope: m.Envelope,
 				},
 			)
 		}
@@ -87,9 +103,9 @@ func (q *Queue) Enqueue(
 	for _, m := range r.Enqueue.Messages {
 		q.Logger.Debug(
 			"message enqueued",
-			zap.Object("queue", (*logAdaptor)(q)),
 			zap.String("key", m.Key),
 			zapx.Envelope("message", m.Envelope),
+			zap.Object("queue", (*logAdaptor)(q)),
 		)
 	}
 
@@ -101,6 +117,7 @@ func (q *Queue) applyEnqueue(r *EnqueueRecord) {
 		e := &elem{JournalMessage: jm}
 		q.elements[jm.Key] = e
 		heap.Push(&q.queue, e)
+		q.size++
 	}
 }
 
@@ -111,13 +128,13 @@ func (q *Queue) applyEnqueue(r *EnqueueRecord) {
 //
 // The message must be subsequently removed from the queue or returned to the
 // pool of unacquired messages by calling Ack() or Reject(), respectively.
-func (q *Queue) Acquire(ctx context.Context) (m Message, ok bool, err error) {
+func (q *Queue) Acquire(ctx context.Context) (m AcquiredMessage, ok bool, err error) {
 	if err := q.load(ctx); err != nil {
-		return Message{}, false, err
+		return AcquiredMessage{}, false, err
 	}
 
 	if q.queue.Len() == 0 {
-		return Message{}, false, nil
+		return AcquiredMessage{}, false, nil
 	}
 
 	e := q.queue.elements[0]
@@ -128,38 +145,39 @@ func (q *Queue) Acquire(ctx context.Context) (m Message, ok bool, err error) {
 	}
 
 	if err := q.apply(ctx, r); err != nil {
-		return Message{}, false, fmt.Errorf("unable to acquire message: %w", err)
+		return AcquiredMessage{}, false, fmt.Errorf("unable to acquire message: %w", err)
 	}
 
 	q.Logger.Debug(
 		"message acquired",
-		zap.Object("queue", (*logAdaptor)(q)),
 		zap.String("key", e.Key),
 		zapx.Envelope("message", e.Envelope),
+		zap.Object("queue", (*logAdaptor)(q)),
 	)
 
-	return Message{
+	return AcquiredMessage{
 		Envelope: e.Envelope,
+		queue:    q,
+		element:  e,
 	}, true, nil
 }
 
 func (q *Queue) applyAcquire(r *AcquireRecord) {
 	e := q.elements[r.Key]
-	q.acquired[r.Key] = e
+	e.acquired = true
 	heap.Remove(&q.queue, e.index)
 }
 
 // Ack acknowledges a previously acquired message, permanently removing it from
 // the queue.
-func (q *Queue) Ack(ctx context.Context, key string) error {
-	e, ok := q.acquired[key]
-	if !ok {
-		panic("message has not been acquired")
+func (q *Queue) Ack(ctx context.Context, m AcquiredMessage) error {
+	if m.queue != q || m.element == nil || !m.element.acquired {
+		panic("message has not been acquired from this queue")
 	}
 
 	r := &JournalRecord_Ack{
 		Ack: &AckRecord{
-			Key: key,
+			Key: m.element.Key,
 		},
 	}
 
@@ -169,9 +187,9 @@ func (q *Queue) Ack(ctx context.Context, key string) error {
 
 	q.Logger.Debug(
 		"message acknowledged",
+		zap.String("key", m.element.Key),
+		zapx.Envelope("message", m.Envelope),
 		zap.Object("queue", (*logAdaptor)(q)),
-		zap.String("key", e.Key),
-		zapx.Envelope("message", e.Envelope),
 	)
 
 	return nil
@@ -179,20 +197,19 @@ func (q *Queue) Ack(ctx context.Context, key string) error {
 
 func (q *Queue) applyAck(r *AckRecord) {
 	q.elements[r.Key] = nil
-	delete(q.acquired, r.Key)
+	q.size--
 }
 
 // Reject returns previously acquired message to the queue so that it may be
 // re-acquired.
-func (q *Queue) Reject(ctx context.Context, key string) error {
-	e, ok := q.acquired[key]
-	if !ok {
-		panic("message has not been acquired")
+func (q *Queue) Reject(ctx context.Context, m AcquiredMessage) error {
+	if m.queue != q || m.element == nil || !m.element.acquired {
+		panic("message has not been acquired from this queue")
 	}
 
 	r := &JournalRecord_Reject{
 		Reject: &RejectRecord{
-			Key: key,
+			Key: m.element.Key,
 		},
 	}
 
@@ -202,17 +219,17 @@ func (q *Queue) Reject(ctx context.Context, key string) error {
 
 	q.Logger.Debug(
 		"message rejected",
+		zap.String("key", m.element.Key),
+		zapx.Envelope("message", m.element.Envelope),
 		zap.Object("queue", (*logAdaptor)(q)),
-		zap.String("key", e.Key),
-		zapx.Envelope("message", e.Envelope),
 	)
 
 	return nil
 }
 
 func (q *Queue) applyReject(r *RejectRecord) {
-	e := q.acquired[r.Key]
-	delete(q.acquired, r.Key)
+	e := q.elements[r.Key]
+	e.acquired = false
 	heap.Push(&q.queue, e)
 }
 
@@ -223,7 +240,6 @@ func (q *Queue) load(ctx context.Context) error {
 	}
 
 	q.elements = map[string]*elem{}
-	q.acquired = map[string]*elem{}
 
 	for {
 		r, ok, err := q.Journal.Read(ctx, q.version)
@@ -238,17 +254,29 @@ func (q *Queue) load(ctx context.Context) error {
 		q.version++
 	}
 
-	n := len(q.acquired)
-	for id := range q.acquired {
-		if err := q.Reject(ctx, id); err != nil {
-			return err
+	unacknowledged := 0
+	for _, e := range q.elements {
+		if e == nil || !e.acquired {
+			continue
 		}
+
+		r := &JournalRecord_Reject{
+			Reject: &RejectRecord{
+				Key: e.Key,
+			},
+		}
+
+		if err := q.apply(ctx, r); err != nil {
+			return fmt.Errorf("unable to load queue: %w", err)
+		}
+
+		unacknowledged++
 	}
 
 	q.Logger.Debug(
 		"loaded queue from journal",
 		zap.Object("queue", (*logAdaptor)(q)),
-		zap.Int("unacknowledged_count", n),
+		zap.Int("unacknowledged_count", unacknowledged),
 	)
 
 	return nil
@@ -293,6 +321,6 @@ type logAdaptor Queue
 
 func (a *logAdaptor) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddUint32("version", a.version)
-	enc.AddInt("size", a.queue.Len()+len(a.acquired))
+	enc.AddInt("size", a.size)
 	return nil
 }
