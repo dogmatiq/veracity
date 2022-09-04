@@ -20,7 +20,14 @@ func (q *pqueue) Len() int {
 }
 
 func (q *pqueue) Less(i, j int) bool {
-	return q.elements[i].Priority < q.elements[j].Priority
+	a := q.elements[i]
+	b := q.elements[j]
+
+	if a.acquired == b.acquired {
+		return a.Priority < b.Priority
+	}
+
+	return b.acquired
 }
 
 func (q *pqueue) Swap(i, j int) {
