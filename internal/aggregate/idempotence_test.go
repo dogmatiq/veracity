@@ -53,44 +53,39 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 
 			tick := func(ctx context.Context) error {
 				exec := &CommandExecutor{
-					Supervisors: map[string]*Supervisor{
-						"<handler-key>": {
-							HandlerIdentity: &envelopespec.Identity{
-								Name: "<handler-name>",
-								Key:  "<handler-key>",
-							},
-							Handler: &AggregateMessageHandler{
-								HandleCommandFunc: func(
-									r dogma.AggregateRoot,
-									s dogma.AggregateCommandScope,
-									m dogma.Message,
-								) {
-									s.RecordEvent(MessageE1)
-								},
-							},
-							Packer: packer,
-							JournalOpener: &journal.OpenerStub[*JournalRecord]{
-								Opener: &journal.InMemoryOpener[*JournalRecord]{},
-								OpenJournalFunc: func(
-									ctx context.Context,
-									id string,
-								) (journal.Journal[*JournalRecord], error) {
-									Expect(id).To(Equal("<instance-id>"))
-									return instanceJournal, nil
-								},
-							},
-							EventAppender: &eventstream.EventStream{
-								Journal: eventsJournal,
-								Logger:  zapx.NewTesting(),
-							},
-							Logger: zapx.NewTesting(),
+					HandlerIdentity: &envelopespec.Identity{
+						Name: "<handler-name>",
+						Key:  "<handler-key>",
+					},
+					Handler: &AggregateMessageHandler{
+						HandleCommandFunc: func(
+							r dogma.AggregateRoot,
+							s dogma.AggregateCommandScope,
+							m dogma.Message,
+						) {
+							s.RecordEvent(MessageE1)
 						},
 					},
+					Packer: packer,
+					JournalOpener: &journal.OpenerStub[*JournalRecord]{
+						Opener: &journal.InMemoryOpener[*JournalRecord]{},
+						OpenJournalFunc: func(
+							ctx context.Context,
+							id string,
+						) (journal.Journal[*JournalRecord], error) {
+							Expect(id).To(Equal("<instance-id>"))
+							return instanceJournal, nil
+						},
+					},
+					EventAppender: &eventstream.EventStream{
+						Journal: eventsJournal,
+						Logger:  zapx.NewTesting(),
+					},
+					Logger: zapx.NewTesting(),
 				}
 
 				return exec.ExecuteCommand(
 					ctx,
-					"<handler-key>",
 					"<instance-id>",
 					env,
 				)

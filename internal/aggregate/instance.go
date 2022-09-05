@@ -13,11 +13,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// EventAppender is an interface for appending event messages to a stream.
-type EventAppender interface {
-	Append(ctx context.Context, envelopes ...*envelopespec.Envelope) error
-}
-
 type instance struct {
 	HandlerIdentity *envelopespec.Identity
 	InstanceID      string
