@@ -18,7 +18,7 @@ type Supervisor struct {
 	EventAppender   EventAppender
 	Logger          *zap.Logger
 
-	instances map[string]*Instance
+	instances map[string]*instance
 }
 
 func (s *Supervisor) ExecuteCommand(
@@ -33,7 +33,7 @@ func (s *Supervisor) ExecuteCommand(
 			return err
 		}
 
-		sup = &Instance{
+		sup = &instance{
 			HandlerIdentity: s.HandlerIdentity,
 			InstanceID:      id,
 			Handler:         s.Handler,
@@ -44,7 +44,7 @@ func (s *Supervisor) ExecuteCommand(
 		}
 
 		if s.instances == nil {
-			s.instances = map[string]*Instance{}
+			s.instances = map[string]*instance{}
 		}
 
 		s.instances[id] = sup

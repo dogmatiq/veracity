@@ -18,7 +18,7 @@ type EventAppender interface {
 	Append(ctx context.Context, envelopes ...*envelopespec.Envelope) error
 }
 
-type Instance struct {
+type instance struct {
 	HandlerIdentity *envelopespec.Identity
 	InstanceID      string
 	Handler         dogma.AggregateMessageHandler
@@ -33,7 +33,7 @@ type Instance struct {
 	root        dogma.AggregateRoot
 }
 
-func (s *Instance) ExecuteCommand(
+func (s *instance) ExecuteCommand(
 	ctx context.Context,
 	env *envelopespec.Envelope,
 ) error {
@@ -93,7 +93,7 @@ func (s *Instance) ExecuteCommand(
 	return nil
 }
 
-func (s *Instance) applyRevision(r *RevisionRecord) {
+func (s *instance) applyRevision(r *RevisionRecord) {
 	s.commands[r.CommandId] = struct{}{}
 	s.unpublished = nil
 
@@ -108,7 +108,7 @@ func (s *Instance) applyRevision(r *RevisionRecord) {
 }
 
 // load reads all entries from the journal and applies them to the instance.
-func (s *Instance) load(ctx context.Context) error {
+func (s *instance) load(ctx context.Context) error {
 	if s.root != nil {
 		return nil
 	}
@@ -145,7 +145,7 @@ func (s *Instance) load(ctx context.Context) error {
 }
 
 // apply writes a record to the journal and applies it to the queue.
-func (s *Instance) apply(
+func (s *instance) apply(
 	ctx context.Context,
 	r journalRecord,
 ) error {
@@ -171,7 +171,7 @@ func (s *Instance) apply(
 
 type journalRecord interface {
 	isJournalRecord_OneOf
-	apply(s *Instance)
+	apply(s *instance)
 }
 
-func (x *JournalRecord_Revision) apply(s *Instance) { s.applyRevision(x.Revision) }
+func (x *JournalRecord_Revision) apply(s *instance) { s.applyRevision(x.Revision) }
