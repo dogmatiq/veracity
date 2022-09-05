@@ -2,10 +2,13 @@ package aggregate
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/internal/envelope"
+	"github.com/dogmatiq/veracity/internal/persistence/journal"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"go.uber.org/zap"
 )
@@ -14,10 +17,13 @@ type InstanceSupervisor struct {
 	HandlerIdentity *envelopespec.Identity
 	InstanceID      string
 	Handler         dogma.AggregateMessageHandler
-	Root            dogma.AggregateRoot
+	Journal         journal.Journal[*JournalRecord]
 	EventAppender   EventAppender
 	Packer          *envelope.Packer
 	Logger          *zap.Logger
+
+	version uint32
+	root    dogma.AggregateRoot
 }
 
 func (s *InstanceSupervisor) ExecuteCommand(
@@ -33,24 +39,32 @@ func (s *InstanceSupervisor) ExecuteCommand(
 		return err
 	}
 
-	r := &RevisionRecord{}
+	rev := &RevisionRecord{}
 
 	s.Handler.HandleCommand(
-		s.Root,
+		s.root,
 		&scope{
 			HandlerIdentity: s.HandlerIdentity,
 			InstID:          s.InstanceID,
-			Root:            s.Root,
+			Root:            s.root,
 			Packer:          s.Packer,
 			Logger:          s.Logger.With(zapx.Envelope("command", env)),
 			CommandEnvelope: env,
-			Revision:        r,
+			Revision:        rev,
 		},
 		cmd,
 	)
 
+	r := &JournalRecord_Revision{
+		Revision: rev,
+	}
+
+	if err := s.apply(ctx, r); err != nil {
+		return err
+	}
+
 	var envelopes []*envelopespec.Envelope
-	for _, a := range r.Actions {
+	for _, a := range rev.Actions {
 		if r := a.GetRecordEvent(); r != nil {
 			envelopes = append(envelopes, r.Envelope)
 		}
@@ -63,174 +77,66 @@ func (s *InstanceSupervisor) ExecuteCommand(
 	return s.EventAppender.Append(ctx, envelopes...)
 }
 
+func (s *InstanceSupervisor) applyRevision(r *RevisionRecord) {
+}
+
+// load reads all entries from the journal and applies them to the instance.
 func (s *InstanceSupervisor) load(ctx context.Context) error {
-	if s.Root != nil {
+	if s.root != nil {
 		return nil
 	}
 
-	s.Root = s.Handler.New()
+	s.root = s.Handler.New()
+
+	for {
+		r, ok, err := s.Journal.Read(ctx, s.version)
+		if err != nil {
+			return fmt.Errorf("unable to load instance: %w", err)
+		}
+		if !ok {
+			break
+		}
+
+		r.GetOneOf().(journalRecord).apply(s)
+		s.version++
+	}
+
+	s.Logger.Debug(
+		"loaded aggregate instance from journal",
+		zap.Uint32("version", s.version),
+	)
+
 	return nil
 }
 
-// func (s *InstanceSupervisor) ExecuteCommand(
-// 	ctx context.Context,
-// 	env *envelopespec.Envelope,
-// ) error {
-// 	return nil
-// }
+// apply writes a record to the journal and applies it to the queue.
+func (s *InstanceSupervisor) apply(
+	ctx context.Context,
+	r journalRecord,
+) error {
+	ok, err := s.Journal.Write(
+		ctx,
+		s.version,
+		&JournalRecord{
+			OneOf: r,
+		},
+	)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errors.New("optimistic concurrency conflict")
+	}
 
-// // instance is the in-memory representation of an aggregate instance.
-// type instance struct {
-// 	// Executor *executor
+	r.apply(s)
+	s.version++
 
-// 	// HandlerIdentity *envelopespec.Identity
-// 	// InstanceID      string
-// 	// Handler         dogma.AggregateMessageHandler
-// 	// Packer          *envelope.Packer
-// 	// EventAppender   EventAppender
-// 	// Journal         journal.Journal[*JournalRecord]
-// 	// Logger          *zap.Logger
-// 	// Root            dogma.AggregateRoot
+	return nil
+}
 
-// 	// version uint32
-// 	// commands map[string]struct{}
-// 	// events   []*envelopespec.Envelope
-// }
+type journalRecord interface {
+	isJournalRecord_OneOf
+	apply(s *InstanceSupervisor)
+}
 
-// // func (i *Instance) ExecuteCommand(
-// // 	ctx context.Context,
-// // 	env *envelopespec.Envelope,
-// // ) error {
-// // 	if err := i.load(ctx); err != nil {
-// // 		return err
-// // 	}
-
-// // 	if len(i.events) != 0 {
-// // 		panic("cannot handle a command while there are unpublished events")
-// // 	}
-
-// // 	if _, ok := i.commands[env.GetMessageId()]; ok {
-// // 		return nil
-// // 	}
-
-// // 	cmd, err := i.Packer.Unpack(env)
-// // 	if err != nil {
-// // 		return err
-// // 	}
-
-// // 	s := &scope{
-// // 		InstID:          i,
-// // 		CommandEnvelope: env,
-// // 	}
-// // 	i.Handler.HandleCommand(i.Root, s, cmd)
-
-// // 	if err := i.apply(
-// // 		ctx,
-// // 		&JournalRecord_Revision{
-// // 			Revision: &RevisionRecord{
-// // 				CommandId:      env.GetMessageId(),
-// // 				EventEnvelopes: s.EventEnvelopes,
-// // 			},
-// // 		},
-// // 	); err != nil {
-// // 		return err
-// // 	}
-
-// // 	for _, env := range i.events {
-// // 		if err := i.EventAppender.Append(ctx, env); err != nil {
-// // 			return err
-// // 		}
-// // 	}
-
-// // 	return nil
-// // }
-
-// // func (i *Instance) applyRevision(rec *RevisionRecord) {
-// // 	i.commands[rec.GetCommandId()] = struct{}{}
-// // 	i.events = rec.GetEventEnvelopes()
-// // }
-
-// // func (i *Instance) applyEventsWritten(rec *EventsWrittenRecord) {
-// // 	i.events = nil
-// // }
-
-// // // load reads all entries from the journal and applies them to the queue.
-// // func (i *Instance) load(ctx context.Context) error {
-// // 	if i.commands != nil {
-// // 		return nil
-// // 	}
-
-// // 	i.commands = map[string]struct{}{}
-
-// // 	for {
-// // 		rec, ok, err := i.Journal.Read(ctx, i.version)
-// // 		if err != nil {
-// // 			return err
-// // 		}
-// // 		if !ok {
-// // 			break
-// // 		}
-
-// // 		rec.GetOneOf().(journalRecord).apply(i)
-// // 		i.version++
-// // 	}
-
-// // 	n := len(i.events)
-// // 	if n != 0 {
-// // 		for _, env := range i.events {
-// // 			if err := i.EventAppender.Append(ctx, env); err != nil {
-// // 				return err
-// // 			}
-// // 		}
-
-// // 		if err := i.apply(
-// // 			ctx,
-// // 			&JournalRecord_EventsWritten{
-// // 				EventsWritten: &EventsWrittenRecord{},
-// // 			},
-// // 		); err != nil {
-// // 			return err
-// // 		}
-// // 	}
-
-// // 	i.Logger.Debug(
-// // 		"loaded aggregate instance from journal",
-// // 		zap.Uint32("version", i.version),
-// // 		zap.Int("unpublished_events", n),
-// // 	)
-
-// // 	return nil
-// // }
-
-// // // apply writes a record to the journal and applies it to the queue.
-// // func (i *Instance) apply(
-// // 	ctx context.Context,
-// // 	rec journalRecord,
-// // ) error {
-// // 	ok, err := i.Journal.Write(
-// // 		ctx,
-// // 		i.version,
-// // 		&JournalRecord{
-// // 			OneOf: rec,
-// // 		},
-// // 	)
-// // 	if err != nil {
-// // 		return err
-// // 	}
-// // 	if !ok {
-// // 		return errors.New("optimistic concurrency conflict")
-// // 	}
-
-// // 	rec.apply(i)
-// // 	i.version++
-
-// // 	return nil
-// // }
-
-// // type journalRecord interface {
-// // 	isJournalRecord_OneOf
-// // 	apply(i *Instance)
-// // }
-
-// // func (x *JournalRecord_Revision) apply(i *Instance)      { i.applyRevision(x.Revision) }
-// // func (x *JournalRecord_EventsWritten) apply(i *Instance) { i.applyEventsWritten(x.EventsWritten) }
+func (x *JournalRecord_Revision) apply(s *InstanceSupervisor) { s.applyRevision(x.Revision) }
