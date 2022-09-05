@@ -13,7 +13,12 @@ import (
 	"go.uber.org/zap"
 )
 
-type InstanceSupervisor struct {
+// EventAppender is an interface for appending event messages to a stream.
+type EventAppender interface {
+	Append(ctx context.Context, envelopes ...*envelopespec.Envelope) error
+}
+
+type Instance struct {
 	HandlerIdentity *envelopespec.Identity
 	InstanceID      string
 	Handler         dogma.AggregateMessageHandler
@@ -22,11 +27,13 @@ type InstanceSupervisor struct {
 	Packer          *envelope.Packer
 	Logger          *zap.Logger
 
-	version uint32
-	root    dogma.AggregateRoot
+	version     uint32
+	commands    map[string]struct{}
+	unpublished []*envelopespec.Envelope
+	root        dogma.AggregateRoot
 }
 
-func (s *InstanceSupervisor) ExecuteCommand(
+func (s *Instance) ExecuteCommand(
 	ctx context.Context,
 	env *envelopespec.Envelope,
 ) error {
@@ -34,12 +41,22 @@ func (s *InstanceSupervisor) ExecuteCommand(
 		return err
 	}
 
+	if len(s.unpublished) != 0 {
+		panic("cannot handle command while there are unpublished events")
+	}
+
+	if _, ok := s.commands[env.MessageId]; ok {
+		return nil
+	}
+
 	cmd, err := s.Packer.Unpack(env)
 	if err != nil {
 		return err
 	}
 
-	rev := &RevisionRecord{}
+	rev := &RevisionRecord{
+		CommandId: env.MessageId,
+	}
 
 	s.Handler.HandleCommand(
 		s.root,
@@ -63,29 +80,40 @@ func (s *InstanceSupervisor) ExecuteCommand(
 		return err
 	}
 
-	var envelopes []*envelopespec.Envelope
-	for _, a := range rev.Actions {
-		if r := a.GetRecordEvent(); r != nil {
-			envelopes = append(envelopes, r.Envelope)
-		}
-	}
-
-	if len(envelopes) == 0 {
+	if len(s.unpublished) == 0 {
 		return nil
 	}
 
-	return s.EventAppender.Append(ctx, envelopes...)
+	if err := s.EventAppender.Append(ctx, s.unpublished...); err != nil {
+		return err
+	}
+
+	s.unpublished = nil
+
+	return nil
 }
 
-func (s *InstanceSupervisor) applyRevision(r *RevisionRecord) {
+func (s *Instance) applyRevision(r *RevisionRecord) {
+	s.commands[r.CommandId] = struct{}{}
+	s.unpublished = nil
+
+	for _, a := range r.Actions {
+		if r := a.GetRecordEvent(); r != nil {
+			s.unpublished = append(
+				s.unpublished,
+				r.Envelope,
+			)
+		}
+	}
 }
 
 // load reads all entries from the journal and applies them to the instance.
-func (s *InstanceSupervisor) load(ctx context.Context) error {
+func (s *Instance) load(ctx context.Context) error {
 	if s.root != nil {
 		return nil
 	}
 
+	s.commands = map[string]struct{}{}
 	s.root = s.Handler.New()
 
 	for {
@@ -101,6 +129,13 @@ func (s *InstanceSupervisor) load(ctx context.Context) error {
 		s.version++
 	}
 
+	if len(s.unpublished) != 0 {
+		if err := s.EventAppender.Append(ctx, s.unpublished...); err != nil {
+			return err
+		}
+		s.unpublished = nil
+	}
+
 	s.Logger.Debug(
 		"loaded aggregate instance from journal",
 		zap.Uint32("version", s.version),
@@ -110,7 +145,7 @@ func (s *InstanceSupervisor) load(ctx context.Context) error {
 }
 
 // apply writes a record to the journal and applies it to the queue.
-func (s *InstanceSupervisor) apply(
+func (s *Instance) apply(
 	ctx context.Context,
 	r journalRecord,
 ) error {
@@ -136,7 +171,7 @@ func (s *InstanceSupervisor) apply(
 
 type journalRecord interface {
 	isJournalRecord_OneOf
-	apply(s *InstanceSupervisor)
+	apply(s *Instance)
 }
 
-func (x *JournalRecord_Revision) apply(s *InstanceSupervisor) { s.applyRevision(x.Revision) }
+func (x *JournalRecord_Revision) apply(s *Instance) { s.applyRevision(x.Revision) }

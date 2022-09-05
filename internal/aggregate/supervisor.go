@@ -10,12 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// EventAppender is an interface for appending event messages to a stream.
-type EventAppender interface {
-	Append(ctx context.Context, envelopes ...*envelopespec.Envelope) error
-}
-
-type HandlerSupervisor struct {
+type Supervisor struct {
 	HandlerIdentity *envelopespec.Identity
 	Handler         dogma.AggregateMessageHandler
 	Packer          *envelope.Packer
@@ -23,10 +18,10 @@ type HandlerSupervisor struct {
 	EventAppender   EventAppender
 	Logger          *zap.Logger
 
-	instances map[string]*InstanceSupervisor
+	instances map[string]*Instance
 }
 
-func (s *HandlerSupervisor) ExecuteCommand(
+func (s *Supervisor) ExecuteCommand(
 	ctx context.Context,
 	id string,
 	env *envelopespec.Envelope,
@@ -38,7 +33,7 @@ func (s *HandlerSupervisor) ExecuteCommand(
 			return err
 		}
 
-		sup = &InstanceSupervisor{
+		sup = &Instance{
 			HandlerIdentity: s.HandlerIdentity,
 			InstanceID:      id,
 			Handler:         s.Handler,
@@ -49,7 +44,7 @@ func (s *HandlerSupervisor) ExecuteCommand(
 		}
 
 		if s.instances == nil {
-			s.instances = map[string]*InstanceSupervisor{}
+			s.instances = map[string]*Instance{}
 		}
 
 		s.instances[id] = sup

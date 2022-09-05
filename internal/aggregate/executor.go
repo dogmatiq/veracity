@@ -8,7 +8,7 @@ import (
 )
 
 type CommandExecutor struct {
-	Supervisors map[string]*HandlerSupervisor
+	Supervisors map[string]*Supervisor
 }
 
 func (e *CommandExecutor) ExecuteCommand(

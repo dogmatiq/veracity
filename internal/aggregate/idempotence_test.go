@@ -21,10 +21,10 @@ import (
 
 var _ = Describe("type CommandExecutor (idempotence)", func() {
 	var (
-		ctx    context.Context
-		journ  *journal.Stub[*JournalRecord]
-		events *eventstream.EventStream
-		packer *envelope.Packer
+		ctx             context.Context
+		instanceJournal *journal.Stub[*JournalRecord]
+		eventsJournal   *journal.Stub[*eventstream.JournalRecord]
+		packer          *envelope.Packer
 	)
 
 	BeforeEach(func() {
@@ -32,13 +32,12 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 		DeferCleanup(cancel)
 
-		journ = &journal.Stub[*JournalRecord]{
+		instanceJournal = &journal.Stub[*JournalRecord]{
 			Journal: &journal.InMemory[*JournalRecord]{},
 		}
 
-		events = &eventstream.EventStream{
+		eventsJournal = &journal.Stub[*eventstream.JournalRecord]{
 			Journal: &journal.InMemory[*eventstream.JournalRecord]{},
-			Logger:  zapx.NewTesting(),
 		}
 
 		packer = envelope.NewTestPacker()
@@ -48,13 +47,13 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		"it handles a command exactly once",
 		func(setup func()) {
 			setup()
-			expectErr := journ.WriteFunc != nil
+			expectErr := instanceJournal.WriteFunc != nil || eventsJournal.WriteFunc != nil
 
 			env := NewEnvelope("<command>", MessageC1)
 
 			tick := func(ctx context.Context) error {
 				exec := &CommandExecutor{
-					Supervisors: map[string]*HandlerSupervisor{
+					Supervisors: map[string]*Supervisor{
 						"<handler-key>": {
 							HandlerIdentity: &envelopespec.Identity{
 								Name: "<handler-name>",
@@ -77,11 +76,14 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 									id string,
 								) (journal.Journal[*JournalRecord], error) {
 									Expect(id).To(Equal("<instance-id>"))
-									return journ, nil
+									return instanceJournal, nil
 								},
 							},
-							EventAppender: events,
-							Logger:        zapx.NewTesting(),
+							EventAppender: &eventstream.EventStream{
+								Journal: eventsJournal,
+								Logger:  zapx.NewTesting(),
+							},
+							Logger: zapx.NewTesting(),
 						},
 					},
 				}
@@ -100,11 +102,16 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 					break
 				}
 
-				Expect(err).To(MatchError("<error>"))
+				Expect(err).To(MatchError(ContainSubstring("<error>")))
 				expectErr = false
 			}
 
 			Expect(expectErr).To(BeFalse(), "process should fail at least once")
+
+			events := &eventstream.EventStream{
+				Journal: eventsJournal,
+				Logger:  zapx.NewTesting(),
+			}
 
 			var actual []*envelopespec.Envelope
 			err := events.Range(
@@ -130,34 +137,72 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		Entry(
 			"revision fails before journal record is written",
 			func() {
-				journ.WriteFunc = func(
+				instanceJournal.WriteFunc = func(
 					ctx context.Context,
 					v uint32,
 					r *JournalRecord,
 				) (bool, error) {
 					if r.GetRevision() != nil {
-						journ.WriteFunc = nil
+						instanceJournal.WriteFunc = nil
 						return false, errors.New("<error>")
 					}
-					return journ.Journal.Write(ctx, v, r)
+					return instanceJournal.Journal.Write(ctx, v, r)
 				}
 			},
 		),
-		FEntry(
+		Entry(
 			"revision fails after journal record is written",
 			func() {
-				journ.WriteFunc = func(
+				instanceJournal.WriteFunc = func(
 					ctx context.Context,
 					v uint32,
 					r *JournalRecord,
 				) (bool, error) {
-					ok, err := journ.Journal.Write(ctx, v, r)
+					ok, err := instanceJournal.Journal.Write(ctx, v, r)
 					if !ok || err != nil {
 						return false, err
 					}
 
 					if r.GetRevision() != nil {
-						journ.WriteFunc = nil
+						instanceJournal.WriteFunc = nil
+						return false, errors.New("<error>")
+					}
+
+					return true, nil
+				}
+			},
+		),
+		Entry(
+			"event stream append fails before journal record is written",
+			func() {
+				eventsJournal.WriteFunc = func(
+					ctx context.Context,
+					v uint32,
+					r *eventstream.JournalRecord,
+				) (bool, error) {
+					if r.GetAppend() != nil {
+						eventsJournal.WriteFunc = nil
+						return false, errors.New("<error>")
+					}
+					return eventsJournal.Journal.Write(ctx, v, r)
+				}
+			},
+		),
+		Entry(
+			"event stream append fails after journal record is written",
+			func() {
+				eventsJournal.WriteFunc = func(
+					ctx context.Context,
+					v uint32,
+					r *eventstream.JournalRecord,
+				) (bool, error) {
+					ok, err := eventsJournal.Journal.Write(ctx, v, r)
+					if !ok || err != nil {
+						return false, err
+					}
+
+					if r.GetAppend() != nil {
+						eventsJournal.WriteFunc = nil
 						return false, errors.New("<error>")
 					}
 
