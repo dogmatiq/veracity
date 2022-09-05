@@ -4,7 +4,10 @@ import (
 	"context"
 )
 
-// Journal is an append-only log that stores records of type R.
+// A Journal is an append-only log that stores records of type R.
+//
+// The read/write operations are immediately consistent, meaning that successful
+// writes are immediately visible to readers.
 //
 // Journals may be safely used concurrently.
 type Journal[R any] interface {
@@ -23,9 +26,16 @@ type Journal[R any] interface {
 	//
 	// If v > current then the behavior is undefined.
 	Write(ctx context.Context, v uint32, r R) (ok bool, err error)
+
+	// Close closes the journal.
+	Close() error
 }
 
-// BinaryJournal is an append-only log that stores binary records.
-type BinaryJournal interface {
-	Journal[[]byte]
+// Opener is an interface for opening journals by key.
+type Opener[R any] interface {
+	// OpenJournal opens the journal identified by the given key.
+	OpenJournal(
+		ctx context.Context,
+		key string,
+	) (Journal[R], error)
 }

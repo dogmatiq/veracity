@@ -10,9 +10,13 @@ import (
 // PB is a journal that persists protocol-buffers-based journal records to an
 // underlying binary journal.
 type PB[R proto.Message] struct {
-	Journal BinaryJournal
+	Journal[[]byte]
 }
 
+// Read returns the record that was written to produce the given version of the
+// journal.
+//
+// If the version does not exist ok is false.
 func (j *PB[R]) Read(ctx context.Context, v uint32) (R, bool, error) {
 	var r R
 
@@ -28,6 +32,14 @@ func (j *PB[R]) Read(ctx context.Context, v uint32) (R, bool, error) {
 	return r, true, proto.Unmarshal(data, r)
 }
 
+// Write appends a new record to the journal.
+//
+// v must be the current version of the journal.
+//
+// If v < current then the record is not persisted; ok is false indicating an
+// optimistic concurrency conflict.
+//
+// If v > current then the behavior is undefined.
 func (j *PB[R]) Write(ctx context.Context, v uint32, r R) (bool, error) {
 	data, err := proto.Marshal(r)
 	if err != nil {
