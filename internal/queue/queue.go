@@ -6,14 +6,14 @@ import (
 	"errors"
 	"fmt"
 
-	envelopespec "github.com/dogmatiq/interopspec/envelopespec"
+	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/marshalkit"
 	"github.com/dogmatiq/veracity/internal/persistence/journal"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/protobuf/proto"
-	anypb "google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // Queue is a durable priority queue of messages.
