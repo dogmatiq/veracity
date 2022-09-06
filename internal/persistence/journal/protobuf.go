@@ -13,7 +13,7 @@ type PB[R proto.Message] struct {
 	Journal[[]byte]
 }
 
-// Read returns the record that was written to produce the given version of the
+// Read returns the record that was written to produce the version v of the
 // journal.
 //
 // If the version does not exist ok is false.

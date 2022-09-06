@@ -11,8 +11,8 @@ import (
 //
 // Journals may be safely used concurrently.
 type Journal[R any] interface {
-	// Read returns the record that was written to produce the given version of
-	// the journal.
+	// Read returns the record that was written to produce the version v of the
+	// journal.
 	//
 	// If the version does not exist ok is false.
 	Read(ctx context.Context, v uint32) (r R, ok bool, err error)
