@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/dogmatiq/veracity/internal/persistence/journal"
+	"github.com/dogmatiq/veracity/journal"
 )
 
 // OpenerStub is a test implementation of the Opener[R] interface.

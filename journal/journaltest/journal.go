@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync/atomic"
 
-	"github.com/dogmatiq/veracity/internal/persistence/journal"
+	"github.com/dogmatiq/veracity/journal"
 )
 
 // JournalStub is a test implementation of the journal.Journal[R] interface.

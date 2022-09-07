@@ -6,7 +6,7 @@ import (
 	"github.com/dogmatiq/dogma"
 	envelopespec "github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/internal/envelope"
-	"github.com/dogmatiq/veracity/internal/persistence/journal"
+	"github.com/dogmatiq/veracity/journal"
 	"go.uber.org/zap"
 )
 

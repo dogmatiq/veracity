@@ -8,8 +8,8 @@ import (
 
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/marshalkit"
-	"github.com/dogmatiq/veracity/internal/persistence/journal"
 	"github.com/dogmatiq/veracity/internal/zapx"
+	"github.com/dogmatiq/veracity/journal"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/protobuf/proto"

@@ -13,9 +13,9 @@ import (
 	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/eventstream"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
-	"github.com/dogmatiq/veracity/internal/persistence/journal"
-	"github.com/dogmatiq/veracity/internal/persistence/journal/journaltest"
 	"github.com/dogmatiq/veracity/internal/zapx"
+	"github.com/dogmatiq/veracity/journal"
+	"github.com/dogmatiq/veracity/journal/journaltest"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
