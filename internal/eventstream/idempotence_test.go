@@ -10,6 +10,7 @@ import (
 	. "github.com/dogmatiq/veracity/internal/eventstream"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
 	"github.com/dogmatiq/veracity/internal/persistence/journal"
+	"github.com/dogmatiq/veracity/internal/persistence/journal/journaltest"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	. "github.com/jmalloc/gomegax"
 	. "github.com/onsi/ginkgo/v2"
@@ -19,7 +20,7 @@ import (
 var _ = Describe("type EventStream (idempotence)", func() {
 	var (
 		ctx   context.Context
-		journ *journal.Stub[*JournalRecord]
+		journ *journaltest.JournalStub[*JournalRecord]
 	)
 
 	BeforeEach(func() {
@@ -27,7 +28,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 		DeferCleanup(cancel)
 
-		journ = &journal.Stub[*JournalRecord]{
+		journ = &journaltest.JournalStub[*JournalRecord]{
 			Journal: &journal.InMemory[*JournalRecord]{},
 		}
 	})

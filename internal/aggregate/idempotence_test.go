@@ -14,6 +14,7 @@ import (
 	"github.com/dogmatiq/veracity/internal/eventstream"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
 	"github.com/dogmatiq/veracity/internal/persistence/journal"
+	"github.com/dogmatiq/veracity/internal/persistence/journal/journaltest"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -22,8 +23,8 @@ import (
 var _ = Describe("type CommandExecutor (idempotence)", func() {
 	var (
 		ctx             context.Context
-		instanceJournal *journal.Stub[*JournalRecord]
-		eventsJournal   *journal.Stub[*eventstream.JournalRecord]
+		instanceJournal *journaltest.JournalStub[*JournalRecord]
+		eventsJournal   *journaltest.JournalStub[*eventstream.JournalRecord]
 		packer          *envelope.Packer
 	)
 
@@ -32,11 +33,11 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 		DeferCleanup(cancel)
 
-		instanceJournal = &journal.Stub[*JournalRecord]{
+		instanceJournal = &journaltest.JournalStub[*JournalRecord]{
 			Journal: &journal.InMemory[*JournalRecord]{},
 		}
 
-		eventsJournal = &journal.Stub[*eventstream.JournalRecord]{
+		eventsJournal = &journaltest.JournalStub[*eventstream.JournalRecord]{
 			Journal: &journal.InMemory[*eventstream.JournalRecord]{},
 		}
 
@@ -67,7 +68,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 						},
 					},
 					Packer: packer,
-					JournalOpener: &journal.OpenerStub[*JournalRecord]{
+					JournalOpener: &journaltest.OpenerStub[*JournalRecord]{
 						Opener: &journal.InMemoryOpener[*JournalRecord]{},
 						OpenJournalFunc: func(
 							ctx context.Context,
