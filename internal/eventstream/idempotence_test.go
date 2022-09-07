@@ -2,7 +2,6 @@ package eventstream_test
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	. "github.com/dogmatiq/dogma/fixtures"
@@ -35,9 +34,8 @@ var _ = Describe("type EventStream (idempotence)", func() {
 
 	DescribeTable(
 		"it acknowledges the message exactly once",
-		func(setup func()) {
+		func(expectErr string, setup func()) {
 			setup()
-			expectErr := journ.WriteFunc != nil
 
 			expect := NewEnvelope("<event>", MessageE1)
 			appended := false
@@ -58,17 +56,19 @@ var _ = Describe("type EventStream (idempotence)", func() {
 				return nil
 			}
 
+			needError := expectErr != ""
+
 			for {
 				err := tick(ctx)
 				if err == nil {
 					break
 				}
 
-				Expect(err).To(MatchError(ContainSubstring("<error>")))
-				expectErr = false
+				Expect(err).To(MatchError(expectErr))
+				needError = false
 			}
 
-			Expect(expectErr).To(BeFalse(), "process should fail at least once")
+			Expect(needError).To(BeFalse(), "process should fail with the expected error at least once")
 
 			stream := &EventStream{
 				Journal: journ,
@@ -95,44 +95,31 @@ var _ = Describe("type EventStream (idempotence)", func() {
 		},
 		Entry(
 			"no faults",
+			"", // no error expected
 			func() {},
 		),
 		Entry(
 			"append fails before journal record is written",
+			"unable to append event(s): <error>",
 			func() {
-				journ.WriteFunc = func(
-					ctx context.Context,
-					v uint32,
-					r *JournalRecord,
-				) (bool, error) {
-					if r.GetAppend() != nil {
-						journ.WriteFunc = nil
-						return false, errors.New("<error>")
-					}
-					return journ.Journal.Write(ctx, v, r)
-				}
+				journaltest.FailOnceBeforeWrite(
+					journ,
+					func(r *JournalRecord) bool {
+						return r.GetAppend() != nil
+					},
+				)
 			},
 		),
 		Entry(
 			"append fails after journal record is written",
+			"unable to append event(s): <error>",
 			func() {
-				journ.WriteFunc = func(
-					ctx context.Context,
-					v uint32,
-					r *JournalRecord,
-				) (bool, error) {
-					ok, err := journ.Journal.Write(ctx, v, r)
-					if !ok || err != nil {
-						return false, err
-					}
-
-					if r.GetAppend() != nil {
-						journ.WriteFunc = nil
-						return false, errors.New("<error>")
-					}
-
-					return true, nil
-				}
+				journaltest.FailOnceAfterWrite(
+					journ,
+					func(r *JournalRecord) bool {
+						return r.GetAppend() != nil
+					},
+				)
 			},
 		),
 	)

@@ -54,7 +54,7 @@ func (s *EventStream) Append(
 	}
 
 	if err := s.apply(ctx, r); err != nil {
-		return fmt.Errorf("unable to append events: %w", err)
+		return fmt.Errorf("unable to append event(s): %w", err)
 	}
 
 	for _, env := range r.Append.Envelopes {
