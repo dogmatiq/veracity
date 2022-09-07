@@ -2,6 +2,7 @@ package journaltest
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 
 	"github.com/dogmatiq/veracity/journal"
@@ -89,7 +90,6 @@ func (j *JournalStub[R]) Close() error {
 // The error is returned before the write is actually performed.
 func FailOnceBeforeWrite[R any](
 	s *JournalStub[R],
-	e error,
 	pred func(R) bool,
 ) {
 	var done uint32
@@ -97,7 +97,7 @@ func FailOnceBeforeWrite[R any](
 	s.beforeWrite = func(ctx context.Context, v uint32, r R) (bool, error) {
 		if pred(r) {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				return false, e
+				return false, errors.New("<error>")
 			}
 		}
 
@@ -111,7 +111,6 @@ func FailOnceBeforeWrite[R any](
 // The error is returned after the write is actually performed.
 func FailOnceAfterWrite[R any](
 	s *JournalStub[R],
-	e error,
 	pred func(R) bool,
 ) {
 	var done uint32
@@ -129,7 +128,7 @@ func FailOnceAfterWrite[R any](
 
 		if pred(r) {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				return false, e
+				return false, errors.New("<error>")
 			}
 		}
 

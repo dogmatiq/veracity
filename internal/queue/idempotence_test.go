@@ -2,7 +2,6 @@ package queue_test
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	. "github.com/dogmatiq/dogma/fixtures"
@@ -33,9 +32,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 
 	DescribeTable(
 		"it acknowledges the message exactly once",
-		func(setup func()) {
+		func(expectErr string, setup func()) {
 			setup()
-			expectErr := journ.WriteFunc != nil
 
 			messages := []Message{
 				{
@@ -78,19 +76,21 @@ var _ = Describe("type Queue (idempotence)", func() {
 				return queue.Ack(ctx, m)
 			}
 
-			acks := 0
-			for acks < len(messages) {
+			needAcks := len(messages)
+			needError := expectErr != ""
+
+			for needAcks > 0 {
 				err := tick(ctx)
 				if err == nil {
-					acks++
+					needAcks--
 					continue
 				}
 
-				Expect(err).To(MatchError(ContainSubstring("<error>")))
-				expectErr = false
+				Expect(err).To(MatchError(expectErr))
+				needError = false
 			}
 
-			Expect(expectErr).To(BeFalse(), "process should fail at least once")
+			Expect(needError).To(BeFalse(), "process should fail with the expected error")
 
 			queue := &Queue{
 				Journal: journ,
@@ -102,158 +102,103 @@ var _ = Describe("type Queue (idempotence)", func() {
 		},
 		Entry(
 			"no faults",
+			"", // no error expected
 			func() {},
 		),
 		Entry(
 			"enqueue fails before journal record is written",
+			"unable to enqueue message(s): <error>",
 			func() {
-				journ.WriteFunc = func(
-					ctx context.Context,
-					v uint32,
-					r *JournalRecord,
-				) (bool, error) {
-					if r.GetEnqueue() != nil {
-						journ.WriteFunc = nil
-						return false, errors.New("<error>")
-					}
-					return journ.Journal.Write(ctx, v, r)
-				}
+				journaltest.FailOnceBeforeWrite(
+					journ,
+					func(r *JournalRecord) bool {
+						return r.GetEnqueue() != nil
+					},
+				)
 			},
 		),
 		Entry(
 			"enqueue fails after journal record is written",
+			"unable to enqueue message(s): <error>",
 			func() {
-				journ.WriteFunc = func(
-					ctx context.Context,
-					v uint32,
-					r *JournalRecord,
-				) (bool, error) {
-					ok, err := journ.Journal.Write(ctx, v, r)
-					if !ok || err != nil {
-						return false, err
-					}
-
-					if r.GetEnqueue() != nil {
-						journ.WriteFunc = nil
-						return false, errors.New("<error>")
-					}
-
-					return true, nil
-				}
+				journaltest.FailOnceAfterWrite(
+					journ,
+					func(r *JournalRecord) bool {
+						return r.GetEnqueue() != nil
+					},
+				)
 			},
 		),
 		Entry(
 			"acquire fails before journal record is written",
+			"unable to acquire message: <error>",
 			func() {
-				journ.WriteFunc = func(
-					ctx context.Context,
-					v uint32,
-					r *JournalRecord,
-				) (bool, error) {
-					if r.GetAcquire() != nil {
-						journ.WriteFunc = nil
-						return false, errors.New("<error>")
-					}
-					return journ.Journal.Write(ctx, v, r)
-				}
+				journaltest.FailOnceBeforeWrite(
+					journ,
+					func(r *JournalRecord) bool {
+						return r.GetAcquire() != nil
+					},
+				)
 			},
 		),
 		Entry(
 			"acquire fails after journal record is written",
+			"unable to acquire message: <error>",
 			func() {
-				journ.WriteFunc = func(
-					ctx context.Context,
-					v uint32,
-					r *JournalRecord,
-				) (bool, error) {
-					ok, err := journ.Journal.Write(ctx, v, r)
-					if !ok || err != nil {
-						return false, err
-					}
-
-					if r.GetAcquire() != nil {
-						journ.WriteFunc = nil
-						return false, errors.New("<error>")
-					}
-
-					return true, nil
-				}
+				journaltest.FailOnceAfterWrite(
+					journ,
+					func(r *JournalRecord) bool {
+						return r.GetAcquire() != nil
+					},
+				)
 			},
 		),
 		Entry(
 			"acknowledge fails before journal record is written",
+			"unable to acknowledge message: <error>",
 			func() {
-				journ.WriteFunc = func(
-					ctx context.Context,
-					v uint32,
-					r *JournalRecord,
-				) (bool, error) {
-					if r.GetAck() != nil {
-						journ.WriteFunc = nil
-						return false, errors.New("<error>")
-					}
-					return journ.Journal.Write(ctx, v, r)
-				}
+				journaltest.FailOnceBeforeWrite(
+					journ,
+					func(r *JournalRecord) bool {
+						return r.GetAck() != nil
+					},
+				)
 			},
 		),
 		Entry(
 			"acknowledge fails after journal record is written",
+			"unable to acknowledge message: <error>",
 			func() {
-				journ.WriteFunc = func(
-					ctx context.Context,
-					v uint32,
-					r *JournalRecord,
-				) (bool, error) {
-					ok, err := journ.Journal.Write(ctx, v, r)
-					if !ok || err != nil {
-						return false, err
-					}
-
-					if r.GetAck() != nil {
-						journ.WriteFunc = nil
-						return false, errors.New("<error>")
-					}
-
-					return true, nil
-				}
+				journaltest.FailOnceAfterWrite(
+					journ,
+					func(r *JournalRecord) bool {
+						return r.GetAck() != nil
+					},
+				)
 			},
 		),
 		Entry(
 			"reject fails before journal record is written",
+			"unable to reject message: <error>",
 			func() {
-				journ.WriteFunc = func(
-					ctx context.Context,
-					v uint32,
-					r *JournalRecord,
-				) (bool, error) {
-					if r.GetReject() != nil {
-						journ.WriteFunc = nil
-						return false, errors.New("<error>")
-					}
-					return journ.Journal.Write(ctx, v, r)
-				}
+				journaltest.FailOnceBeforeWrite(
+					journ,
+					func(r *JournalRecord) bool {
+						return r.GetReject() != nil
+					},
+				)
 			},
 		),
 		Entry(
 			"reject fails after journal record is written",
+			"unable to reject message: <error>",
 			func() {
-				journ.WriteFunc = func(
-					ctx context.Context,
-					v uint32,
-					r *JournalRecord,
-				) (bool, error) {
-					ok, err := journ.Journal.Write(ctx, v, r)
-					if !ok || err != nil {
-						return false, err
-					}
-
-					if r.GetReject() != nil {
-						journ.WriteFunc = nil
-						return false, errors.New("<error>")
-					}
-
-					return true, nil
-				}
+				journaltest.FailOnceAfterWrite(
+					journ,
+					func(r *JournalRecord) bool {
+						return r.GetReject() != nil
+					},
+				)
 			},
 		),
 	)

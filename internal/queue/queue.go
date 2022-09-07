@@ -64,7 +64,7 @@ func (q *Queue) Enqueue(
 	}
 
 	if err := q.write(ctx, r); err != nil {
-		return fmt.Errorf("unable to enqueue messages: %w", err)
+		return fmt.Errorf("unable to enqueue message(s): %w", err)
 	}
 
 	q.applyEnqueue(marshaled)
