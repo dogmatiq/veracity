@@ -21,6 +21,7 @@ type instance struct {
 	EventAppender   EventAppender
 	Packer          *envelope.Packer
 	Logger          *zap.Logger
+	Requests        <-chan request
 
 	version     uint32
 	commands    map[string]struct{}
@@ -28,23 +29,38 @@ type instance struct {
 	root        dogma.AggregateRoot
 }
 
-func (s *instance) ExecuteCommand(
-	ctx context.Context,
-	env *envelopespec.Envelope,
-) error {
-	if err := s.load(ctx); err != nil {
+func (i *instance) Run(ctx context.Context) error {
+	if err := i.load(ctx); err != nil {
 		return err
 	}
 
-	if len(s.unpublished) != 0 {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case req := <-i.Requests:
+			err := i.executeCommand(ctx, req.CommandEnvelope)
+			req.Response <- err
+			if err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func (i *instance) executeCommand(
+	ctx context.Context,
+	env *envelopespec.Envelope,
+) error {
+	if len(i.unpublished) != 0 {
 		panic("cannot handle command while there are unpublished events")
 	}
 
-	if _, ok := s.commands[env.MessageId]; ok {
+	if _, ok := i.commands[env.MessageId]; ok {
 		return nil
 	}
 
-	cmd, err := s.Packer.Unpack(env)
+	cmd, err := i.Packer.Unpack(env)
 	if err != nil {
 		return err
 	}
@@ -53,14 +69,14 @@ func (s *instance) ExecuteCommand(
 		CommandId: env.MessageId,
 	}
 
-	s.Handler.HandleCommand(
-		s.root,
+	i.Handler.HandleCommand(
+		i.root,
 		&scope{
-			HandlerIdentity: s.HandlerIdentity,
-			InstID:          s.InstanceID,
-			Root:            s.root,
-			Packer:          s.Packer,
-			Logger:          s.Logger.With(zapx.Envelope("command", env)),
+			HandlerIdentity: i.HandlerIdentity,
+			InstID:          i.InstanceID,
+			Root:            i.root,
+			Packer:          i.Packer,
+			Logger:          i.Logger.With(zapx.Envelope("command", env)),
 			CommandEnvelope: env,
 			Revision:        rev,
 		},
@@ -71,31 +87,31 @@ func (s *instance) ExecuteCommand(
 		Revision: rev,
 	}
 
-	if err := s.apply(ctx, r); err != nil {
+	if err := i.apply(ctx, r); err != nil {
 		return fmt.Errorf("unable to record revision: %w", err)
 	}
 
-	if len(s.unpublished) == 0 {
+	if len(i.unpublished) == 0 {
 		return nil
 	}
 
-	if err := s.EventAppender.Append(ctx, s.unpublished...); err != nil {
+	if err := i.EventAppender.Append(ctx, i.unpublished...); err != nil {
 		return err
 	}
 
-	s.unpublished = nil
+	i.unpublished = nil
 
 	return nil
 }
 
-func (s *instance) applyRevision(r *RevisionRecord) {
-	s.commands[r.CommandId] = struct{}{}
-	s.unpublished = nil
+func (i *instance) applyRevision(r *RevisionRecord) {
+	i.commands[r.CommandId] = struct{}{}
+	i.unpublished = nil
 
 	for _, a := range r.Actions {
 		if r := a.GetRecordEvent(); r != nil {
-			s.unpublished = append(
-				s.unpublished,
+			i.unpublished = append(
+				i.unpublished,
 				r.Envelope,
 			)
 		}
@@ -103,16 +119,12 @@ func (s *instance) applyRevision(r *RevisionRecord) {
 }
 
 // load reads all entries from the journal and applies them to the instance.
-func (s *instance) load(ctx context.Context) error {
-	if s.root != nil {
-		return nil
-	}
-
-	s.commands = map[string]struct{}{}
-	s.root = s.Handler.New()
+func (i *instance) load(ctx context.Context) error {
+	i.commands = map[string]struct{}{}
+	i.root = i.Handler.New()
 
 	for {
-		r, ok, err := s.Journal.Read(ctx, s.version)
+		r, ok, err := i.Journal.Read(ctx, i.version)
 		if err != nil {
 			return fmt.Errorf("unable to load instance: %w", err)
 		}
@@ -120,33 +132,33 @@ func (s *instance) load(ctx context.Context) error {
 			break
 		}
 
-		r.GetOneOf().(journalRecord).apply(s)
-		s.version++
+		r.GetOneOf().(journalRecord).apply(i)
+		i.version++
 	}
 
-	if len(s.unpublished) != 0 {
-		if err := s.EventAppender.Append(ctx, s.unpublished...); err != nil {
+	if len(i.unpublished) != 0 {
+		if err := i.EventAppender.Append(ctx, i.unpublished...); err != nil {
 			return err
 		}
-		s.unpublished = nil
+		i.unpublished = nil
 	}
 
-	s.Logger.Debug(
+	i.Logger.Debug(
 		"loaded aggregate instance from journal",
-		zap.Uint32("version", s.version),
+		zap.Uint32("version", i.version),
 	)
 
 	return nil
 }
 
-// apply writes a record to the journal and applies it to the queue.
-func (s *instance) apply(
+// apply writes a record to the journal and applies it to the instance.
+func (i *instance) apply(
 	ctx context.Context,
 	r journalRecord,
 ) error {
-	ok, err := s.Journal.Write(
+	ok, err := i.Journal.Write(
 		ctx,
-		s.version,
+		i.version,
 		&JournalRecord{
 			OneOf: r,
 		},
@@ -158,15 +170,15 @@ func (s *instance) apply(
 		return errors.New("optimistic concurrency conflict")
 	}
 
-	r.apply(s)
-	s.version++
+	r.apply(i)
+	i.version++
 
 	return nil
 }
 
 type journalRecord interface {
 	isJournalRecord_OneOf
-	apply(s *instance)
+	apply(i *instance)
 }
 
-func (x *JournalRecord_Revision) apply(s *instance) { s.applyRevision(x.Revision) }
+func (x *JournalRecord_Revision) apply(i *instance) { i.applyRevision(x.Revision) }

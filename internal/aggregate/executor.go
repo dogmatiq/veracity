@@ -29,7 +29,7 @@ type CommandExecutor struct {
 	once     sync.Once
 	requests chan request
 
-	instances map[string]*instance
+	instances map[string]chan request
 }
 
 type request struct {
@@ -48,9 +48,7 @@ func (e *CommandExecutor) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case req := <-e.requests:
-			err := e.executeCommand(ctx, req)
-			req.Response <- err
-			if err != nil {
+			if err := e.executeCommand(ctx, req); err != nil {
 				return err
 			}
 		}
@@ -58,31 +56,44 @@ func (e *CommandExecutor) Run(ctx context.Context) error {
 }
 
 func (e *CommandExecutor) executeCommand(ctx context.Context, req request) error {
-	inst, ok := e.instances[req.InstanceID]
+	requests, ok := e.instances[req.InstanceID]
 	if !ok {
-		j, err := e.JournalOpener.OpenJournal(ctx, req.InstanceID)
-		if err != nil {
-			return err
-		}
 
-		inst = &instance{
-			HandlerIdentity: e.HandlerIdentity,
-			InstanceID:      req.InstanceID,
-			Handler:         e.Handler,
-			Packer:          e.Packer,
-			Journal:         j,
-			EventAppender:   e.EventAppender,
-			Logger:          e.Logger.With(zap.String("instance_id", req.InstanceID)),
-		}
+		requests = make(chan request)
+
+		go func() {
+			j, err := e.JournalOpener.OpenJournal(ctx, req.InstanceID)
+			if err != nil {
+				panic(err)
+			}
+
+			inst := &instance{
+				HandlerIdentity: e.HandlerIdentity,
+				InstanceID:      req.InstanceID,
+				Handler:         e.Handler,
+				Packer:          e.Packer,
+				Journal:         j,
+				EventAppender:   e.EventAppender,
+				Logger:          e.Logger.With(zap.String("instance_id", req.InstanceID)),
+				Requests:        requests,
+			}
+
+			inst.Run(ctx)
+		}()
 
 		if e.instances == nil {
-			e.instances = map[string]*instance{}
+			e.instances = map[string]chan request{}
 		}
 
-		e.instances[req.InstanceID] = inst
+		e.instances[req.InstanceID] = requests
 	}
 
-	return inst.ExecuteCommand(ctx, req.CommandEnvelope)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case requests <- req:
+		return nil
+	}
 }
 
 // ExecuteCommand executes a command against the given aggregate instance.
