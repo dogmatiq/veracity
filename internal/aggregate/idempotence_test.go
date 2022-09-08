@@ -2,6 +2,7 @@ package aggregate_test
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/dogmatiq/dogma"
@@ -89,7 +90,11 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 				g, ctx := errgroup.WithContext(ctx)
 
 				g.Go(func() error {
-					return exec.Run(ctx)
+					err := exec.Run(ctx)
+					if errors.Is(err, context.Canceled) {
+						return nil
+					}
+					return err
 				})
 
 				g.Go(func() error {
