@@ -28,6 +28,11 @@ type CommandExecutor struct {
 	instances map[string]*instance
 }
 
+func (e *CommandExecutor) Run(ctx context.Context) error {
+	<-ctx.Done()
+	return nil
+}
+
 // ExecuteCommand executes a command against the given aggregate instance.
 func (e *CommandExecutor) ExecuteCommand(
 	ctx context.Context,

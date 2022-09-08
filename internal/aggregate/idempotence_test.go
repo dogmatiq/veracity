@@ -17,6 +17,7 @@ import (
 	"github.com/dogmatiq/veracity/journal/journaltest"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"golang.org/x/sync/errgroup"
 )
 
 var _ = Describe("type CommandExecutor (idempotence)", func() {
@@ -83,11 +84,28 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 					Logger: zapx.NewTesting(),
 				}
 
-				return exec.ExecuteCommand(
-					ctx,
-					"<instance-id>",
-					env,
-				)
+				ctx, cancel := context.WithCancel(ctx)
+				defer cancel()
+				g, ctx := errgroup.WithContext(ctx)
+
+				g.Go(func() error {
+					return exec.Run(ctx)
+				})
+
+				g.Go(func() error {
+					if err := exec.ExecuteCommand(
+						ctx,
+						"<instance-id>",
+						env,
+					); err != nil {
+						return err
+					}
+
+					cancel()
+					return nil
+				})
+
+				return g.Wait()
 			}
 
 			needError := expectErr != ""
