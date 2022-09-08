@@ -56,7 +56,7 @@ type InMemory[R any] struct {
 // journal.
 //
 // If the version does not exist ok is false.
-func (j *InMemory[R]) Read(ctx context.Context, v uint32) (R, bool, error) {
+func (j *InMemory[R]) Read(ctx context.Context, v uint64) (R, bool, error) {
 	data := j.get()
 
 	data.m.RLock()
@@ -81,7 +81,7 @@ func (j *InMemory[R]) Read(ctx context.Context, v uint32) (R, bool, error) {
 // optimistic concurrency conflict.
 //
 // It panics if v > current.
-func (j *InMemory[R]) Write(ctx context.Context, v uint32, r R) (bool, error) {
+func (j *InMemory[R]) Write(ctx context.Context, v uint64, r R) (bool, error) {
 	data := j.get()
 
 	data.m.Lock()

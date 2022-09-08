@@ -15,7 +15,7 @@ type Journal[R any] interface {
 	// journal.
 	//
 	// If the version does not exist ok is false.
-	Read(ctx context.Context, v uint32) (r R, ok bool, err error)
+	Read(ctx context.Context, v uint64) (r R, ok bool, err error)
 
 	// Write appends a new record to the journal.
 	//
@@ -25,7 +25,7 @@ type Journal[R any] interface {
 	// an optimistic concurrency conflict.
 	//
 	// If v > current then the behavior is undefined.
-	Write(ctx context.Context, v uint32, r R) (ok bool, err error)
+	Write(ctx context.Context, v uint64, r R) (ok bool, err error)
 
 	// Close closes the journal.
 	Close() error

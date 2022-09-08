@@ -22,7 +22,7 @@ type Queue struct {
 	Key     func(m Message) string
 	Logger  *zap.Logger
 
-	version  uint32
+	version  uint64
 	elements map[string]*elem
 	queue    pqueue
 	dangling map[string]*elem // acquired but unacknowledged messages, only used during load
@@ -367,7 +367,7 @@ func (q *Queue) write(
 type logAdaptor Queue
 
 func (a *logAdaptor) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	enc.AddUint32("version", a.version)
+	enc.AddUint64("version", a.version)
 	enc.AddInt("size", a.queue.Len())
 	return nil
 }

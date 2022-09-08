@@ -12,11 +12,11 @@ import (
 type JournalStub[R any] struct {
 	journal.Journal[R]
 
-	ReadFunc func(ctx context.Context, v uint32) (R, bool, error)
+	ReadFunc func(ctx context.Context, v uint64) (R, bool, error)
 
-	WriteFunc   func(ctx context.Context, v uint32, r R) (bool, error)
-	beforeWrite func(ctx context.Context, v uint32, r R) (bool, error)
-	afterWrite  func(ctx context.Context, v uint32, r R, ok bool, err error) (bool, error)
+	WriteFunc   func(ctx context.Context, v uint64, r R) (bool, error)
+	beforeWrite func(ctx context.Context, v uint64, r R) (bool, error)
+	afterWrite  func(ctx context.Context, v uint64, r R, ok bool, err error) (bool, error)
 
 	CloseFunc func() error
 }
@@ -25,7 +25,7 @@ type JournalStub[R any] struct {
 // journal.
 //
 // If the version does not exist ok is false.
-func (j *JournalStub[R]) Read(ctx context.Context, v uint32) (R, bool, error) {
+func (j *JournalStub[R]) Read(ctx context.Context, v uint64) (R, bool, error) {
 	if j.ReadFunc != nil {
 		return j.ReadFunc(ctx, v)
 	}
@@ -46,7 +46,7 @@ func (j *JournalStub[R]) Read(ctx context.Context, v uint32) (R, bool, error) {
 // optimistic concurrency conflict.
 //
 // If v > current then the behavior is undefined.
-func (j *JournalStub[R]) Write(ctx context.Context, v uint32, r R) (ok bool, err error) {
+func (j *JournalStub[R]) Write(ctx context.Context, v uint64, r R) (ok bool, err error) {
 	if j.beforeWrite != nil {
 		ok, err := j.beforeWrite(ctx, v, r)
 		if !ok || err != nil {
@@ -94,7 +94,7 @@ func FailOnceBeforeWrite[R any](
 ) {
 	var done uint32
 
-	s.beforeWrite = func(ctx context.Context, v uint32, r R) (bool, error) {
+	s.beforeWrite = func(ctx context.Context, v uint64, r R) (bool, error) {
 		if pred(r) {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
 				return false, errors.New("<error>")
@@ -117,7 +117,7 @@ func FailOnceAfterWrite[R any](
 
 	s.afterWrite = func(
 		ctx context.Context,
-		v uint32,
+		v uint64,
 		r R,
 		ok bool,
 		err error,

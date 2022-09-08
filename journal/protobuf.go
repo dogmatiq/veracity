@@ -17,7 +17,7 @@ type PB[R proto.Message] struct {
 // journal.
 //
 // If the version does not exist ok is false.
-func (j *PB[R]) Read(ctx context.Context, v uint32) (R, bool, error) {
+func (j *PB[R]) Read(ctx context.Context, v uint64) (R, bool, error) {
 	var r R
 
 	data, ok, err := j.Journal.Read(ctx, v)
@@ -40,7 +40,7 @@ func (j *PB[R]) Read(ctx context.Context, v uint32) (R, bool, error) {
 // optimistic concurrency conflict.
 //
 // If v > current then the behavior is undefined.
-func (j *PB[R]) Write(ctx context.Context, v uint32, r R) (bool, error) {
+func (j *PB[R]) Write(ctx context.Context, v uint64, r R) (bool, error) {
 	data, err := proto.Marshal(r)
 	if err != nil {
 		return false, err

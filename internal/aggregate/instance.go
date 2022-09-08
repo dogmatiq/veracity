@@ -23,7 +23,7 @@ type instance struct {
 	Logger          *zap.Logger
 	Requests        <-chan request
 
-	version     uint32
+	version     uint64
 	commands    map[string]struct{}
 	unpublished []*envelopespec.Envelope
 	root        dogma.AggregateRoot
@@ -145,7 +145,7 @@ func (i *instance) load(ctx context.Context) error {
 
 	i.Logger.Debug(
 		"loaded aggregate instance from journal",
-		zap.Uint32("version", i.version),
+		zap.Uint64("version", i.version),
 	)
 
 	return nil

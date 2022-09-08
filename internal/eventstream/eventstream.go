@@ -17,7 +17,7 @@ type EventStream struct {
 	Journal journal.Journal[*JournalRecord]
 	Logger  *zap.Logger
 
-	version uint32
+	version uint64
 	offset  uint64
 	events  map[string]struct{}
 }
@@ -139,17 +139,17 @@ func (s *EventStream) Range(
 func (s *EventStream) search(
 	ctx context.Context,
 	offset uint64,
-) (*JournalRecord, uint32, error) {
+) (*JournalRecord, uint64, error) {
 	if offset == 0 {
 		r, _, err := s.Journal.Read(ctx, 0)
 		return r, 0, err
 	}
 
-	min := uint32(0)
+	min := uint64(0)
 	max := s.version
 
 	for {
-		v := uint32((uint64(min) + uint64(max)) / 2)
+		v := min>>1 + max>>1
 
 		r, _, err := s.Journal.Read(ctx, v)
 		if err != nil {
@@ -225,7 +225,7 @@ func (s *EventStream) apply(
 type logAdaptor EventStream
 
 func (a *logAdaptor) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	enc.AddUint32("version", a.version)
+	enc.AddUint64("version", a.version)
 	enc.AddInt("size", len(a.events))
 	return nil
 }
