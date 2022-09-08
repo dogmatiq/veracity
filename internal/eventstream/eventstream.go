@@ -18,7 +18,7 @@ type EventStream struct {
 	Logger  *zap.Logger
 
 	version uint32
-	offset  uint32
+	offset  uint64
 	events  map[string]struct{}
 }
 
@@ -27,13 +27,17 @@ func (s *EventStream) Append(
 	ctx context.Context,
 	envelopes ...*envelopespec.Envelope,
 ) error {
+	if len(envelopes) == 0 {
+		panic("must provide at least one envelope")
+	}
+
 	if err := s.load(ctx); err != nil {
 		return err
 	}
 
 	r := &JournalRecord_Append{
 		Append: &AppendRecord{
-			Offset: s.offset,
+			BeginOffset: s.offset,
 		},
 	}
 
@@ -81,7 +85,7 @@ func (s *EventStream) applyAppend(r *AppendRecord) {
 // Iteration is stopped if fn returns false or a non-nil error.
 func (s *EventStream) Range(
 	ctx context.Context,
-	offset uint32,
+	offset uint64,
 	fn func(context.Context, *envelopespec.Envelope) (bool, error),
 ) error {
 	if err := s.load(ctx); err != nil {
@@ -98,9 +102,10 @@ func (s *EventStream) Range(
 	}
 
 	append := r.GetAppend()
+	begin := append.GetBeginOffset()
 	envelopes := append.GetEnvelopes()
 
-	for _, env := range envelopes[offset-append.GetOffset():] {
+	for _, env := range envelopes[offset-begin:] {
 		ok, err := fn(ctx, env)
 		if !ok || err != nil {
 			return err
@@ -133,7 +138,7 @@ func (s *EventStream) Range(
 // journal.
 func (s *EventStream) search(
 	ctx context.Context,
-	offset uint32,
+	offset uint64,
 ) (*JournalRecord, uint32, error) {
 	if offset == 0 {
 		r, _, err := s.Journal.Read(ctx, 0)
@@ -152,12 +157,10 @@ func (s *EventStream) search(
 		}
 
 		append := r.GetAppend()
-		begin := append.GetOffset()
-		end := begin + uint32(len(append.GetEnvelopes()))
 
-		if offset < begin {
+		if offset < append.GetBeginOffset() {
 			max = v
-		} else if offset > end {
+		} else if offset >= append.GetEndOffset() { // TODO: test edge case here
 			min = v + 1
 		} else {
 			return r, v, nil
@@ -218,13 +221,6 @@ func (s *EventStream) apply(
 
 	return nil
 }
-
-type journalRecord interface {
-	isJournalRecord_OneOf
-	apply(s *EventStream)
-}
-
-func (x *JournalRecord_Append) apply(s *EventStream) { s.applyAppend(x.Append) }
 
 type logAdaptor EventStream
 

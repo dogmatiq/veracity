@@ -90,7 +90,7 @@ var _ = Describe("type EventStream", func() {
 
 				err := stream.Range(
 					ctx,
-					uint32(i),
+					uint64(i),
 					func(
 						ctx context.Context,
 						env *envelopespec.Envelope,

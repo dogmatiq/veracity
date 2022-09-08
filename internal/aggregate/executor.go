@@ -58,7 +58,6 @@ func (e *CommandExecutor) Run(ctx context.Context) error {
 func (e *CommandExecutor) executeCommand(ctx context.Context, req request) error {
 	requests, ok := e.instances[req.InstanceID]
 	if !ok {
-
 		requests = make(chan request)
 
 		go func() {
