@@ -2,7 +2,6 @@ package aggregate_test
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/dogmatiq/dogma"
@@ -46,9 +45,8 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 
 	DescribeTable(
 		"it handles a command exactly once",
-		func(setup func()) {
+		func(expectErr string, setup func()) {
 			setup()
-			expectErr := instanceJournal.WriteFunc != nil || eventsJournal.WriteFunc != nil
 
 			env := NewEnvelope("<command>", MessageC1)
 
@@ -92,17 +90,19 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 				)
 			}
 
+			needError := expectErr != ""
+
 			for {
 				err := tick(ctx)
 				if err == nil {
 					break
 				}
 
-				Expect(err).To(MatchError(ContainSubstring("<error>")))
-				expectErr = false
+				Expect(err).To(MatchError(expectErr))
+				needError = false
 			}
 
-			Expect(expectErr).To(BeFalse(), "process should fail at least once")
+			Expect(needError).To(BeFalse(), "process should fail with the expected error at least once")
 
 			events := &eventstream.EventStream{
 				Journal: eventsJournal,
@@ -128,82 +128,55 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		},
 		Entry(
 			"no faults",
+			"", // no error expected
 			func() {},
 		),
 		Entry(
 			"revision fails before journal record is written",
+			"unable to record revision: <error>",
 			func() {
-				instanceJournal.WriteFunc = func(
-					ctx context.Context,
-					v uint32,
-					r *JournalRecord,
-				) (bool, error) {
-					if r.GetRevision() != nil {
-						instanceJournal.WriteFunc = nil
-						return false, errors.New("<error>")
-					}
-					return instanceJournal.Journal.Write(ctx, v, r)
-				}
+				journaltest.FailOnceBeforeWrite(
+					instanceJournal,
+					func(r *JournalRecord) bool {
+						return r.GetRevision() != nil
+					},
+				)
 			},
 		),
 		Entry(
 			"revision fails after journal record is written",
+			"unable to record revision: <error>",
 			func() {
-				instanceJournal.WriteFunc = func(
-					ctx context.Context,
-					v uint32,
-					r *JournalRecord,
-				) (bool, error) {
-					ok, err := instanceJournal.Journal.Write(ctx, v, r)
-					if !ok || err != nil {
-						return false, err
-					}
-
-					if r.GetRevision() != nil {
-						instanceJournal.WriteFunc = nil
-						return false, errors.New("<error>")
-					}
-
-					return true, nil
-				}
+				journaltest.FailOnceAfterWrite(
+					instanceJournal,
+					func(r *JournalRecord) bool {
+						return r.GetRevision() != nil
+					},
+				)
 			},
 		),
 		Entry(
 			"event stream append fails before journal record is written",
+			"unable to append event(s): <error>",
 			func() {
-				eventsJournal.WriteFunc = func(
-					ctx context.Context,
-					v uint32,
-					r *eventstream.JournalRecord,
-				) (bool, error) {
-					if r.GetAppend() != nil {
-						eventsJournal.WriteFunc = nil
-						return false, errors.New("<error>")
-					}
-					return eventsJournal.Journal.Write(ctx, v, r)
-				}
+				journaltest.FailOnceBeforeWrite(
+					eventsJournal,
+					func(r *eventstream.JournalRecord) bool {
+						return r.GetAppend() != nil
+					},
+				)
 			},
 		),
 		Entry(
 			"event stream append fails after journal record is written",
+			"unable to append event(s): <error>",
 			func() {
-				eventsJournal.WriteFunc = func(
-					ctx context.Context,
-					v uint32,
-					r *eventstream.JournalRecord,
-				) (bool, error) {
-					ok, err := eventsJournal.Journal.Write(ctx, v, r)
-					if !ok || err != nil {
-						return false, err
-					}
-
-					if r.GetAppend() != nil {
-						eventsJournal.WriteFunc = nil
-						return false, errors.New("<error>")
-					}
-
-					return true, nil
-				}
+				journaltest.FailOnceAfterWrite(
+					eventsJournal,
+					func(r *eventstream.JournalRecord) bool {
+						return r.GetAppend() != nil
+					},
+				)
 			},
 		),
 	)

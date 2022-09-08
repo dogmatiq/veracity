@@ -72,7 +72,7 @@ func (s *instance) ExecuteCommand(
 	}
 
 	if err := s.apply(ctx, r); err != nil {
-		return err
+		return fmt.Errorf("unable to record revision: %w", err)
 	}
 
 	if len(s.unpublished) == 0 {
