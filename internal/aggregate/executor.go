@@ -38,6 +38,9 @@ type request struct {
 	Response        chan<- error
 }
 
+// Run starts the command executor.
+//
+// It runs until ctx is canceled or an error occurs.
 func (e *CommandExecutor) Run(ctx context.Context) error {
 	e.once.Do(func() {
 		e.requests = make(chan request)
