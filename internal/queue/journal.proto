@@ -10,19 +10,19 @@ message JournalRecord {
   oneof OneOf {
     EnqueueRecord enqueue = 1;
     AcquireRecord acquire = 2;
-    AckRecord ack = 3;
-    RejectRecord reject = 4;
+    ReleaseRecord release = 3;
+    RemoveRecord remove = 4;
   }
 }
 
 message JournalMessage {
   dogma.interop.v1.envelope.Envelope envelope = 1;
-  string key = 2;
+  string idempotency_key = 2;
   int64 priority = 3;
   google.protobuf.Any meta_data = 4;
 }
 
 message EnqueueRecord { repeated JournalMessage messages = 1; }
-message AcquireRecord { string key = 1; }
-message AckRecord { string key = 1; }
-message RejectRecord { string key = 1; }
+message AcquireRecord { string idempotency_key = 1; }
+message ReleaseRecord { string idempotency_key = 1; }
+message RemoveRecord { string idempotency_key = 1; }

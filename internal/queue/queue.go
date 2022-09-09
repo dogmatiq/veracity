@@ -11,21 +11,28 @@ import (
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/journal"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // Queue is a durable priority queue of messages.
 type Queue struct {
+	// Journal is the journal used to store the queue's state.
 	Journal journal.Journal[*JournalRecord]
-	Key     func(m Message) string
-	Logger  *zap.Logger
 
-	version  uint64
-	elements map[string]*elem
-	queue    pqueue
-	dangling map[string]*elem // acquired but unacknowledged messages, only used during load
+	// DeriveIdempotencyKey is a function that derives the idempotency key to
+	// use for each message on the queue.
+	//
+	// If it is nil the message's ID is used as the idempotency key.
+	DeriveIdempotencyKey func(m Message) string
+
+	// Logger is the target for log messages about changes to the queue.
+	Logger *zap.Logger
+
+	version    uint64
+	elements   map[string]*elem
+	queue      pqueue
+	unreleased map[string]*elem // only used for recovery during load
 }
 
 // Message is a container for a message on a queue.
@@ -43,7 +50,7 @@ type AcquiredMessage struct {
 	element *elem
 }
 
-// Enqueue adds messages to the queue.
+// Enqueue adds message to the queue.
 func (q *Queue) Enqueue(
 	ctx context.Context,
 	messages ...Message,
@@ -67,40 +74,51 @@ func (q *Queue) Enqueue(
 		return fmt.Errorf("unable to enqueue message(s): %w", err)
 	}
 
-	q.applyEnqueue(marshaled)
-
 	for _, m := range marshaled {
+		q.enqueue(m)
+
 		q.Logger.Debug(
 			"message enqueued",
-			zap.String("key", m.Key),
+			zap.Uint64("queue_version", q.version),
+			zap.Int("queue_size", q.queue.Len()),
+			zap.String("idempotency_key", m.IdempotencyKey),
 			zapx.Envelope("message", m.Envelope),
-			zap.Object("queue", (*logAdaptor)(q)),
 		)
 	}
 
 	return nil
 }
 
-func (q *Queue) loadEnqueue(r *EnqueueRecord) {
-	q.applyEnqueue(r.GetMessages())
-}
-
-func (q *Queue) applyEnqueue(messages []*JournalMessage) {
-	for _, jm := range messages {
-		e := &elem{JournalMessage: jm}
-		q.elements[jm.Key] = e
-		heap.Push(&q.queue, e)
+// apply updates the queue's in-memory state to reflect an enqueue record.
+func (x *JournalRecord_Enqueue) apply(q *Queue) {
+	for _, jm := range x.Enqueue.GetMessages() {
+		q.enqueue(jm)
 	}
 }
 
+// enqueue updates the queue's in-memory state to include an enqueued message.
+func (q *Queue) enqueue(jm *JournalMessage) {
+	e := &elem{JournalMessage: jm}
+	q.elements[jm.IdempotencyKey] = e
+	heap.Push(&q.queue, e)
+}
+
+// useMessageIDAsKey is an idempotency key "derivation function" that uses the
+// message's ID as the idempotency key.
+func useMessageIDAsKey(m Message) string {
+	return m.Envelope.MessageId
+}
+
+// marshalMessages marshals the in-memory representations of queued messages
+// into their protocol buffers representation for storage in the journal.
+//
+// It ignores any messages that are already on the queue.
 func (q *Queue) marshalMessages(messages []Message) []*JournalMessage {
 	result := make([]*JournalMessage, 0, len(messages))
 
-	makeKey := q.Key
-	if makeKey == nil {
-		makeKey = func(m Message) string {
-			return m.Envelope.MessageId
-		}
+	deriveKey := q.DeriveIdempotencyKey
+	if deriveKey == nil {
+		deriveKey = useMessageIDAsKey
 	}
 
 	for _, m := range messages {
@@ -108,21 +126,21 @@ func (q *Queue) marshalMessages(messages []Message) []*JournalMessage {
 			panic(err)
 		}
 
-		key := makeKey(m)
+		createdAt, err := marshalkit.UnmarshalEnvelopeTime(m.Envelope.CreatedAt)
+		if err != nil {
+			panic(err)
+		}
+
+		key := deriveKey(m)
 
 		if _, ok := q.elements[key]; ok {
 			q.Logger.Debug(
-				"message ignored because it is already enqueued",
-				zap.String("key", key),
+				"ignored duplicate message",
+				zap.String("idempotency_key", key),
 				zapx.Envelope("message", m.Envelope),
-				zap.Object("queue", (*logAdaptor)(q)),
 			)
-			continue
-		}
 
-		t, err := marshalkit.UnmarshalEnvelopeTime(m.Envelope.CreatedAt)
-		if err != nil {
-			panic(err)
+			continue
 		}
 
 		var md *anypb.Any
@@ -137,10 +155,10 @@ func (q *Queue) marshalMessages(messages []Message) []*JournalMessage {
 		result = append(
 			result,
 			&JournalMessage{
-				Envelope: m.Envelope,
-				Key:      key,
-				Priority: t.UnixNano(),
-				MetaData: md,
+				Envelope:       m.Envelope,
+				IdempotencyKey: key,
+				Priority:       createdAt.UnixNano(),
+				MetaData:       md,
 			},
 		)
 	}
@@ -148,13 +166,14 @@ func (q *Queue) marshalMessages(messages []Message) []*JournalMessage {
 	return result
 }
 
-// Acquire acquires a message from the queue for processing.
+// Acquire returns the next message from the queue.
 //
 // If the queue is empty ok is false; otherwise, m is the next unacquired
 // message in the queue.
 //
-// The message must be subsequently removed from the queue or returned to the
-// pool of unacquired messages by calling Ack() or Reject(), respectively.
+// Acquiring a message from the queue does not immediately remove it from the
+// queue. The message must subsequently be either released back onto the queue
+// or removed entirely using Release() or Remove(), respectively.
 func (q *Queue) Acquire(ctx context.Context) (m AcquiredMessage, ok bool, err error) {
 	if err := q.load(ctx); err != nil {
 		return AcquiredMessage{}, false, err
@@ -165,7 +184,7 @@ func (q *Queue) Acquire(ctx context.Context) (m AcquiredMessage, ok bool, err er
 	}
 
 	e := q.queue.elements[0]
-	if e.acquired {
+	if e.isAcquired {
 		return AcquiredMessage{}, false, nil
 	}
 
@@ -176,16 +195,16 @@ func (q *Queue) Acquire(ctx context.Context) (m AcquiredMessage, ok bool, err er
 	}
 
 	if e.MetaData != nil {
-		md, err := e.MetaData.UnmarshalNew()
+		var err error
+		m.MetaData, err = e.MetaData.UnmarshalNew()
 		if err != nil {
 			return AcquiredMessage{}, false, fmt.Errorf("unable to unmarshal meta-data: %w", err)
 		}
-		m.MetaData = md
 	}
 
 	r := &JournalRecord_Acquire{
 		Acquire: &AcquireRecord{
-			Key: e.Key,
+			IdempotencyKey: e.IdempotencyKey,
 		},
 	}
 
@@ -193,116 +212,86 @@ func (q *Queue) Acquire(ctx context.Context) (m AcquiredMessage, ok bool, err er
 		return AcquiredMessage{}, false, fmt.Errorf("unable to acquire message: %w", err)
 	}
 
-	q.applyAcquire(e)
+	q.acquire(e)
 
 	q.Logger.Debug(
-		"message acquired",
-		zap.String("key", e.Key),
+		"message acquired from queue for processing",
+		zap.Uint64("queue_version", q.version),
+		zap.String("idempotency_key", e.IdempotencyKey),
 		zapx.Envelope("message", e.Envelope),
-		zap.Object("queue", (*logAdaptor)(q)),
 	)
 
 	return m, true, nil
 }
 
-func (q *Queue) loadAcquire(r *AcquireRecord) {
-	e := q.elements[r.Key]
-	q.applyAcquire(e)
-	q.dangling[r.Key] = e
+// apply updates the queue's in-memory state to reflect an acquire record.
+func (x *JournalRecord_Acquire) apply(q *Queue) {
+	k := x.Acquire.IdempotencyKey
+	e := q.elements[k]
+	q.unreleased[k] = e
+
+	q.acquire(e)
 }
 
-func (q *Queue) applyAcquire(e *elem) {
-	e.acquired = true
+// acquire updates the queue's in-memory state to reflect acquisition of a
+// message.
+func (q *Queue) acquire(e *elem) {
+	e.isAcquired = true
 	heap.Fix(&q.queue, e.index)
 }
 
-// Ack acknowledges a previously acquired message, permanently removing it from
-// the queue.
-func (q *Queue) Ack(ctx context.Context, m AcquiredMessage) error {
-	if m.queue != q || m.element == nil || !m.element.acquired {
+// Release reverts an prior call to Acquire(), making the message eligible for
+// re-acquisition.
+func (q *Queue) Release(ctx context.Context, m AcquiredMessage) error {
+	if m.queue != q || m.element == nil || !m.element.isAcquired {
 		panic("message has not been acquired from this queue")
 	}
 
-	r := &JournalRecord_Ack{
-		Ack: &AckRecord{
-			Key: m.element.Key,
+	r := &JournalRecord_Release{
+		Release: &ReleaseRecord{
+			IdempotencyKey: m.element.IdempotencyKey,
 		},
 	}
 
 	if err := q.write(ctx, r); err != nil {
-		return fmt.Errorf("unable to acknowledge message: %w", err)
+		return fmt.Errorf("unable to release message: %w", err)
 	}
 
-	q.applyAck(m.element)
+	q.release(m.element)
 
 	q.Logger.Debug(
-		"message acknowledged",
-		zap.String("key", m.element.Key),
-		zapx.Envelope("message", m.Envelope),
-		zap.Object("queue", (*logAdaptor)(q)),
-	)
-
-	return nil
-}
-
-func (q *Queue) loadAck(r *AckRecord) {
-	e := q.elements[r.Key]
-	q.applyAck(e)
-	delete(q.dangling, r.Key)
-}
-
-func (q *Queue) applyAck(e *elem) {
-	q.elements[e.Key] = nil
-	heap.Remove(&q.queue, e.index)
-}
-
-// Reject returns previously acquired message to the queue so that it may be
-// re-acquired.
-func (q *Queue) Reject(ctx context.Context, m AcquiredMessage) error {
-	if m.queue != q || m.element == nil || !m.element.acquired {
-		panic("message has not been acquired from this queue")
-	}
-
-	r := &JournalRecord_Reject{
-		Reject: &RejectRecord{
-			Key: m.element.Key,
-		},
-	}
-
-	if err := q.write(ctx, r); err != nil {
-		return fmt.Errorf("unable to reject message: %w", err)
-	}
-
-	q.applyReject(m.element)
-
-	q.Logger.Debug(
-		"message rejected",
-		zap.String("key", m.element.Key),
+		"message released for re-acquisition",
+		zap.Uint64("queue_version", q.version),
+		zap.String("idempotency_key", m.element.IdempotencyKey),
 		zapx.Envelope("message", m.element.Envelope),
-		zap.Object("queue", (*logAdaptor)(q)),
 	)
 
 	return nil
 }
 
-func (q *Queue) loadReject(r *RejectRecord) {
-	e := q.elements[r.Key]
-	q.applyReject(e)
+// apply updates the queue's in-memory state to reflect a release record.
+func (x *JournalRecord_Release) apply(q *Queue) {
+	k := x.Release.IdempotencyKey
+	e := q.elements[k]
+
+	q.release(e)
 }
 
-func (q *Queue) applyReject(e *elem) {
-	e.acquired = false
+// release updates the queue's in-memory state to reflect releasing of an
+// acquired message.
+func (q *Queue) release(e *elem) {
+	e.isAcquired = false
 	heap.Fix(&q.queue, e.index)
 }
 
-// load reads all entries from the journal and applies them to the queue.
+// load reads all records from the journal and applies them to the queue.
 func (q *Queue) load(ctx context.Context) error {
 	if q.elements != nil {
 		return nil
 	}
 
 	q.elements = map[string]*elem{}
-	q.dangling = map[string]*elem{}
+	q.unreleased = map[string]*elem{}
 
 	for {
 		r, ok, err := q.Journal.Read(ctx, q.version)
@@ -313,38 +302,80 @@ func (q *Queue) load(ctx context.Context) error {
 			break
 		}
 
-		r.GetOneOf().(journalRecord).load(q)
+		r.GetOneOf().(journalRecord).apply(q)
 		q.version++
 	}
 
-	for _, e := range q.dangling {
-		r := &JournalRecord_Reject{
-			Reject: &RejectRecord{
-				Key: e.Key,
+	for _, e := range q.unreleased {
+		r := &JournalRecord_Release{
+			Release: &ReleaseRecord{
+				IdempotencyKey: e.IdempotencyKey,
 			},
 		}
 
 		if err := q.write(ctx, r); err != nil {
-			return fmt.Errorf("unable to load queue: %w", err)
+			return fmt.Errorf("unable to release message: %w", err)
 		}
 	}
 
 	q.Logger.Debug(
-		"loaded queue from journal",
-		zap.Int("dangling_count", len(q.dangling)),
-		zap.Object("queue", (*logAdaptor)(q)),
+		"loaded queue",
+		zap.Uint64("queue_version", q.version),
+		zap.Int("queue_size", q.queue.Len()),
+		zap.Int("released_message_count", len(q.unreleased)),
 	)
 
-	q.dangling = nil
+	q.unreleased = nil
 
 	return nil
 }
 
+// Remove permanently removes a message from the queue.
+func (q *Queue) Remove(ctx context.Context, m AcquiredMessage) error {
+	if m.queue != q || m.element == nil || !m.element.isAcquired {
+		panic("message has not been acquired from this queue")
+	}
+
+	r := &JournalRecord_Remove{
+		Remove: &RemoveRecord{
+			IdempotencyKey: m.element.IdempotencyKey,
+		},
+	}
+
+	if err := q.write(ctx, r); err != nil {
+		return fmt.Errorf("unable to remove message: %w", err)
+	}
+
+	q.remove(m.element)
+
+	q.Logger.Debug(
+		"message removed from queue",
+		zap.Uint64("queue_version", q.version),
+		zap.Int("queue_size", q.queue.Len()),
+		zap.String("idempotency_key", m.element.IdempotencyKey),
+		zapx.Envelope("message", m.Envelope),
+	)
+
+	return nil
+}
+
+// apply updates the queue's in-memory state to reflect a remove record.
+func (x *JournalRecord_Remove) apply(q *Queue) {
+	k := x.Remove.IdempotencyKey
+	e := q.elements[k]
+	delete(q.unreleased, k)
+
+	q.remove(e)
+}
+
+// remove updates the queue's in-memory state to reflect removal of a message.
+func (q *Queue) remove(e *elem) {
+	q.elements[e.IdempotencyKey] = nil
+	heap.Remove(&q.queue, e.index)
+}
+
 // write writes a record to the journal.
-func (q *Queue) write(
-	ctx context.Context,
-	r journalRecord,
-) error {
+func (q *Queue) write(ctx context.Context, r journalRecord) error {
 	ok, err := q.Journal.Write(
 		ctx,
 		q.version,
@@ -364,10 +395,7 @@ func (q *Queue) write(
 	return nil
 }
 
-type logAdaptor Queue
-
-func (a *logAdaptor) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	enc.AddUint64("version", a.version)
-	enc.AddInt("size", a.queue.Len())
-	return nil
+type journalRecord interface {
+	isJournalRecord_OneOf
+	apply(*Queue)
 }

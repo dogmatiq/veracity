@@ -20,13 +20,13 @@ import (
 )
 
 var _ = Describe("type Queue (parallelism)", func() {
-	It("acknowledges each message exactly once", func() {
+	It("removes each message exactly once", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 
 		queue := &Queue{
 			Journal: &journal.InMemory[*JournalRecord]{},
-			Logger:  zapx.NewTesting(),
+			Logger:  zapx.NewTesting("queue"),
 		}
 
 		var (
@@ -67,7 +67,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 				return err
 			}
 
-			if err = q.Reject(ctx, m); err != nil {
+			if err = q.Release(ctx, m); err != nil {
 				return err
 			}
 
@@ -76,7 +76,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 				return err
 			}
 
-			if err = q.Ack(ctx, m); err != nil {
+			if err = q.Remove(ctx, m); err != nil {
 				return err
 			}
 

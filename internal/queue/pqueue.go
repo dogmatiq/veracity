@@ -6,8 +6,8 @@ package queue
 type elem struct {
 	*JournalMessage
 
-	index    int
-	acquired bool
+	index      int
+	isAcquired bool
 }
 
 // pqueue is an in-memory priority queue. It implements heap.Interface.
@@ -23,11 +23,11 @@ func (q *pqueue) Less(i, j int) bool {
 	a := q.elements[i]
 	b := q.elements[j]
 
-	if a.acquired == b.acquired {
+	if a.isAcquired == b.isAcquired {
 		return a.Priority < b.Priority
 	}
 
-	return b.acquired
+	return b.isAcquired
 }
 
 func (q *pqueue) Swap(i, j int) {

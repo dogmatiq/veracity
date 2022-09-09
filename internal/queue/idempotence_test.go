@@ -31,7 +31,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 	})
 
 	DescribeTable(
-		"it acknowledges the message exactly once",
+		"it eventually removes each message",
 		func(expectErr string, setup func()) {
 			setup()
 
@@ -48,7 +48,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			tick := func(ctx context.Context) error {
 				queue := &Queue{
 					Journal: journ,
-					Logger:  zapx.NewTesting(),
+					Logger:  zapx.NewTesting("queue-write"),
 				}
 
 				if !enqueued {
@@ -63,7 +63,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 					return err
 				}
 
-				err = queue.Reject(ctx, m)
+				err = queue.Release(ctx, m)
 				if err != nil {
 					return err
 				}
@@ -73,16 +73,16 @@ var _ = Describe("type Queue (idempotence)", func() {
 					return err
 				}
 
-				return queue.Ack(ctx, m)
+				return queue.Remove(ctx, m)
 			}
 
-			needAcks := len(messages)
+			remaining := len(messages)
 			needError := expectErr != ""
 
-			for needAcks > 0 {
+			for remaining > 0 {
 				err := tick(ctx)
 				if err == nil {
-					needAcks--
+					remaining--
 					continue
 				}
 
@@ -94,11 +94,11 @@ var _ = Describe("type Queue (idempotence)", func() {
 
 			queue := &Queue{
 				Journal: journ,
-				Logger:  zapx.NewTesting(),
+				Logger:  zapx.NewTesting("queue-read"),
 			}
 			_, ok, err := queue.Acquire(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(ok).To(BeFalse(), "message should be acknowledged")
+			Expect(ok).To(BeFalse(), "message should be removed from the queue")
 		},
 		Entry(
 			"no faults",
@@ -154,49 +154,49 @@ var _ = Describe("type Queue (idempotence)", func() {
 			},
 		),
 		Entry(
-			"acknowledge fails before journal record is written",
-			"unable to acknowledge message: <error>",
+			"release fails before journal record is written",
+			"unable to release message: <error>",
 			func() {
 				journaltest.FailOnceBeforeWrite(
 					journ,
 					func(r *JournalRecord) bool {
-						return r.GetAck() != nil
+						return r.GetRelease() != nil
 					},
 				)
 			},
 		),
 		Entry(
-			"acknowledge fails after journal record is written",
-			"unable to acknowledge message: <error>",
+			"release fails after journal record is written",
+			"unable to release message: <error>",
 			func() {
 				journaltest.FailOnceAfterWrite(
 					journ,
 					func(r *JournalRecord) bool {
-						return r.GetAck() != nil
+						return r.GetRelease() != nil
 					},
 				)
 			},
 		),
 		Entry(
-			"reject fails before journal record is written",
-			"unable to reject message: <error>",
+			"remove fails before journal record is written",
+			"unable to remove message: <error>",
 			func() {
 				journaltest.FailOnceBeforeWrite(
 					journ,
 					func(r *JournalRecord) bool {
-						return r.GetReject() != nil
+						return r.GetRemove() != nil
 					},
 				)
 			},
 		),
 		Entry(
-			"reject fails after journal record is written",
-			"unable to reject message: <error>",
+			"remove fails after journal record is written",
+			"unable to remove message: <error>",
 			func() {
 				journaltest.FailOnceAfterWrite(
 					journ,
 					func(r *JournalRecord) bool {
-						return r.GetReject() != nil
+						return r.GetRemove() != nil
 					},
 				)
 			},

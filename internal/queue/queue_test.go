@@ -30,7 +30,7 @@ var _ = Describe("type Queue", func() {
 
 		queue = &Queue{
 			Journal: &journal.InMemory[*JournalRecord]{},
-			Logger:  zapx.NewTesting(),
+			Logger:  zapx.NewTesting("queue"),
 		}
 	})
 
@@ -78,7 +78,7 @@ var _ = Describe("type Queue", func() {
 			By("re-reading the queue state from the journal", func() {
 				queue = &Queue{
 					Journal: queue.Journal,
-					Logger:  zapx.NewTesting(),
+					Logger:  zapx.NewTesting("queue-reread"),
 				}
 			})
 
@@ -90,7 +90,7 @@ var _ = Describe("type Queue", func() {
 	})
 
 	Describe("func Acquire()", func() {
-		It("returns a message from the queue", func() {
+		It("returns the next message on the queue", func() {
 			expect := Message{
 				Envelope: NewEnvelope("<id>", MessageM1),
 			}
@@ -169,37 +169,7 @@ var _ = Describe("type Queue", func() {
 		})
 	})
 
-	Describe("func Ack()", func() {
-		It("removes the message from the queue", func() {
-			err := queue.Enqueue(
-				ctx,
-				Message{
-					Envelope: NewEnvelope("<id>", MessageM1),
-				},
-			)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			m, ok, err := queue.Acquire(ctx)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(ok).To(BeTrue(), "queue should not be empty")
-
-			err = queue.Ack(ctx, m)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			By("re-reading the queue state from the journal", func() {
-				queue = &Queue{
-					Journal: queue.Journal,
-					Logger:  zapx.NewTesting(),
-				}
-			})
-
-			_, ok, err = queue.Acquire(ctx)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(ok).To(BeFalse(), "queue should be empty")
-		})
-	})
-
-	Describe("func Reject()", func() {
+	Describe("func Release()", func() {
 		It("allows the message to be re-acquired", func() {
 			err := queue.Enqueue(
 				ctx,
@@ -213,7 +183,7 @@ var _ = Describe("type Queue", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ok).To(BeTrue(), "queue should not be empty")
 
-			err = queue.Reject(ctx, expect)
+			err = queue.Release(ctx, expect)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			actual, ok, err := queue.Acquire(ctx)
@@ -256,7 +226,7 @@ var _ = Describe("type Queue", func() {
 				}
 			})
 
-			By("rejecting the messages in a random order", func() {
+			By("releasing the messages in a random order", func() {
 				rand.Shuffle(
 					len(acquired),
 					func(i, j int) {
@@ -265,7 +235,7 @@ var _ = Describe("type Queue", func() {
 				)
 
 				for _, m := range acquired {
-					err := queue.Reject(ctx, m)
+					err := queue.Release(ctx, m)
 					Expect(err).ShouldNot(HaveOccurred())
 				}
 			})
@@ -285,8 +255,38 @@ var _ = Describe("type Queue", func() {
 
 			Expect(actual).To(
 				EqualX(expect),
-				"rejected messages should still be prioritized by creation time",
+				"released messages should still be prioritized by creation time",
 			)
+		})
+	})
+
+	Describe("func Remove()", func() {
+		It("removes the message from the queue", func() {
+			err := queue.Enqueue(
+				ctx,
+				Message{
+					Envelope: NewEnvelope("<id>", MessageM1),
+				},
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			m, ok, err := queue.Acquire(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeTrue(), "queue should not be empty")
+
+			err = queue.Remove(ctx, m)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			By("re-reading the queue state from the journal", func() {
+				queue = &Queue{
+					Journal: queue.Journal,
+					Logger:  zapx.NewTesting("queue-reread"),
+				}
+			})
+
+			_, ok, err = queue.Acquire(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(ok).To(BeFalse(), "queue should be empty")
 		})
 	})
 })
