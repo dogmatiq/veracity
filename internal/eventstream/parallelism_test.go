@@ -25,7 +25,7 @@ var _ = Describe("type EventStream (parallelism)", func() {
 
 		stream := &EventStream{
 			Journal: &journal.InMemory[*JournalRecord]{},
-			Logger:  zapx.NewTesting(),
+			Logger:  zapx.NewTesting("eventstream"),
 		}
 
 		var (

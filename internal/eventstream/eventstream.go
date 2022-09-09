@@ -9,7 +9,6 @@ import (
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/journal"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 // EventStream is a durable, chronologically ordered stream of events.
@@ -27,10 +26,6 @@ func (s *EventStream) Append(
 	ctx context.Context,
 	envelopes ...*envelopespec.Envelope,
 ) error {
-	if len(envelopes) == 0 {
-		panic("must provide at least one envelope")
-	}
-
 	if err := s.load(ctx); err != nil {
 		return err
 	}
@@ -44,27 +39,30 @@ func (s *EventStream) Append(
 	for _, env := range envelopes {
 		if _, ok := s.events[env.GetMessageId()]; ok {
 			s.Logger.Debug(
-				"event ignored because it is already in the stream",
-				zap.Object("eventstream", (*logAdaptor)(s)),
+				"ignored duplicate event",
 				zapx.Envelope("event", env),
 			)
-		} else {
-			r.Append.Envelopes = append(r.Append.Envelopes, env)
+			continue
 		}
+
+		r.Append.Envelopes = append(r.Append.Envelopes, env)
 	}
 
 	if len(r.Append.Envelopes) == 0 {
 		return nil
 	}
 
-	if err := s.apply(ctx, r); err != nil {
+	if err := s.write(ctx, r); err != nil {
 		return fmt.Errorf("unable to append event(s): %w", err)
 	}
 
 	for _, env := range r.Append.Envelopes {
+		s.append(env)
+
 		s.Logger.Debug(
 			"event appended to stream",
-			zap.Object("eventstream", (*logAdaptor)(s)),
+			zap.Uint64("eventstream_version", s.version),
+			zap.Uint64("eventstream_offset", s.offset-1), // the offset of THIS event
 			zapx.Envelope("event", env),
 		)
 	}
@@ -72,12 +70,19 @@ func (s *EventStream) Append(
 	return nil
 }
 
-func (s *EventStream) applyAppend(r *AppendRecord) {
-	for _, env := range r.GetEnvelopes() {
-		id := env.GetMessageId()
-		s.events[id] = struct{}{}
-		s.offset++
+// apply updates the event stream's in-memory state to reflect an append record.
+func (x *JournalRecord_Append) apply(s *EventStream) {
+	for _, env := range x.Append.Envelopes {
+		s.append(env)
 	}
+}
+
+// append updates the event stream's in-memory state to include an appended
+// event.
+func (s *EventStream) append(env *envelopespec.Envelope) {
+	id := env.MessageId
+	s.events[id] = struct{}{}
+	s.offset++
 }
 
 // Range calls fn for each event in the stream beginning at the given offset.
@@ -121,7 +126,7 @@ func (s *EventStream) Range(
 		}
 
 		if append := r.GetAppend(); append != nil {
-			for _, env := range append.GetEnvelopes() {
+			for _, env := range append.Envelopes {
 				ok, err := fn(ctx, env)
 				if !ok || err != nil {
 					return err
@@ -168,7 +173,7 @@ func (s *EventStream) search(
 	}
 }
 
-// load reads all entries from the journal and applies them to the stream.
+// load reads all records from the journal and applies them to the stream.
 func (s *EventStream) load(ctx context.Context) error {
 	if s.events != nil {
 		return nil
@@ -190,15 +195,16 @@ func (s *EventStream) load(ctx context.Context) error {
 	}
 
 	s.Logger.Debug(
-		"loaded event stream from journal",
-		zap.Object("eventstream", (*logAdaptor)(s)),
+		"loaded event stream",
+		zap.Uint64("eventstream_version", s.version),
+		zap.Uint64("eventstream_offset", s.offset),
 	)
 
 	return nil
 }
 
-// apply writes a record to the journal and applies it to the queue.
-func (s *EventStream) apply(
+// write writes a record to the journal.
+func (s *EventStream) write(
 	ctx context.Context,
 	r journalRecord,
 ) error {
@@ -216,16 +222,12 @@ func (s *EventStream) apply(
 		return errors.New("optimistic concurrency conflict")
 	}
 
-	r.apply(s)
 	s.version++
 
 	return nil
 }
 
-type logAdaptor EventStream
-
-func (a *logAdaptor) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	enc.AddUint64("version", a.version)
-	enc.AddInt("size", len(a.events))
-	return nil
+type journalRecord interface {
+	isJournalRecord_OneOf
+	apply(s *EventStream)
 }

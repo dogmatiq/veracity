@@ -43,7 +43,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 			tick := func(ctx context.Context) error {
 				stream := &EventStream{
 					Journal: journ,
-					Logger:  zapx.NewTesting(),
+					Logger:  zapx.NewTesting("eventstream-write"),
 				}
 
 				if !appended {
@@ -72,7 +72,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 
 			stream := &EventStream{
 				Journal: journ,
-				Logger:  zapx.NewTesting(),
+				Logger:  zapx.NewTesting("eventstream-read"),
 			}
 
 			var envelopes []*envelopespec.Envelope
