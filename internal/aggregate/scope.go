@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/dogmatiq/dogma"
-	envelopespec "github.com/dogmatiq/interopspec/envelopespec"
+	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"go.uber.org/zap"
@@ -42,14 +42,14 @@ func (s *scope) Destroy() {
 		},
 	)
 
-	s.Logger.Info("instance destroyed")
+	s.Logger.Info("scheduled instance for destruction")
 }
 
 func (s *scope) RecordEvent(m dogma.Message) {
 	if s.destroy != nil {
 		s.destroy.IsCancelled = true
 		s.destroy = nil
-		s.Logger.Info("instance destruction canceled")
+		s.Logger.Info("canceled instance destruction")
 	}
 
 	env := s.Packer.Pack(
@@ -72,7 +72,7 @@ func (s *scope) RecordEvent(m dogma.Message) {
 	)
 
 	s.Logger.Info(
-		"event recorded",
+		"recorded a domain event",
 		zapx.Envelope("event", env),
 	)
 }
@@ -91,5 +91,8 @@ func (s *scope) Log(f string, v ...interface{}) {
 		},
 	)
 
-	s.Logger.Info(message)
+	s.Logger.Info(
+		"logged an application message",
+		zap.String("message", message),
+	)
 }
