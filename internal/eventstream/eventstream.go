@@ -11,10 +11,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// EventStream is a durable, chronologically ordered stream of events.
+// EventStream is a durable, chronologically ordered stream of event messages.
 type EventStream struct {
+	// Journal is the journal used to store the queue's state.
 	Journal journal.Journal[*JournalRecord]
-	Logger  *zap.Logger
+
+	// Logger is the target for log messages about changes to the event stream.
+	Logger *zap.Logger
 
 	version uint64
 	offset  uint64

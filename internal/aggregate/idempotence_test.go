@@ -26,6 +26,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		ctx             context.Context
 		instanceJournal *journaltest.JournalStub[*JournalRecord]
 		eventsJournal   *journaltest.JournalStub[*eventstream.JournalRecord]
+		journalOpener   journal.Opener[*JournalRecord]
 		packer          *envelope.Packer
 	)
 
@@ -40,6 +41,16 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 
 		eventsJournal = &journaltest.JournalStub[*eventstream.JournalRecord]{
 			Journal: &journal.InMemory[*eventstream.JournalRecord]{},
+		}
+
+		journalOpener = &journaltest.OpenerStub[*JournalRecord]{
+			OpenJournalFunc: func(
+				ctx context.Context,
+				id string,
+			) (journal.Journal[*JournalRecord], error) {
+				Expect(id).To(Equal("<instance-id>"))
+				return journaltest.NopCloser[*JournalRecord](instanceJournal), nil
+			},
 		}
 
 		packer = envelope.NewTestPacker()
@@ -67,46 +78,47 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 							s.RecordEvent(MessageE1)
 						},
 					},
-					Packer: packer,
-					JournalOpener: &journaltest.OpenerStub[*JournalRecord]{
-						Opener: &journal.InMemoryOpener[*JournalRecord]{},
-						OpenJournalFunc: func(
-							ctx context.Context,
-							id string,
-						) (journal.Journal[*JournalRecord], error) {
-							Expect(id).To(Equal("<instance-id>"))
-							return instanceJournal, nil
-						},
-					},
+					Packer:        packer,
+					JournalOpener: journalOpener,
 					EventAppender: &eventstream.EventStream{
 						Journal: eventsJournal,
-						Logger:  zapx.NewTesting(),
+						Logger:  zapx.NewTesting("eventstream-write"),
 					},
-					Logger: zapx.NewTesting(),
+					Logger: zapx.NewTesting("<handler-name>"),
 				}
 
 				ctx, cancel := context.WithCancel(ctx)
 				defer cancel()
+
 				g, ctx := errgroup.WithContext(ctx)
 
 				g.Go(func() error {
 					err := exec.Run(ctx)
+
+					// The context is canceled after the command is executed
+					// successfully, therefore it is not an error condition.
 					if errors.Is(err, context.Canceled) {
 						return nil
 					}
+
 					return err
 				})
 
 				g.Go(func() error {
-					if err := exec.ExecuteCommand(
+					err := exec.ExecuteCommand(
 						ctx,
 						"<instance-id>",
 						env,
-					); err != nil {
-						return err
+					)
+
+					// If the command was executed successfully we want to stop
+					// the executor.
+					if err == nil {
+						cancel()
 					}
 
-					cancel()
+					// But we never report the error, because we expect the
+					// errors to be returned by Run().
 					return nil
 				})
 
@@ -129,7 +141,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 
 			events := &eventstream.EventStream{
 				Journal: eventsJournal,
-				Logger:  zapx.NewTesting(),
+				Logger:  zapx.NewTesting("eventstream-read"),
 			}
 
 			var actual []*envelopespec.Envelope

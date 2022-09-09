@@ -17,11 +17,11 @@ type instance struct {
 	HandlerIdentity *envelopespec.Identity
 	InstanceID      string
 	Handler         dogma.AggregateMessageHandler
+	Requests        <-chan request
 	Journal         journal.Journal[*JournalRecord]
 	EventAppender   EventAppender
 	Packer          *envelope.Packer
 	Logger          *zap.Logger
-	Requests        <-chan request
 
 	version     uint64
 	commands    map[string]struct{}
@@ -38,12 +38,12 @@ func (i *instance) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+
 		case req := <-i.Requests:
-			err := i.executeCommand(ctx, req.CommandEnvelope)
-			req.Response <- err
-			if err != nil {
+			if err := i.executeCommand(ctx, req.CommandEnvelope); err != nil {
 				return err
 			}
+			close(req.Done)
 		}
 	}
 }
@@ -57,12 +57,17 @@ func (i *instance) executeCommand(
 	}
 
 	if _, ok := i.commands[env.MessageId]; ok {
+		i.Logger.Debug(
+			"ignored duplicate command",
+			zapx.Envelope("command", env),
+		)
+
 		return nil
 	}
 
 	cmd, err := i.Packer.Unpack(env)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to unpack command from envelope: %w", err)
 	}
 
 	rev := &RevisionRecord{
@@ -76,7 +81,7 @@ func (i *instance) executeCommand(
 			InstID:          i.InstanceID,
 			Root:            i.root,
 			Packer:          i.Packer,
-			Logger:          i.Logger.With(zapx.Envelope("command", env)),
+			Logger:          i.Logger,
 			CommandEnvelope: env,
 			Revision:        rev,
 		},
@@ -118,7 +123,7 @@ func (i *instance) applyRevision(r *RevisionRecord) {
 	}
 }
 
-// load reads all entries from the journal and applies them to the instance.
+// load reads all records from the journal and applies them to the instance.
 func (i *instance) load(ctx context.Context) error {
 	i.commands = map[string]struct{}{}
 	i.root = i.Handler.New()
@@ -144,7 +149,7 @@ func (i *instance) load(ctx context.Context) error {
 	}
 
 	i.Logger.Debug(
-		"loaded aggregate instance from journal",
+		"loaded aggregate instance",
 		zap.Uint64("version", i.version),
 	)
 
