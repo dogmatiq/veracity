@@ -13,6 +13,10 @@ import (
 	"go.uber.org/zap"
 )
 
+// DefaultRequestBuffer is the default number of command requests to buffer in
+// memory per aggregate instance.
+const DefaultRequestBuffer = 100
+
 // EventAppender is an interface for appending event messages to a stream.
 type EventAppender interface {
 	Append(ctx context.Context, envelopes ...*envelopespec.Envelope) error
@@ -36,6 +40,12 @@ type CommandExecutor struct {
 
 	// EventAppender is used to append events to the global event stream.
 	EventAppender EventAppender
+
+	// RequestBuffer is the number of requests to buffer in memory per aggregate
+	// instance.
+	//
+	// If it is non-positive, DefaultRequestBuffer is used instead.
+	RequestBuffer int
 
 	// Logger is the target for messages about the execution of commands and
 	// management of aggregate state.
@@ -161,7 +171,11 @@ func (e *CommandExecutor) loadInstance(
 		return requests
 	}
 
-	requests := make(chan request)
+	cap := e.RequestBuffer
+	if cap <= 0 {
+		cap = DefaultRequestBuffer
+	}
+	requests := make(chan request, cap)
 
 	if e.instances == nil {
 		e.instances = map[string]chan<- request{}
