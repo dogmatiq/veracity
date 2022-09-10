@@ -3,6 +3,7 @@ package aggregate_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/dogmatiq/dogma"
@@ -46,9 +47,12 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		journalOpener = &journaltest.OpenerStub[*JournalRecord]{
 			OpenJournalFunc: func(
 				ctx context.Context,
-				id string,
+				key string,
 			) (journal.Journal[*JournalRecord], error) {
-				Expect(id).To(Equal("<instance-id>"))
+				if key != "aggregate/<handler-key>/<instance-id>" {
+					return nil, fmt.Errorf("unexpected journal key: %s", key)
+				}
+
 				return journaltest.NopCloser[*JournalRecord](instanceJournal), nil
 			},
 		}
