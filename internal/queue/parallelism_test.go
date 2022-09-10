@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,7 +32,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 
 		var (
 			parallelism = runtime.NumCPU()
-			messages    = parallelism * 50
+			messages    = parallelism * 10
 		)
 
 		var mutex sync.Mutex
@@ -94,6 +95,9 @@ var _ = Describe("type Queue (parallelism)", func() {
 				for {
 					err := tick(ctx)
 					if err != nil {
+						if !strings.Contains(err.Error(), "optimistic concurrency conflict") {
+							return err
+						}
 						continue
 					}
 
