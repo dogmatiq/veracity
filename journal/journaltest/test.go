@@ -38,30 +38,37 @@ func RunTests(
 
 			ctx, tc := prepare(t, setup)
 
-			expect := []byte("<record>")
-
-			ok, err := tc.Journal.Write(ctx, 0, expect)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !ok {
-				t.Fatal("unexpected optimistic concurrency conflict")
+			expect := [][]byte{
+				[]byte("<record-1>"),
+				[]byte("<record-2>"),
 			}
 
-			actual, ok, err := tc.Journal.Read(ctx, 0)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !ok {
-				t.Fatal("expected record to exist")
+			for i, r := range expect {
+				ok, err := tc.Journal.Write(ctx, uint64(i), r)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !ok {
+					t.Fatal("unexpected optimistic concurrency conflict")
+				}
 			}
 
-			if !bytes.Equal(expect, actual) {
-				t.Fatalf(
-					"unexpected record, want %q, got %q",
-					string(expect),
-					string(actual),
-				)
+			for i, r := range expect {
+				actual, ok, err := tc.Journal.Read(ctx, uint64(i))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !ok {
+					t.Fatal("expected record to exist")
+				}
+
+				if !bytes.Equal(r, actual) {
+					t.Fatalf(
+						"unexpected record, want %q, got %q",
+						string(r),
+						string(actual),
+					)
+				}
 			}
 		})
 	})
