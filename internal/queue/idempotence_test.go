@@ -8,16 +8,16 @@ import (
 	. "github.com/dogmatiq/veracity/internal/fixtures"
 	. "github.com/dogmatiq/veracity/internal/queue"
 	"github.com/dogmatiq/veracity/internal/zapx"
-	"github.com/dogmatiq/veracity/journal"
 	"github.com/dogmatiq/veracity/journal/journaltest"
+	"github.com/dogmatiq/veracity/journal/memory"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("type Queue (idempotence)", func() {
 	var (
-		ctx   context.Context
-		journ *journaltest.JournalStub[*JournalRecord]
+		ctx     context.Context
+		journal *journaltest.JournalStub[*JournalRecord]
 	)
 
 	BeforeEach(func() {
@@ -25,8 +25,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 		DeferCleanup(cancel)
 
-		journ = &journaltest.JournalStub[*JournalRecord]{
-			Journal: &journal.InMemory[*JournalRecord]{},
+		journal = &journaltest.JournalStub[*JournalRecord]{
+			Journal: &memory.Journal[*JournalRecord]{},
 		}
 	})
 
@@ -47,7 +47,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 
 			tick := func(ctx context.Context) error {
 				queue := &Queue{
-					Journal: journ,
+					Journal: journal,
 					Logger:  zapx.NewTesting("queue-write"),
 				}
 
@@ -93,7 +93,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			Expect(needError).To(BeFalse(), "process should fail with the expected error at least once")
 
 			queue := &Queue{
-				Journal: journ,
+				Journal: journal,
 				Logger:  zapx.NewTesting("queue-read"),
 			}
 			_, ok, err := queue.Acquire(ctx)
@@ -110,7 +110,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"unable to enqueue message(s): <error>",
 			func() {
 				journaltest.FailOnceBeforeWrite(
-					journ,
+					journal,
 					func(r *JournalRecord) bool {
 						return r.GetEnqueue() != nil
 					},
@@ -122,7 +122,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"unable to enqueue message(s): <error>",
 			func() {
 				journaltest.FailOnceAfterWrite(
-					journ,
+					journal,
 					func(r *JournalRecord) bool {
 						return r.GetEnqueue() != nil
 					},
@@ -134,7 +134,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"unable to acquire message: <error>",
 			func() {
 				journaltest.FailOnceBeforeWrite(
-					journ,
+					journal,
 					func(r *JournalRecord) bool {
 						return r.GetAcquire() != nil
 					},
@@ -146,7 +146,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"unable to acquire message: <error>",
 			func() {
 				journaltest.FailOnceAfterWrite(
-					journ,
+					journal,
 					func(r *JournalRecord) bool {
 						return r.GetAcquire() != nil
 					},
@@ -158,7 +158,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"unable to release message: <error>",
 			func() {
 				journaltest.FailOnceBeforeWrite(
-					journ,
+					journal,
 					func(r *JournalRecord) bool {
 						return r.GetRelease() != nil
 					},
@@ -170,7 +170,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"unable to release message: <error>",
 			func() {
 				journaltest.FailOnceAfterWrite(
-					journ,
+					journal,
 					func(r *JournalRecord) bool {
 						return r.GetRelease() != nil
 					},
@@ -182,7 +182,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"unable to remove message: <error>",
 			func() {
 				journaltest.FailOnceBeforeWrite(
-					journ,
+					journal,
 					func(r *JournalRecord) bool {
 						return r.GetRemove() != nil
 					},
@@ -194,7 +194,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"unable to remove message: <error>",
 			func() {
 				journaltest.FailOnceAfterWrite(
-					journ,
+					journal,
 					func(r *JournalRecord) bool {
 						return r.GetRemove() != nil
 					},

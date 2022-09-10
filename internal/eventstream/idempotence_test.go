@@ -9,8 +9,8 @@ import (
 	. "github.com/dogmatiq/veracity/internal/eventstream"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
 	"github.com/dogmatiq/veracity/internal/zapx"
-	"github.com/dogmatiq/veracity/journal"
 	"github.com/dogmatiq/veracity/journal/journaltest"
+	"github.com/dogmatiq/veracity/journal/memory"
 	. "github.com/jmalloc/gomegax"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -18,8 +18,8 @@ import (
 
 var _ = Describe("type EventStream (idempotence)", func() {
 	var (
-		ctx   context.Context
-		journ *journaltest.JournalStub[*JournalRecord]
+		ctx     context.Context
+		journal *journaltest.JournalStub[*JournalRecord]
 	)
 
 	BeforeEach(func() {
@@ -27,8 +27,8 @@ var _ = Describe("type EventStream (idempotence)", func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 		DeferCleanup(cancel)
 
-		journ = &journaltest.JournalStub[*JournalRecord]{
-			Journal: &journal.InMemory[*JournalRecord]{},
+		journal = &journaltest.JournalStub[*JournalRecord]{
+			Journal: &memory.Journal[*JournalRecord]{},
 		}
 	})
 
@@ -42,7 +42,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 
 			tick := func(ctx context.Context) error {
 				stream := &EventStream{
-					Journal: journ,
+					Journal: journal,
 					Logger:  zapx.NewTesting("eventstream-write"),
 				}
 
@@ -71,7 +71,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 			Expect(needError).To(BeFalse(), "process should fail with the expected error at least once")
 
 			stream := &EventStream{
-				Journal: journ,
+				Journal: journal,
 				Logger:  zapx.NewTesting("eventstream-read"),
 			}
 
@@ -103,7 +103,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 			"unable to append event(s): <error>",
 			func() {
 				journaltest.FailOnceBeforeWrite(
-					journ,
+					journal,
 					func(r *JournalRecord) bool {
 						return r.GetAppend() != nil
 					},
@@ -115,7 +115,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 			"unable to append event(s): <error>",
 			func() {
 				journaltest.FailOnceAfterWrite(
-					journ,
+					journal,
 					func(r *JournalRecord) bool {
 						return r.GetAppend() != nil
 					},

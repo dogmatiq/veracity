@@ -11,7 +11,7 @@ import (
 	. "github.com/dogmatiq/veracity/internal/eventstream"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
 	"github.com/dogmatiq/veracity/internal/zapx"
-	"github.com/dogmatiq/veracity/journal"
+	"github.com/dogmatiq/veracity/journal/memory"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap"
@@ -24,7 +24,7 @@ var _ = Describe("type EventStream (parallelism)", func() {
 		defer cancel()
 
 		stream := &EventStream{
-			Journal: &journal.InMemory[*JournalRecord]{},
+			Journal: &memory.Journal[*JournalRecord]{},
 			Logger:  zapx.NewTesting("eventstream"),
 		}
 

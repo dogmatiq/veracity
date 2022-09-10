@@ -1,69 +1,43 @@
-package journal
+package memory
 
 import (
 	"context"
 	"errors"
 	"sync"
+
+	"github.com/dogmatiq/veracity/journal"
 )
 
-// InMemoryOpener is an implementation of JournalOpener that opens in-memory
-// journals.
-type InMemoryOpener[R any] struct {
-	m    sync.Mutex
-	data map[string]*sharedData[R]
-}
-
-// Open opens the journal identified by the given key.
-func (o *InMemoryOpener[R]) Open(ctx context.Context, key string) (Journal[R], error) {
-	o.m.Lock()
-	defer o.m.Unlock()
-
-	data, ok := o.data[key]
-
-	if !ok {
-		if o.data == nil {
-			o.data = map[string]*sharedData[R]{}
-		}
-
-		data = &sharedData[R]{}
-		o.data[key] = data
-	}
-
-	return &InMemory[R]{
-		data: data,
-	}, nil
+// Journal is an in-memory journal.
+type Journal[R any] struct {
+	m      sync.Mutex
+	data   *data[R]
+	closed bool
 }
 
 // sharedData is an in-memory collection of journal sharedData that is
 // sharedData between instances of in-memory journals that refer to the same
 // journal key.
-type sharedData[R any] struct {
+type data[R any] struct {
 	m       sync.RWMutex
 	records []R
-}
-
-// InMemory is an in-memory journal.
-type InMemory[R any] struct {
-	m      sync.Mutex
-	data   *sharedData[R]
-	closed bool
 }
 
 // Read returns the record that was written to produce the version v of the
 // journal.
 //
 // If the version does not exist ok is false.
-func (j *InMemory[R]) Read(ctx context.Context, v uint64) (R, bool, error) {
-	data := j.get()
+func (j *Journal[R]) Read(ctx context.Context, v uint64) (R, bool, error) {
+	d := j.get()
 
-	data.m.RLock()
-	defer data.m.RUnlock()
+	d.m.RLock()
+	defer d.m.RUnlock()
 
 	index := int(v)
-	size := len(data.records)
+	size := len(d.records)
 
 	if index < size {
-		return data.records[index], true, ctx.Err()
+		return d.records[index], true, ctx.Err()
 	}
 
 	var zero R
@@ -78,7 +52,7 @@ func (j *InMemory[R]) Read(ctx context.Context, v uint64) (R, bool, error) {
 // optimistic concurrency conflict.
 //
 // It panics if v > current.
-func (j *InMemory[R]) Write(ctx context.Context, v uint64, r R) (bool, error) {
+func (j *Journal[R]) Write(ctx context.Context, v uint64, r R) (bool, error) {
 	data := j.get()
 
 	data.m.Lock()
@@ -99,7 +73,7 @@ func (j *InMemory[R]) Write(ctx context.Context, v uint64, r R) (bool, error) {
 }
 
 // Close closes the journal.
-func (j *InMemory[R]) Close() error {
+func (j *Journal[R]) Close() error {
 	j.m.Lock()
 	defer j.m.Unlock()
 
@@ -113,7 +87,7 @@ func (j *InMemory[R]) Close() error {
 	return nil
 }
 
-func (j *InMemory[R]) get() *sharedData[R] {
+func (j *Journal[R]) get() *data[R] {
 	j.m.Lock()
 	defer j.m.Unlock()
 
@@ -122,11 +96,35 @@ func (j *InMemory[R]) get() *sharedData[R] {
 	}
 
 	if j.data == nil {
-		// This journal was not obtained from an InMemoryOpener, so we just
-		// lazily construct some record storage to allow it to work
-		// independently.
-		j.data = &sharedData[R]{}
+		// This journal was not obtained from a JournalOpener, so we just lazily
+		// construct some record storage to allow it to work independently.
+		j.data = &data[R]{}
 	}
 
 	return j.data
+}
+
+// JournalOpener is an implementation of JournalOpener that opens in-memory journals.
+type JournalOpener[R any] struct {
+	m    sync.Mutex
+	data map[string]*data[R]
+}
+
+// Open opens the journal identified by the given key.
+func (o *JournalOpener[R]) Open(ctx context.Context, key string) (journal.Journal[R], error) {
+	o.m.Lock()
+	defer o.m.Unlock()
+
+	d, ok := o.data[key]
+
+	if !ok {
+		if o.data == nil {
+			o.data = map[string]*data[R]{}
+		}
+
+		d = &data[R]{}
+		o.data[key] = d
+	}
+
+	return &Journal[R]{data: d}, nil
 }

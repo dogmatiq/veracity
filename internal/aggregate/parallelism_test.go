@@ -16,7 +16,7 @@ import (
 	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/eventstream"
 	. "github.com/dogmatiq/veracity/internal/fixtures"
-	"github.com/dogmatiq/veracity/journal"
+	"github.com/dogmatiq/veracity/journal/memory"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap"
@@ -28,8 +28,8 @@ var _ = Describe("type CommandExecutor (parallelism)", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 
-		journalOpener := &journal.InMemoryOpener[*JournalRecord]{}
-		eventJournal := &journal.InMemory[*eventstream.JournalRecord]{}
+		journalOpener := &memory.JournalOpener[*JournalRecord]{}
+		eventJournal := &memory.Journal[*eventstream.JournalRecord]{}
 		packer := envelope.NewTestPacker()
 
 		var (

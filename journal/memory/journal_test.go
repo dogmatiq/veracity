@@ -1,15 +1,15 @@
-package journal_test
+package memory_test
 
 import (
 	"testing"
 
-	"github.com/dogmatiq/veracity/journal"
 	"github.com/dogmatiq/veracity/journal/journaltest"
+	. "github.com/dogmatiq/veracity/journal/memory"
 )
 
-func TestInMemory(t *testing.T) {
+func TestJournal(t *testing.T) {
 	journaltest.RunTests(t, func() (journaltest.TestContext, error) {
-		j := &journal.InMemory[[]byte]{}
+		j := &Journal[[]byte]{}
 
 		return journaltest.TestContext{
 			Journal: j,

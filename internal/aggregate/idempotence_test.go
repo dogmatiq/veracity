@@ -17,6 +17,7 @@ import (
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/journal"
 	"github.com/dogmatiq/veracity/journal/journaltest"
+	"github.com/dogmatiq/veracity/journal/memory"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"golang.org/x/sync/errgroup"
@@ -37,11 +38,11 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		DeferCleanup(cancel)
 
 		instanceJournal = &journaltest.JournalStub[*JournalRecord]{
-			Journal: &journal.InMemory[*JournalRecord]{},
+			Journal: &memory.Journal[*JournalRecord]{},
 		}
 
 		eventsJournal = &journaltest.JournalStub[*eventstream.JournalRecord]{
-			Journal: &journal.InMemory[*eventstream.JournalRecord]{},
+			Journal: &memory.Journal[*eventstream.JournalRecord]{},
 		}
 
 		journalOpener = &journaltest.OpenerStub[*JournalRecord]{
