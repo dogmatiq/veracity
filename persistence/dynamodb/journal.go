@@ -7,7 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/dogmatiq/veracity/internal/awsx"
+	"github.com/dogmatiq/veracity/persistence/internal/awsx"
 )
 
 // Journal is an implementation of the journal.Journal interface that stores

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/dogmatiq/veracity/journal/journaltest"
-	. "github.com/dogmatiq/veracity/journal/memory"
+	. "github.com/dogmatiq/veracity/persistence/memory"
 )
 
 func TestJournal(t *testing.T) {

@@ -9,9 +9,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/dogmatiq/veracity/internal/awsx"
-	. "github.com/dogmatiq/veracity/journal/dynamodb"
 	"github.com/dogmatiq/veracity/journal/journaltest"
+	. "github.com/dogmatiq/veracity/persistence/dynamodb"
+	"github.com/dogmatiq/veracity/persistence/internal/awsx"
 	"github.com/google/uuid"
 )
 
