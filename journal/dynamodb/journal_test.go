@@ -12,6 +12,7 @@ import (
 	"github.com/dogmatiq/veracity/internal/awsx"
 	. "github.com/dogmatiq/veracity/journal/dynamodb"
 	"github.com/dogmatiq/veracity/journal/journaltest"
+	"github.com/google/uuid"
 )
 
 func TestJournal(t *testing.T) {
@@ -48,10 +49,10 @@ func TestJournal(t *testing.T) {
 	})
 
 	journaltest.RunTests(t, func() (journaltest.TestContext, error) {
-
 		j := &Journal{
 			DB:    db,
 			Table: table,
+			Key:   uuid.NewString(),
 		}
 
 		return journaltest.TestContext{

@@ -30,21 +30,21 @@ func CreateTable(
 			TableName: aws.String(table),
 			AttributeDefinitions: []*dynamodb.AttributeDefinition{
 				{
-					AttributeName: aws.String("JournalKey"),
+					AttributeName: aws.String("K"),
 					AttributeType: aws.String("S"),
 				},
 				{
-					AttributeName: aws.String("Version"),
+					AttributeName: aws.String("V"),
 					AttributeType: aws.String("N"),
 				},
 			},
 			KeySchema: []*dynamodb.KeySchemaElement{
 				{
-					AttributeName: aws.String("JournalKey"),
+					AttributeName: aws.String("K"),
 					KeyType:       aws.String("HASH"),
 				},
 				{
-					AttributeName: aws.String("Version"),
+					AttributeName: aws.String("V"),
 					KeyType:       aws.String("RANGE"),
 				},
 			},

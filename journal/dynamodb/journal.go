@@ -2,8 +2,12 @@ package dynamodb
 
 import (
 	"context"
+	"strconv"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/dogmatiq/veracity/internal/awsx"
 )
 
 type Journal struct {
@@ -12,6 +16,16 @@ type Journal struct {
 
 	// Table is the table name used for storage of journal records.
 	Table string
+
+	// Key uniquely identifies the journal.
+	Key string
+
+	// DecoratePutItem is an optional function that is called before each
+	// DynamoDB "PutItem" request.
+	//
+	// It may modify the API input in-place. It returns options that will be
+	// applied to the request.
+	DecoratePutItem func(*dynamodb.PutItemInput) []request.Option
 }
 
 // Read returns the record that was written to produce the version v of the
@@ -31,10 +45,52 @@ func (j *Journal) Read(ctx context.Context, v uint64) (r []byte, ok bool, err er
 //
 // If v > current then the behavior is undefined.
 func (j *Journal) Write(ctx context.Context, v uint64, r []byte) (ok bool, err error) {
+	if _, err = awsx.Do(
+		ctx,
+		j.DB.PutItemWithContext,
+		j.DecoratePutItem,
+		&dynamodb.PutItemInput{
+			TableName: aws.String(j.Table),
+			ConditionExpression: aws.String(
+				`attribute_not_exists(K)`,
+			),
+			Item: map[string]*dynamodb.AttributeValue{
+				"K": marshalString(j.Key),
+				"V": marshalVersion(v),
+				"R": marshalRecord(r),
+			},
+		},
+	); err != nil {
+		if awsx.IsErrorCode(err, dynamodb.ErrCodeConditionalCheckFailedException) {
+			return false, nil
+		}
+
+		return false, err
+	}
+
 	return true, nil
 }
 
 // Close closes the journal.
 func (j *Journal) Close() error {
 	return nil
+}
+
+// marshalVersion marshals a version to a DynamoDB number.
+func marshalVersion(v uint64) *dynamodb.AttributeValue {
+	return &dynamodb.AttributeValue{
+		N: aws.String(
+			strconv.FormatUint(v, 10),
+		),
+	}
+}
+
+// marshalString marshals a string to a DynamoDB string.
+func marshalString(v string) *dynamodb.AttributeValue {
+	return &dynamodb.AttributeValue{S: &v}
+}
+
+// marshalRecord marshals a record to a DynamoDB binary value.
+func marshalRecord(r []byte) *dynamodb.AttributeValue {
+	return &dynamodb.AttributeValue{B: r}
 }
