@@ -19,6 +19,7 @@ type scope struct {
 	Logger          *zap.Logger
 	CommandEnvelope *envelopespec.Envelope
 	Revision        *RevisionRecord
+	EventEnvelopes  []*envelopespec.Envelope
 
 	destroy *DestroyAction
 }
@@ -60,6 +61,7 @@ func (s *scope) RecordEvent(m dogma.Message) {
 	)
 
 	s.Root.ApplyEvent(m)
+	s.EventEnvelopes = append(s.EventEnvelopes, env)
 	s.Revision.Actions = append(
 		s.Revision.Actions,
 		&RevisionAction{

@@ -8,6 +8,7 @@ import (
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/internal/envelope"
+	"github.com/dogmatiq/veracity/internal/fsm"
 	"github.com/dogmatiq/veracity/journal"
 	"go.uber.org/zap"
 )
@@ -40,8 +41,6 @@ type CommandExecutor struct {
 	// management of aggregate state.
 	Logger *zap.Logger
 
-	state     executorState
-	request   request
 	instances map[string]chan<- request
 
 	once     sync.Once
@@ -63,12 +62,6 @@ type unload struct {
 	InstanceID string
 	Error      error
 }
-
-// executorState is a function that implements the logic for a single state of
-// the executor.
-//
-// It returns the next state to transition to.
-type executorState func(context.Context) (executorState, error)
 
 // ExecuteCommand executes a command against the given aggregate instance.
 func (e *CommandExecutor) ExecuteCommand(
@@ -117,39 +110,33 @@ func (e *CommandExecutor) Run(ctx context.Context) error {
 	// Abort any pending calls to ExecuteCommand() that will not be serviced.
 	defer close(e.abort)
 
-	e.state = e.stateAwait
-	for {
-		var err error
-		e.state, err = e.state(ctx)
-		if err != nil {
-			return err
-		}
-	}
+	return fsm.Run(ctx, e.stateAwait)
 }
 
-// stateAwait waits for a new request to be received.
-func (e *CommandExecutor) stateAwait(ctx context.Context) (executorState, error) {
+// stateAwait waits for a command request to be received.
+func (e *CommandExecutor) stateAwait(ctx context.Context) (fsm.Action, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case r := <-e.requests:
-		e.request = r
-		return e.stateDispatch, nil
+		return fsm.TransitionWith(e.stateDispatch, r), nil
 	case u := <-e.unloads:
-		return e.state, e.handleUnload(u)
+		return fsm.StayInCurrentState, e.handleUnload(u)
 	}
 }
 
-// stateDispatch dispatches the current request to the appropriate instance.
-func (e *CommandExecutor) stateDispatch(ctx context.Context) (executorState, error) {
-	requests := e.loadInstance(ctx, e.request.InstanceID)
+// stateDispatch dispatches a command request to the appropriate instance.
+func (e *CommandExecutor) stateDispatch(
+	ctx context.Context,
+	req request,
+) (fsm.Action, error) {
+	requests := e.loadInstance(ctx, req.InstanceID)
 
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case requests <- e.request:
-		e.request = request{}
-		return e.stateAwait, nil
+	case requests <- req:
+		return fsm.Transition(e.stateAwait), nil
 	}
 }
 
