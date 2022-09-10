@@ -8,12 +8,12 @@ import (
 )
 
 func TestInMemory(t *testing.T) {
-	journaltest.RunTests(t, func() journaltest.TestContext {
+	journaltest.RunTests(t, func() (journaltest.TestContext, error) {
 		j := &journal.InMemory[[]byte]{}
 
 		return journaltest.TestContext{
 			Journal: j,
 			Cleanup: j.Close,
-		}
+		}, nil
 	})
 }

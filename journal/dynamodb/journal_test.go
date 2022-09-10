@@ -35,14 +35,19 @@ func TestJournal(t *testing.T) {
 	db := dynamodb.New(sess)
 	table := "journal"
 
-	if err := deleteTable(db, table); err != nil {
-		t.Fatal(err)
-	}
-
-	journaltest.RunTests(t, func() journaltest.TestContext {
-		if err := CreateTable(context.Background(), db, table); err != nil {
+	if err := CreateTable(context.Background(), db, table); err != nil {
+		if !awsx.IsErrorCode(err, dynamodb.ErrCodeResourceInUseException) {
 			t.Fatal(err)
 		}
+	}
+
+	t.Cleanup(func() {
+		if err := deleteTable(db, table); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	journaltest.RunTests(t, func() (journaltest.TestContext, error) {
 
 		j := &Journal{
 			DB:    db,
@@ -51,14 +56,8 @@ func TestJournal(t *testing.T) {
 
 		return journaltest.TestContext{
 			Journal: j,
-			Cleanup: func() error {
-				if err := deleteTable(db, table); err != nil {
-					t.Fatal(err)
-				}
-
-				return j.Close()
-			},
-		}
+			Cleanup: j.Close,
+		}, nil
 	})
 }
 
