@@ -11,20 +11,17 @@ import (
 type OpenerStub[R any] struct {
 	journal.Opener[R]
 
-	OpenJournalFunc func(ctx context.Context, key string) (journal.Journal[R], error)
+	OpenFunc func(ctx context.Context, key string) (journal.Journal[R], error)
 }
 
-// OpenJournal opens the journal identified by the given key.
-func (o *OpenerStub[R]) OpenJournal(
-	ctx context.Context,
-	key string,
-) (journal.Journal[R], error) {
-	if o.OpenJournalFunc != nil {
-		return o.OpenJournalFunc(ctx, key)
+// Open opens the journal identified by the given key.
+func (o *OpenerStub[R]) Open(ctx context.Context, key string) (journal.Journal[R], error) {
+	if o.OpenFunc != nil {
+		return o.OpenFunc(ctx, key)
 	}
 
 	if o.Opener != nil {
-		return o.Opener.OpenJournal(ctx, key)
+		return o.Opener.Open(ctx, key)
 	}
 
 	return nil, errors.New("<not implemented>")

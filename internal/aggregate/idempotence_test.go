@@ -45,7 +45,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		}
 
 		journalOpener = &journaltest.OpenerStub[*JournalRecord]{
-			OpenJournalFunc: func(
+			OpenFunc: func(
 				ctx context.Context,
 				key string,
 			) (journal.Journal[*JournalRecord], error) {

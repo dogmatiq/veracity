@@ -33,8 +33,8 @@ type Journal[R any] interface {
 
 // Opener is an interface for opening journals by key.
 type Opener[R any] interface {
-	// OpenJournal opens the journal identified by the given key.
-	OpenJournal(
+	// Open opens the journal identified by the given key.
+	Open(
 		ctx context.Context,
 		key string,
 	) (Journal[R], error)

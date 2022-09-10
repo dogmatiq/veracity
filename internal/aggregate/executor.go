@@ -200,7 +200,7 @@ func (e *CommandExecutor) runInstance(
 
 	err := func() error {
 		key := journalKey(e.HandlerIdentity.Key, id)
-		j, err := e.JournalOpener.OpenJournal(ctx, key)
+		j, err := e.JournalOpener.Open(ctx, key)
 		if err != nil {
 			return err
 		}

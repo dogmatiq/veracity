@@ -13,15 +13,12 @@ type InMemoryOpener[R any] struct {
 	data map[string]*sharedData[R]
 }
 
-// OpenJournal opens the journal identified by the given key.
-func (o *InMemoryOpener[R]) OpenJournal(
-	ctx context.Context,
-	id string,
-) (Journal[R], error) {
+// Open opens the journal identified by the given key.
+func (o *InMemoryOpener[R]) Open(ctx context.Context, key string) (Journal[R], error) {
 	o.m.Lock()
 	defer o.m.Unlock()
 
-	data, ok := o.data[id]
+	data, ok := o.data[key]
 
 	if !ok {
 		if o.data == nil {
@@ -29,7 +26,7 @@ func (o *InMemoryOpener[R]) OpenJournal(
 		}
 
 		data = &sharedData[R]{}
-		o.data[id] = data
+		o.data[key] = data
 	}
 
 	return &InMemory[R]{
