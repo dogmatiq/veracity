@@ -10,6 +10,8 @@ import (
 	"github.com/dogmatiq/veracity/internal/awsx"
 )
 
+// Journal is an implementation of the journal.Journal interface that stores
+// records in a DynamoDB table.
 type Journal struct {
 	// DB is the DynamoDB client to use.
 	DB *dynamodb.DynamoDB
@@ -124,4 +126,50 @@ func marshalRecord(r []byte) *dynamodb.AttributeValue {
 // unmarshalRecord unmarshals a record from a DynamoDB binary value.
 func unmarshalRecord(v *dynamodb.AttributeValue) []byte {
 	return v.B
+}
+
+// CreateJournalTable creates a DynamoDB for storing journal records.
+func CreateJournalTable(
+	ctx context.Context,
+	db *dynamodb.DynamoDB,
+	table string,
+	decorators ...func(*dynamodb.CreateTableInput) []request.Option,
+) error {
+	_, err := awsx.Do(
+		ctx,
+		db.CreateTableWithContext,
+		func(in *dynamodb.CreateTableInput) []request.Option {
+			var options []request.Option
+			for _, dec := range decorators {
+				options = append(options, dec(in)...)
+			}
+			return options
+		},
+		&dynamodb.CreateTableInput{
+			TableName: aws.String(table),
+			AttributeDefinitions: []*dynamodb.AttributeDefinition{
+				{
+					AttributeName: aws.String("K"),
+					AttributeType: aws.String("S"),
+				},
+				{
+					AttributeName: aws.String("V"),
+					AttributeType: aws.String("N"),
+				},
+			},
+			KeySchema: []*dynamodb.KeySchemaElement{
+				{
+					AttributeName: aws.String("K"),
+					KeyType:       aws.String("HASH"),
+				},
+				{
+					AttributeName: aws.String("V"),
+					KeyType:       aws.String("RANGE"),
+				},
+			},
+			BillingMode: aws.String("PAY_PER_REQUEST"),
+		},
+	)
+
+	return err
 }

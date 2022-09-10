@@ -8,7 +8,8 @@ import (
 	"github.com/dogmatiq/veracity/journal"
 )
 
-// Journal is an in-memory journal.
+// Journal is an implementation of the journal.Journal interface that stores
+// records in memory.
 type Journal[R any] struct {
 	m      sync.Mutex
 	data   *data[R]

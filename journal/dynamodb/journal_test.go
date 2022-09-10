@@ -36,7 +36,7 @@ func TestJournal(t *testing.T) {
 	db := dynamodb.New(sess)
 	table := "journal"
 
-	if err := CreateTable(context.Background(), db, table); err != nil {
+	if err := CreateJournalTable(context.Background(), db, table); err != nil {
 		if !awsx.IsErrorCode(err, dynamodb.ErrCodeResourceInUseException) {
 			t.Fatal(err)
 		}
