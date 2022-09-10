@@ -1,6 +1,7 @@
 package journaltest
 
 import (
+	"bytes"
 	"context"
 	"testing"
 	"time"
@@ -29,6 +30,38 @@ func RunTests(
 			}
 			if ok {
 				t.Fatal("returned ok == true for non-existent record")
+			}
+		})
+
+		t.Run("it returns the record if it exists", func(t *testing.T) {
+			t.Parallel()
+
+			ctx, tc := prepare(t, setup)
+
+			expect := []byte("<record>")
+
+			ok, err := tc.Journal.Write(ctx, 0, expect)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok {
+				t.Fatal("unexpected optimistic concurrency conflict")
+			}
+
+			actual, ok, err := tc.Journal.Read(ctx, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok {
+				t.Fatal("expected record to exist")
+			}
+
+			if !bytes.Equal(expect, actual) {
+				t.Fatalf(
+					"unexpected record, want %q, got %q",
+					string(expect),
+					string(actual),
+				)
 			}
 		})
 	})

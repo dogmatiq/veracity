@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/aws/aws-sdk-go v1.44.95
 	github.com/dogmatiq/configkit v0.11.1
+	github.com/dogmatiq/dapper v0.4.5
 	github.com/dogmatiq/dogma v0.11.1
 	github.com/dogmatiq/interopspec v0.5.1
 	github.com/dogmatiq/linger v0.2.1

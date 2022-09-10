@@ -20,6 +20,13 @@ type Journal struct {
 	// Key uniquely identifies the journal.
 	Key string
 
+	// DecorateGetItem is an optional function that is called before each
+	// DynamoDB "GetItem" request.
+	//
+	// It may modify the API input in-place. It returns options that will be
+	// applied to the request.
+	DecorateGetItem func(*dynamodb.GetItemInput) []request.Option
+
 	// DecoratePutItem is an optional function that is called before each
 	// DynamoDB "PutItem" request.
 	//
@@ -33,7 +40,26 @@ type Journal struct {
 //
 // If the version does not exist ok is false.
 func (j *Journal) Read(ctx context.Context, v uint64) (r []byte, ok bool, err error) {
-	return nil, false, nil
+	out, err := awsx.Do(
+		ctx,
+		j.DB.GetItemWithContext,
+		j.DecorateGetItem,
+		&dynamodb.GetItemInput{
+			TableName: aws.String(j.Table),
+			Key: map[string]*dynamodb.AttributeValue{
+				"K": marshalString(j.Key),
+				"V": marshalVersion(v),
+			},
+			AttributesToGet: []*string{
+				aws.String("R"),
+			},
+		},
+	)
+	if out.Item == nil || err != nil {
+		return nil, false, err
+	}
+
+	return unmarshalRecord(out.Item["R"]), true, nil
 }
 
 // Write appends a new record to the journal.
@@ -93,4 +119,9 @@ func marshalString(v string) *dynamodb.AttributeValue {
 // marshalRecord marshals a record to a DynamoDB binary value.
 func marshalRecord(r []byte) *dynamodb.AttributeValue {
 	return &dynamodb.AttributeValue{B: r}
+}
+
+// unmarshalRecord unmarshals a record from a DynamoDB binary value.
+func unmarshalRecord(v *dynamodb.AttributeValue) []byte {
+	return v.B
 }
