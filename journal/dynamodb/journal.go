@@ -19,7 +19,7 @@ type Journal struct {
 //
 // If the version does not exist ok is false.
 func (j *Journal) Read(ctx context.Context, v uint64) (r []byte, ok bool, err error) {
-	panic("not implemented")
+	return nil, false, nil
 }
 
 // Write appends a new record to the journal.
@@ -31,7 +31,7 @@ func (j *Journal) Read(ctx context.Context, v uint64) (r []byte, ok bool, err er
 //
 // If v > current then the behavior is undefined.
 func (j *Journal) Write(ctx context.Context, v uint64, r []byte) (ok bool, err error) {
-	panic("not implemented")
+	return true, nil
 }
 
 // Close closes the journal.

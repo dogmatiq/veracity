@@ -1,6 +1,7 @@
 package dynamodb_test
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -26,7 +27,11 @@ func TestJournal(t *testing.T) {
 		DisableSSL:  aws.Bool(true),
 	}
 
-	sess := session.New(config)
+	sess, err := session.NewSession(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	db := dynamodb.New(sess)
 	table := "journal"
 
@@ -35,6 +40,10 @@ func TestJournal(t *testing.T) {
 	}
 
 	journaltest.RunTests(t, func() journaltest.TestContext {
+		if err := CreateTable(context.Background(), db, table); err != nil {
+			t.Fatal(err)
+		}
+
 		j := &Journal{
 			DB:    db,
 			Table: table,
