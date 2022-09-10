@@ -5,7 +5,7 @@ import (
 	"time"
 
 	. "github.com/dogmatiq/dogma/fixtures"
-	. "github.com/dogmatiq/veracity/internal/fixtures"
+	"github.com/dogmatiq/veracity/internal/envelope"
 	. "github.com/dogmatiq/veracity/internal/queue"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/journal/journaltest"
@@ -17,6 +17,7 @@ import (
 var _ = Describe("type Queue (idempotence)", func() {
 	var (
 		ctx     context.Context
+		packer  *envelope.Packer
 		journal *journaltest.JournalStub[*JournalRecord]
 	)
 
@@ -24,6 +25,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 		DeferCleanup(cancel)
+
+		packer = envelope.NewTestPacker()
 
 		journal = &journaltest.JournalStub[*JournalRecord]{
 			Journal: &memory.Journal[*JournalRecord]{},
@@ -37,10 +40,10 @@ var _ = Describe("type Queue (idempotence)", func() {
 
 			messages := []Message{
 				{
-					Envelope: NewEnvelope("<message-1>", MessageM1),
+					Envelope: packer.Pack(MessageM1),
 				},
 				{
-					Envelope: NewEnvelope("<message-2>", MessageM2),
+					Envelope: packer.Pack(MessageM2),
 				},
 			}
 			enqueued := false

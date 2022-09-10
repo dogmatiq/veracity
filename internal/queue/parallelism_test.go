@@ -2,7 +2,6 @@ package queue_test
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"strings"
 	"sync"
@@ -10,7 +9,7 @@ import (
 
 	. "github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/interopspec/envelopespec"
-	. "github.com/dogmatiq/veracity/internal/fixtures"
+	"github.com/dogmatiq/veracity/internal/envelope"
 	. "github.com/dogmatiq/veracity/internal/queue"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/journal/memory"
@@ -24,6 +23,8 @@ var _ = Describe("type Queue (parallelism)", func() {
 	It("removes each message exactly once", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
+
+		packer := envelope.NewTestPacker()
 
 		queue := &Queue{
 			Journal: &memory.Journal[*JournalRecord]{},
@@ -41,9 +42,9 @@ var _ = Describe("type Queue (parallelism)", func() {
 		var envelopes []*envelopespec.Envelope
 
 		for i := 0; i < messages; i++ {
-			id := fmt.Sprintf("<id-%d>", i)
-			expect[id] = 1
-			envelopes = append(envelopes, NewEnvelope(id, MessageM1))
+			env := packer.Pack(MessageM1)
+			expect[env.MessageId] = 1
+			envelopes = append(envelopes, env)
 		}
 
 		tick := func(ctx context.Context) error {

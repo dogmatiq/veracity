@@ -7,7 +7,7 @@ import (
 
 	. "github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/interopspec/envelopespec"
-	. "github.com/dogmatiq/veracity/internal/fixtures"
+	"github.com/dogmatiq/veracity/internal/envelope"
 	. "github.com/dogmatiq/veracity/internal/queue"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/journal/memory"
@@ -19,14 +19,17 @@ import (
 
 var _ = Describe("type Queue", func() {
 	var (
-		ctx   context.Context
-		queue *Queue
+		ctx    context.Context
+		packer *envelope.Packer
+		queue  *Queue
 	)
 
 	BeforeEach(func() {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 		DeferCleanup(cancel)
+
+		packer = envelope.NewTestPacker()
 
 		queue = &Queue{
 			Journal: &memory.Journal[*JournalRecord]{},
@@ -37,8 +40,8 @@ var _ = Describe("type Queue", func() {
 	Describe("func Enqueue()", func() {
 		It("allows enqueuing multiple messages", func() {
 			expect := []*envelopespec.Envelope{
-				NewEnvelope("<id-1>", MessageM1),
-				NewEnvelope("<id-2>", MessageM2),
+				packer.Pack(MessageM1),
+				packer.Pack(MessageM2),
 			}
 
 			var (
@@ -68,7 +71,7 @@ var _ = Describe("type Queue", func() {
 
 		It("allows associating meta-data with each message", func() {
 			expect := Message{
-				Envelope: NewEnvelope("<id-1>", MessageM1),
+				Envelope: packer.Pack(MessageM1),
 				MetaData: wrapperspb.Int32(123),
 			}
 
@@ -92,7 +95,7 @@ var _ = Describe("type Queue", func() {
 	Describe("func Acquire()", func() {
 		It("returns the next message on the queue", func() {
 			expect := Message{
-				Envelope: NewEnvelope("<id>", MessageM1),
+				Envelope: packer.Pack(MessageM1),
 			}
 			err := queue.Enqueue(ctx, expect)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -113,7 +116,7 @@ var _ = Describe("type Queue", func() {
 			err := queue.Enqueue(
 				ctx,
 				Message{
-					Envelope: NewEnvelope("<id>", MessageM1),
+					Envelope: packer.Pack(MessageM1),
 				},
 			)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -133,15 +136,24 @@ var _ = Describe("type Queue", func() {
 				now := time.Now()
 
 				m1 := Message{
-					Envelope: NewEnvelope("<id-1>", MessageM1, now.Add(1*time.Second)),
+					Envelope: packer.Pack(
+						MessageM1,
+						envelope.WithCreatedAt(now.Add(1*time.Second)),
+					),
 				}
 
 				m2 := Message{
-					Envelope: NewEnvelope("<id-2>", MessageM2, now.Add(2*time.Second)),
+					Envelope: packer.Pack(
+						MessageM2,
+						envelope.WithCreatedAt(now.Add(2*time.Second)),
+					),
 				}
 
 				m3 := Message{
-					Envelope: NewEnvelope("<id-3>", MessageM3, now.Add(3*time.Second)),
+					Envelope: packer.Pack(
+						MessageM3,
+						envelope.WithCreatedAt(now.Add(3*time.Second)),
+					),
 				}
 
 				err := queue.Enqueue(ctx, m2, m3, m1)
@@ -174,7 +186,7 @@ var _ = Describe("type Queue", func() {
 			err := queue.Enqueue(
 				ctx,
 				Message{
-					Envelope: NewEnvelope("<id>", MessageM1),
+					Envelope: packer.Pack(MessageM1),
 				},
 			)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -197,9 +209,18 @@ var _ = Describe("type Queue", func() {
 			By("enqueueing several messages", func() {
 				now := time.Now()
 				envelopes := []*envelopespec.Envelope{
-					NewEnvelope("<id-1>", MessageM1, now.Add(1*time.Second)),
-					NewEnvelope("<id-2>", MessageM2, now.Add(2*time.Second)),
-					NewEnvelope("<id-3>", MessageM3, now.Add(3*time.Second)),
+					packer.Pack(
+						MessageM1,
+						envelope.WithCreatedAt(now.Add(1*time.Second)),
+					),
+					packer.Pack(
+						MessageM2,
+						envelope.WithCreatedAt(now.Add(2*time.Second)),
+					),
+					packer.Pack(
+						MessageM3,
+						envelope.WithCreatedAt(now.Add(3*time.Second)),
+					),
 				}
 
 				for _, env := range envelopes {
@@ -265,7 +286,7 @@ var _ = Describe("type Queue", func() {
 			err := queue.Enqueue(
 				ctx,
 				Message{
-					Envelope: NewEnvelope("<id>", MessageM1),
+					Envelope: packer.Pack(MessageM1),
 				},
 			)
 			Expect(err).ShouldNot(HaveOccurred())

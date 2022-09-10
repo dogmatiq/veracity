@@ -4,10 +4,8 @@ go 1.18
 
 require (
 	github.com/aws/aws-sdk-go v1.44.95
-	github.com/dogmatiq/configkit v0.11.1
 	github.com/dogmatiq/dogma v0.11.1
 	github.com/dogmatiq/interopspec v0.5.1
-	github.com/dogmatiq/linger v0.2.1
 	github.com/dogmatiq/marshalkit v0.7.2
 	github.com/google/uuid v1.3.0
 	github.com/jmalloc/gomegax v0.0.0-20200507221434-64fca4c0e03a
@@ -19,6 +17,7 @@ require (
 )
 
 require (
+	github.com/dogmatiq/configkit v0.11.1 // indirect
 	github.com/dogmatiq/iago v0.4.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.3.0 // indirect
 	github.com/google/go-cmp v0.5.8 // indirect

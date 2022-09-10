@@ -2,14 +2,13 @@ package eventstream_test
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"time"
 
 	. "github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/interopspec/envelopespec"
+	"github.com/dogmatiq/veracity/internal/envelope"
 	. "github.com/dogmatiq/veracity/internal/eventstream"
-	. "github.com/dogmatiq/veracity/internal/fixtures"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/journal/memory"
 	. "github.com/onsi/ginkgo/v2"
@@ -22,6 +21,8 @@ var _ = Describe("type EventStream (parallelism)", func() {
 	It("appends each event exactly once", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
+
+		packer := envelope.NewTestPacker()
 
 		stream := &EventStream{
 			Journal: &memory.Journal[*JournalRecord]{},
@@ -36,8 +37,8 @@ var _ = Describe("type EventStream (parallelism)", func() {
 		expect := map[string]*envelopespec.Envelope{}
 
 		for i := 0; i < events; i++ {
-			id := fmt.Sprintf("<id-%d>", i)
-			expect[id] = NewEnvelope(id, MessageE1)
+			env := packer.Pack(MessageE1)
+			expect[env.MessageId] = env
 		}
 
 		tick := func(ctx context.Context) error {

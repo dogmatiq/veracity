@@ -2,13 +2,12 @@ package eventstream_test
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	. "github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/interopspec/envelopespec"
+	"github.com/dogmatiq/veracity/internal/envelope"
 	. "github.com/dogmatiq/veracity/internal/eventstream"
-	. "github.com/dogmatiq/veracity/internal/fixtures"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/journal/memory"
 	. "github.com/jmalloc/gomegax"
@@ -19,6 +18,7 @@ import (
 var _ = Describe("type EventStream", func() {
 	var (
 		ctx    context.Context
+		packer *envelope.Packer
 		stream *EventStream
 	)
 
@@ -26,6 +26,8 @@ var _ = Describe("type EventStream", func() {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 		DeferCleanup(cancel)
+
+		packer = envelope.NewTestPacker()
 
 		stream = &EventStream{
 			Journal: &memory.Journal[*JournalRecord]{},
@@ -36,8 +38,8 @@ var _ = Describe("type EventStream", func() {
 	Describe("func Append()", func() {
 		It("allows enqueuing appending messages", func() {
 			expect := []*envelopespec.Envelope{
-				NewEnvelope("<id-1>", MessageE1),
-				NewEnvelope("<id-2>", MessageE2),
+				packer.Pack(MessageE1),
+				packer.Pack(MessageE2),
 			}
 
 			err := stream.Append(ctx, expect...)
@@ -73,10 +75,7 @@ var _ = Describe("type EventStream", func() {
 				var envelopes []*envelopespec.Envelope
 
 				for j := 0; j <= i; j++ {
-					env := NewEnvelope(
-						fmt.Sprintf("<%d.%d>", i, j),
-						MessageE1,
-					)
+					env := packer.Pack(MessageE1)
 					envelopes = append(envelopes, env)
 					expect = append(expect, env.GetMessageId())
 				}

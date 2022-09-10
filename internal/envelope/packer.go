@@ -1,7 +1,7 @@
 package envelope
 
 import (
-	"strconv"
+	"fmt"
 	"sync"
 	"time"
 
@@ -44,9 +44,9 @@ type Packer struct {
 // starts at 2000-01-01 00:00:00 UTC and increases by 1 second for each message.
 func NewTestPacker() *Packer {
 	var (
-		m   sync.Mutex
-		id  int64
-		now = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+		m     sync.Mutex
+		id    uint64
+		clock = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	)
 
 	return &Packer{
@@ -63,19 +63,18 @@ func NewTestPacker() *Packer {
 			m.Lock()
 			defer m.Unlock()
 
-			v := strconv.FormatInt(id, 10)
 			id++
 
-			return v
+			return fmt.Sprintf("<id-%d>", id)
 		},
 		Now: func() time.Time {
 			m.Lock()
 			defer m.Unlock()
 
-			v := now
-			now = now.Add(1 * time.Second)
+			now := clock
+			clock = clock.Add(1 * time.Second)
 
-			return v
+			return now
 		},
 	}
 }
@@ -114,6 +113,12 @@ func (p *Packer) Unpack(env *envelopespec.Envelope) (dogma.Message, error) {
 // PackOption is an option that alters the behavior of a Pack operation.
 type PackOption func(*envelopespec.Envelope)
 
+func WithID(id string) PackOption {
+	return func(e *envelopespec.Envelope) {
+		e.MessageId = id
+	}
+}
+
 // WithCause sets env as the "cause" of the message being packed.
 func WithCause(env *envelopespec.Envelope) PackOption {
 	return func(e *envelopespec.Envelope) {
@@ -135,6 +140,13 @@ func WithHandler(h *envelopespec.Identity) PackOption {
 func WithInstanceID(id string) PackOption {
 	return func(e *envelopespec.Envelope) {
 		e.SourceInstanceId = id
+	}
+}
+
+// WithCreatedAt sets the creation time of a message.
+func WithCreatedAt(t time.Time) PackOption {
+	return func(e *envelopespec.Envelope) {
+		e.CreatedAt = marshalkit.MustMarshalEnvelopeTime(t)
 	}
 }
 

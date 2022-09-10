@@ -6,8 +6,8 @@ import (
 
 	. "github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/interopspec/envelopespec"
+	"github.com/dogmatiq/veracity/internal/envelope"
 	. "github.com/dogmatiq/veracity/internal/eventstream"
-	. "github.com/dogmatiq/veracity/internal/fixtures"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/journal/journaltest"
 	"github.com/dogmatiq/veracity/journal/memory"
@@ -19,6 +19,7 @@ import (
 var _ = Describe("type EventStream (idempotence)", func() {
 	var (
 		ctx     context.Context
+		packer  *envelope.Packer
 		journal *journaltest.JournalStub[*JournalRecord]
 	)
 
@@ -26,6 +27,8 @@ var _ = Describe("type EventStream (idempotence)", func() {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 		DeferCleanup(cancel)
+
+		packer = envelope.NewTestPacker()
 
 		journal = &journaltest.JournalStub[*JournalRecord]{
 			Journal: &memory.Journal[*JournalRecord]{},
@@ -37,7 +40,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 		func(expectErr string, setup func()) {
 			setup()
 
-			expect := NewEnvelope("<event>", MessageE1)
+			expect := packer.Pack(MessageE1)
 			appended := false
 
 			tick := func(ctx context.Context) error {

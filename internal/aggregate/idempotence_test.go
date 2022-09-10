@@ -13,7 +13,6 @@ import (
 	. "github.com/dogmatiq/veracity/internal/aggregate"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/eventstream"
-	. "github.com/dogmatiq/veracity/internal/fixtures"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/journal"
 	"github.com/dogmatiq/veracity/journal/journaltest"
@@ -26,16 +25,18 @@ import (
 var _ = Describe("type CommandExecutor (idempotence)", func() {
 	var (
 		ctx             context.Context
+		packer          *envelope.Packer
 		instanceJournal *journaltest.JournalStub[*JournalRecord]
 		eventsJournal   *journaltest.JournalStub[*eventstream.JournalRecord]
 		journalOpener   journal.Opener[*JournalRecord]
-		packer          *envelope.Packer
 	)
 
 	BeforeEach(func() {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 		DeferCleanup(cancel)
+
+		packer = envelope.NewTestPacker()
 
 		instanceJournal = &journaltest.JournalStub[*JournalRecord]{
 			Journal: &memory.Journal[*JournalRecord]{},
@@ -57,8 +58,6 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 				return journaltest.NopCloser[*JournalRecord](instanceJournal), nil
 			},
 		}
-
-		packer = envelope.NewTestPacker()
 	})
 
 	DescribeTable(
@@ -66,7 +65,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		func(expectErr string, setup func()) {
 			setup()
 
-			env := NewEnvelope("<command>", MessageC1)
+			env := packer.Pack(MessageC1)
 
 			tick := func(ctx context.Context) error {
 				exec := &CommandExecutor{

@@ -15,7 +15,6 @@ import (
 	. "github.com/dogmatiq/veracity/internal/aggregate"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/eventstream"
-	. "github.com/dogmatiq/veracity/internal/fixtures"
 	"github.com/dogmatiq/veracity/journal/memory"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -28,9 +27,9 @@ var _ = Describe("type CommandExecutor (parallelism)", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 
+		packer := envelope.NewTestPacker()
 		journalOpener := &memory.JournalOpener[*JournalRecord]{}
 		eventJournal := &memory.Journal[*eventstream.JournalRecord]{}
-		packer := envelope.NewTestPacker()
 
 		var (
 			parallelism = runtime.NumCPU()
@@ -43,14 +42,13 @@ var _ = Describe("type CommandExecutor (parallelism)", func() {
 
 		for i := 0; i < messages; i++ {
 			instanceID := fmt.Sprintf("<instance-%d>", i%instances)
-			messageID := fmt.Sprintf("<command-%d>", i)
+			value := fmt.Sprintf("<value-%d>", i)
 
 			envelopes = append(
 				envelopes,
-				NewEnvelope(
-					messageID,
+				packer.Pack(
 					MessageC{
-						Value: messageID,
+						Value: value,
 					},
 				),
 			)
@@ -58,11 +56,12 @@ var _ = Describe("type CommandExecutor (parallelism)", func() {
 			expect = append(
 				expect,
 				MessageE{
-					Value: fmt.Sprintf(
-						"%s-%s",
-						instanceID,
-						messageID,
-					),
+					// The handler produces events with a value of the aggregate
+					// instance ID concatenated with the command's value.
+					//
+					// This lets us assert that the commands are being routed to
+					// the correct instance.
+					Value: fmt.Sprintf("%s-%s", instanceID, value),
 				},
 			)
 		}
