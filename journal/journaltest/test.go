@@ -93,7 +93,9 @@ func RunTests(
 
 			ctx, tc := prepare(t, setup)
 
-			ok, err := tc.Journal.Write(ctx, 0, []byte("<record>"))
+			expect := []byte("<original>")
+
+			ok, err := tc.Journal.Write(ctx, 0, expect)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -101,12 +103,28 @@ func RunTests(
 				t.Fatal("unexpected optimistic concurrency conflict")
 			}
 
-			ok, err = tc.Journal.Write(ctx, 0, []byte("<record>"))
+			ok, err = tc.Journal.Write(ctx, 0, []byte("<modified>"))
 			if err != nil {
 				t.Fatal(err)
 			}
 			if ok {
 				t.Fatal("expected an optimistic concurrency conflict")
+			}
+
+			actual, ok, err := tc.Journal.Read(ctx, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok {
+				t.Fatal("expected record to exist")
+			}
+
+			if !bytes.Equal(expect, actual) {
+				t.Fatalf(
+					"unexpected record, want %q, got %q",
+					string(expect),
+					string(actual),
+				)
 			}
 		})
 	})
