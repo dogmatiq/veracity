@@ -132,15 +132,24 @@ func (i *instance) executeCommand(ctx context.Context, env *envelopespec.Envelop
 }
 
 // apply updates the instance's in-memory state to reflect a revision record.
-func (x *JournalRecord_Revision) apply(i *instance) {
+func (x *JournalRecord_Revision) apply(i *instance) error {
 	i.commands[x.Revision.CommandId] = struct{}{}
 	i.unpublished = nil
 
 	for _, a := range x.Revision.Actions {
 		if r := a.GetRecordEvent(); r != nil {
 			i.unpublished = append(i.unpublished, r.Envelope)
+
+			event, err := i.Packer.Unpack(r.Envelope)
+			if err != nil {
+				return fmt.Errorf("unable to unmarshal historical event: %w", err)
+			}
+
+			i.root.ApplyEvent(event)
 		}
 	}
+
+	return nil
 }
 
 // load reads all records from the journal and applies them to the instance.
@@ -149,7 +158,7 @@ func (i *instance) load(ctx context.Context) error {
 	i.root = i.Handler.New()
 
 	type applyer interface {
-		apply(i *instance)
+		apply(*instance) error
 	}
 
 	for {
@@ -161,7 +170,10 @@ func (i *instance) load(ctx context.Context) error {
 			break
 		}
 
-		r.GetOneOf().(applyer).apply(i)
+		if err := r.GetOneOf().(applyer).apply(i); err != nil {
+			return fmt.Errorf("unable to load instance: %w", err)
+		}
+
 		i.version++
 	}
 
