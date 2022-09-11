@@ -1,3 +1,3 @@
-// Package dynamodb provides a journal implementation that persists to a
-// DynamoDB table.
+// Package dynamodb provides low-level persistence implementations that store
+// data in DynamoDB.
 package dynamodb
