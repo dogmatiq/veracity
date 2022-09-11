@@ -9,22 +9,18 @@ import (
 	"github.com/dogmatiq/veracity/journal"
 )
 
-type TestContext struct {
-	Journal journal.Journal[[]byte]
-	Cleanup func() error
-}
-
+// RunTests runs tests that confirm a journal implementation behaves correctly.
 func RunTests(
 	t *testing.T,
-	setup func() (TestContext, error),
+	new func(t *testing.T) journal.BinaryJournal,
 ) {
 	t.Run("func Read()", func(t *testing.T) {
 		t.Run("it returns false if the version doesn't exist", func(t *testing.T) {
 			t.Parallel()
 
-			ctx, tc := prepare(t, setup)
+			ctx, j := setup(t, new)
 
-			_, ok, err := tc.Journal.Read(ctx, 1)
+			_, ok, err := j.Read(ctx, 1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -36,7 +32,7 @@ func RunTests(
 		t.Run("it returns the record if it exists", func(t *testing.T) {
 			t.Parallel()
 
-			ctx, tc := prepare(t, setup)
+			ctx, j := setup(t, new)
 
 			expect := [][]byte{
 				[]byte("<record-1>"),
@@ -44,7 +40,7 @@ func RunTests(
 			}
 
 			for i, r := range expect {
-				ok, err := tc.Journal.Write(ctx, uint64(i), r)
+				ok, err := j.Write(ctx, uint64(i), r)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -54,7 +50,7 @@ func RunTests(
 			}
 
 			for i, r := range expect {
-				actual, ok, err := tc.Journal.Read(ctx, uint64(i))
+				actual, ok, err := j.Read(ctx, uint64(i))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -77,9 +73,9 @@ func RunTests(
 		t.Run("it returns true if the version doesn't exist", func(t *testing.T) {
 			t.Parallel()
 
-			ctx, tc := prepare(t, setup)
+			ctx, j := setup(t, new)
 
-			ok, err := tc.Journal.Write(ctx, 0, []byte("<record>"))
+			ok, err := j.Write(ctx, 0, []byte("<record>"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -91,11 +87,11 @@ func RunTests(
 		t.Run("it returns false if the version already exists", func(t *testing.T) {
 			t.Parallel()
 
-			ctx, tc := prepare(t, setup)
+			ctx, j := setup(t, new)
 
 			expect := []byte("<original>")
 
-			ok, err := tc.Journal.Write(ctx, 0, expect)
+			ok, err := j.Write(ctx, 0, expect)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -103,7 +99,7 @@ func RunTests(
 				t.Fatal("unexpected optimistic concurrency conflict")
 			}
 
-			ok, err = tc.Journal.Write(ctx, 0, []byte("<modified>"))
+			ok, err = j.Write(ctx, 0, []byte("<modified>"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -111,7 +107,7 @@ func RunTests(
 				t.Fatal("expected an optimistic concurrency conflict")
 			}
 
-			actual, ok, err := tc.Journal.Read(ctx, 0)
+			actual, ok, err := j.Read(ctx, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -130,23 +126,20 @@ func RunTests(
 	})
 }
 
-func prepare(
+func setup(
 	t *testing.T,
-	setup func() (TestContext, error),
-) (context.Context, TestContext) {
+	new func(t *testing.T) journal.BinaryJournal,
+) (context.Context, journal.BinaryJournal) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	t.Cleanup(cancel)
 
-	tc, err := setup()
-	if err != nil {
-		t.Fatal(err)
-	}
+	j := new(t)
 
 	t.Cleanup(func() {
-		if err := tc.Cleanup(); err != nil {
+		if err := j.Close(); err != nil {
 			t.Fatal(err)
 		}
 	})
 
-	return ctx, tc
+	return ctx, j
 }

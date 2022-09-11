@@ -10,7 +10,7 @@ import (
 // PB is a journal that persists protocol-buffers-based journal records to an
 // underlying binary journal.
 type PB[R proto.Message] struct {
-	Journal[[]byte]
+	BinaryJournal
 }
 
 // Read returns the record that was written to produce the version v of the
@@ -20,7 +20,7 @@ type PB[R proto.Message] struct {
 func (j *PB[R]) Read(ctx context.Context, v uint64) (R, bool, error) {
 	var r R
 
-	data, ok, err := j.Journal.Read(ctx, v)
+	data, ok, err := j.BinaryJournal.Read(ctx, v)
 	if !ok || err != nil {
 		return r, ok, err
 	}
@@ -46,5 +46,5 @@ func (j *PB[R]) Write(ctx context.Context, v uint64, r R) (bool, error) {
 		return false, err
 	}
 
-	return j.Journal.Write(ctx, v, data)
+	return j.BinaryJournal.Write(ctx, v, data)
 }

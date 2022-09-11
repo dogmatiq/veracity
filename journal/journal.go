@@ -31,6 +31,9 @@ type Journal[R any] interface {
 	Close() error
 }
 
+// BinaryJournal is a journal that stores opaque binary records.
+type BinaryJournal Journal[[]byte]
+
 // Opener is an interface for opening journals by key.
 type Opener[R any] interface {
 	// Open opens the journal identified by the given key.

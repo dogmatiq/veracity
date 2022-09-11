@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/dogmatiq/veracity/journal"
 	"github.com/dogmatiq/veracity/journal/journaltest"
 	. "github.com/dogmatiq/veracity/persistence/dynamodb"
 	"github.com/dogmatiq/veracity/persistence/internal/awsx"
@@ -48,18 +49,16 @@ func TestJournal(t *testing.T) {
 		}
 	})
 
-	journaltest.RunTests(t, func() (journaltest.TestContext, error) {
-		j := &Journal{
-			DB:    db,
-			Table: table,
-			Key:   uuid.NewString(),
-		}
-
-		return journaltest.TestContext{
-			Journal: j,
-			Cleanup: j.Close,
-		}, nil
-	})
+	journaltest.RunTests(
+		t,
+		func(t *testing.T) journal.BinaryJournal {
+			return &Journal{
+				DB:    db,
+				Table: table,
+				Key:   uuid.NewString(),
+			}
+		},
+	)
 }
 
 func deleteTable(db *dynamodb.DynamoDB, table string) error {
