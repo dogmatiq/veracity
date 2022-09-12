@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -36,7 +37,10 @@ func TestJournal(t *testing.T) {
 	db := dynamodb.New(sess)
 	table := "journal"
 
-	if err := CreateJournalTable(context.Background(), db, table); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if err := CreateJournalTable(ctx, db, table); err != nil {
 		t.Fatal(err)
 	}
 

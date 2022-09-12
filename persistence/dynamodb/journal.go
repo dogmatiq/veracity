@@ -92,7 +92,7 @@ type binaryJournal struct {
 	WriteRequest dynamodb.PutItemInput
 }
 
-func (j *binaryJournal) Read(ctx context.Context, ver uint64) (rec []byte, ok bool, err error) {
+func (j *binaryJournal) Read(ctx context.Context, ver uint64) ([]byte, bool, error) {
 	j.Version.N = aws.String(strconv.FormatUint(ver, 10))
 
 	out, err := awsx.Do(
@@ -108,11 +108,16 @@ func (j *binaryJournal) Read(ctx context.Context, ver uint64) (rec []byte, ok bo
 	return out.Item[journalRecordAttr].B, true, nil
 }
 
-func (j *binaryJournal) Write(ctx context.Context, ver uint64, rec []byte) (ok bool, err error) {
+func (j *binaryJournal) ReadOldest(ctx context.Context) (uint64, []byte, bool, error) {
+	rec, ok, err := j.Read(ctx, 0)
+	return 0, rec, ok, err
+}
+
+func (j *binaryJournal) Write(ctx context.Context, ver uint64, rec []byte) (bool, error) {
 	j.Version.N = aws.String(strconv.FormatUint(ver, 10))
 	j.Record.B = rec
 
-	_, err = awsx.Do(
+	_, err := awsx.Do(
 		ctx,
 		j.DB.PutItemWithContext,
 		j.DecoratePutItem,

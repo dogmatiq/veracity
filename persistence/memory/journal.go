@@ -76,6 +76,11 @@ func (h *binaryJournal[R]) Read(ctx context.Context, ver uint64) (R, bool, error
 	return zero, false, ctx.Err()
 }
 
+func (h *binaryJournal[R]) ReadOldest(ctx context.Context) (uint64, R, bool, error) {
+	rec, ok, err := h.Read(ctx, 0)
+	return 0, rec, ok, err
+}
+
 func (h *binaryJournal[R]) Write(ctx context.Context, v uint64, r R) (bool, error) {
 	if h.state == nil {
 		panic("journal is closed")

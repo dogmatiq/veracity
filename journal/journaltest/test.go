@@ -174,6 +174,107 @@ func RunTests(
 			})
 		})
 
+		t.Run("func ReadOldest()", func(t *testing.T) {
+			t.Run("it returns the record that produced version 0 if there has been no truncation", func(t *testing.T) {
+				t.Parallel()
+
+				expect := []byte("<record>")
+
+				ok, err := j.Write(ctx, 0, expect)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !ok {
+					t.Fatal("unexpected optimistic concurrency conflict")
+				}
+
+				ver, actual, ok, err := j.ReadOldest(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !ok {
+					t.Fatal("expected record to exist")
+				}
+
+				if !bytes.Equal(expect, actual) {
+					t.Fatalf(
+						"unexpected record, want %q, got %q",
+						string(expect),
+						string(actual),
+					)
+				}
+
+				if ver != 0 {
+					t.Fatalf("unexpected version, want 0, got %d", ver)
+				}
+			})
+
+			t.Run("it returns false if the journal is empty", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, j := setup(t, new)
+
+				_, _, ok, err := j.ReadOldest(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if ok {
+					t.Fatal("returned ok == true for non-existent record")
+				}
+			})
+
+			// t.Run("it returns the first non-truncated record", func(t *testing.T) {
+			// 	t.Parallel()
+
+			// 	ctx, j := setup(t, new)
+
+			// 	records := [][]byte{
+			// 		[]byte("<record-1>"),
+			// 		[]byte("<record-2>"),
+			// 		[]byte("<record-3>"),
+			// 		[]byte("<record-4>"),
+			// 		[]byte("<record-5>"),
+			// 	}
+
+			// 	for i, r := range records {
+			// 		ok, err := j.Write(ctx, uint64(i), r)
+			// 		if err != nil {
+			// 			t.Fatal(err)
+			// 		}
+			// 		if !ok {
+			// 			t.Fatal("unexpected optimistic concurrency conflict")
+			// 		}
+			// 	}
+
+			// 	retainVersion := uint64(4)
+			// 	err := j.Truncate(ctx, retainVersion)
+			// 	if err != nil {
+			// 		t.Fatal(err)
+			// 	}
+
+			// 	expect := records[retainVersion]
+			// 	actual, v, ok, err := j.ReadEarliest(ctx)
+			// 	if err != nil {
+			// 		t.Fatal(err)
+			// 	}
+			// 	if !ok {
+			// 		t.Fatal("expected record to exist")
+			// 	}
+
+			// 	if !bytes.Equal(expect, actual) {
+			// 		t.Fatalf(
+			// 			"unexpected record, want %q, got %q",
+			// 			string(expect),
+			// 			string(actual),
+			// 		)
+			// 	}
+
+			// 	if v != retainVersion {
+			// 		t.Fatalf("unexpected version, want 0, got %d", v)
+			// 	}
+			// })
+		})
+
 		t.Run("func Write()", func(t *testing.T) {
 			t.Run("it returns true if the version doesn't exist", func(t *testing.T) {
 				t.Parallel()

@@ -12,34 +12,37 @@ import (
 type JournalStub[R any] struct {
 	journal.Journal[R]
 
-	beforeWrite func(ctx context.Context, v uint64, r R) (bool, error)
-	afterWrite  func(ctx context.Context, v uint64, r R, ok bool, err error) (bool, error)
+	beforeWrite func(R) error
+	afterWrite  func(R) error
 }
 
-// Write appends a new record to the journal.
+// Write adds a record to the journal.
 //
-// v must be the current version of the journal.
+// ver is the next version of the journal. That is, the version to produce as a
+// result of writing this record. The first version is always 0.
 //
-// If v < current then the record is not persisted; ok is false indicating an
+// If the journal's current version >= ver then ok is false indicating an
 // optimistic concurrency conflict.
 //
-// If v > current then the behavior is undefined.
-func (j *JournalStub[R]) Write(ctx context.Context, v uint64, r R) (ok bool, err error) {
+// If ver is greater than the "next" version the behavior is undefined.
+func (j *JournalStub[R]) Write(ctx context.Context, ver uint64, rec R) (ok bool, err error) {
 	if j.beforeWrite != nil {
-		ok, err := j.beforeWrite(ctx, v, r)
+		if err := j.beforeWrite(rec); err != nil {
+			return false, err
+		}
+	}
+
+	if j.Journal != nil {
+		ok, err := j.Journal.Write(ctx, ver, rec)
 		if !ok || err != nil {
 			return false, err
 		}
 	}
 
-	defer func() {
-		if j.afterWrite != nil {
-			ok, err = j.afterWrite(ctx, v, r, ok, err)
+	if j.afterWrite != nil {
+		if err := j.afterWrite(rec); err != nil {
+			return false, err
 		}
-	}()
-
-	if j.Journal != nil {
-		return j.Journal.Write(ctx, v, r)
 	}
 
 	return false, nil
@@ -55,14 +58,14 @@ func FailOnceBeforeWrite[R any](
 ) {
 	var done uint32
 
-	s.beforeWrite = func(ctx context.Context, v uint64, r R) (bool, error) {
-		if pred(r) {
+	s.beforeWrite = func(rec R) error {
+		if pred(rec) {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				return false, errors.New("<error>")
+				return errors.New("<error>")
 			}
 		}
 
-		return true, nil
+		return nil
 	}
 }
 
@@ -76,23 +79,13 @@ func FailOnceAfterWrite[R any](
 ) {
 	var done uint32
 
-	s.afterWrite = func(
-		ctx context.Context,
-		v uint64,
-		r R,
-		ok bool,
-		err error,
-	) (bool, error) {
-		if !ok || err != nil {
-			return false, err
-		}
-
-		if pred(r) {
+	s.afterWrite = func(rec R) error {
+		if pred(rec) {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				return false, errors.New("<error>")
+				return errors.New("<error>")
 			}
 		}
 
-		return true, nil
+		return nil
 	}
 }
