@@ -7,7 +7,7 @@ require (
 	github.com/dogmatiq/dogma v0.11.1
 	github.com/dogmatiq/interopspec v0.5.1
 	github.com/dogmatiq/marshalkit v0.7.2
-	github.com/google/go-cmp v0.5.8
+	github.com/google/go-cmp v0.5.9
 	github.com/google/uuid v1.3.0
 	github.com/jmalloc/gomegax v0.0.0-20200507221434-64fca4c0e03a
 	github.com/onsi/ginkgo/v2 v2.1.6
