@@ -2,6 +2,7 @@ package dynamodb
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -28,12 +29,26 @@ type JournalOpener struct {
 	// applied to the request.
 	DecorateGetItem func(*dynamodb.GetItemInput) []request.Option
 
+	// DecorateQuery is an optional function that is called before each DynamoDB
+	// "Query" request.
+	//
+	// It may modify the API input in-place. It returns options that will be
+	// applied to the request.
+	DecorateQuery func(*dynamodb.QueryInput) []request.Option
+
 	// DecoratePutItem is an optional function that is called before each
 	// DynamoDB "PutItem" request.
 	//
 	// It may modify the API input in-place. It returns options that will be
 	// applied to the request.
 	DecoratePutItem func(*dynamodb.PutItemInput) []request.Option
+
+	// DecorateDeleteItem is an optional function that is called before each
+	// DynamoDB "DeleteItem" request.
+	//
+	// It may modify the API input in-place. It returns options that will be
+	// applied to the request.
+	DecorateDeleteItem func(*dynamodb.DeleteItemInput) []request.Option
 }
 
 // Open returns the journal at the given path.
@@ -46,14 +61,16 @@ func (o *JournalOpener) Open(ctx context.Context, path ...string) (journal.Binar
 	key := keyFromJournalPath(path)
 
 	j := &binaryJournal{
-		DB:              o.DB,
-		DecorateGetItem: o.DecorateGetItem,
-		DecoratePutItem: o.DecoratePutItem,
+		DB:                 o.DB,
+		DecorateGetItem:    o.DecorateGetItem,
+		DecorateQuery:      o.DecorateQuery,
+		DecoratePutItem:    o.DecoratePutItem,
+		DecorateDeleteItem: o.DecorateDeleteItem,
 
 		Key: dynamodb.AttributeValue{S: &key},
 	}
 
-	j.ReadRequest = dynamodb.GetItemInput{
+	j.GetRequest = dynamodb.GetItemInput{
 		TableName: aws.String(o.Table),
 		Key: map[string]*dynamodb.AttributeValue{
 			journalKeyAttr:     &j.Key,
@@ -62,7 +79,23 @@ func (o *JournalOpener) Open(ctx context.Context, path ...string) (journal.Binar
 		ProjectionExpression: aws.String(journalRecordAttr),
 	}
 
-	j.WriteRequest = dynamodb.PutItemInput{
+	j.QueryRequest = dynamodb.QueryInput{
+		TableName:              aws.String(o.Table),
+		KeyConditionExpression: aws.String(`#K = :K`),
+		ConsistentRead:         aws.Bool(true),
+		ExpressionAttributeNames: map[string]*string{
+			"#K": aws.String(journalKeyAttr),
+			"#V": aws.String(journalVersionAttr),
+		},
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":K": &j.Key,
+		},
+		ProjectionExpression: &j.QueryProjection,
+		ScanIndexForward:     aws.Bool(true),
+		Limit:                aws.Int64(1),
+	}
+
+	j.PutRequest = dynamodb.PutItemInput{
 		TableName:           aws.String(o.Table),
 		ConditionExpression: aws.String(`attribute_not_exists(#K)`),
 		ExpressionAttributeNames: map[string]*string{
@@ -75,21 +108,35 @@ func (o *JournalOpener) Open(ctx context.Context, path ...string) (journal.Binar
 		},
 	}
 
+	j.DeleteRequest = dynamodb.DeleteItemInput{
+		TableName: aws.String(o.Table),
+		Key: map[string]*dynamodb.AttributeValue{
+			journalKeyAttr:     &j.Key,
+			journalVersionAttr: &j.Version,
+		},
+	}
+
 	return j, nil
 }
 
 // binaryJournal is an implementation of journal.BinaryJournal that stores
 // records in a DynamoDB table.
 type binaryJournal struct {
-	DB              *dynamodb.DynamoDB
-	DecorateGetItem func(*dynamodb.GetItemInput) []request.Option
-	DecoratePutItem func(*dynamodb.PutItemInput) []request.Option
+	DB                 *dynamodb.DynamoDB
+	DecorateGetItem    func(*dynamodb.GetItemInput) []request.Option
+	DecorateQuery      func(*dynamodb.QueryInput) []request.Option
+	DecoratePutItem    func(*dynamodb.PutItemInput) []request.Option
+	DecorateDeleteItem func(*dynamodb.DeleteItemInput) []request.Option
 
-	Key          dynamodb.AttributeValue
-	Version      dynamodb.AttributeValue
-	Record       dynamodb.AttributeValue
-	ReadRequest  dynamodb.GetItemInput
-	WriteRequest dynamodb.PutItemInput
+	Key             dynamodb.AttributeValue
+	Version         dynamodb.AttributeValue
+	Record          dynamodb.AttributeValue
+	QueryProjection string
+
+	GetRequest    dynamodb.GetItemInput
+	QueryRequest  dynamodb.QueryInput
+	PutRequest    dynamodb.PutItemInput
+	DeleteRequest dynamodb.DeleteItemInput
 }
 
 func (j *binaryJournal) Read(ctx context.Context, ver uint64) ([]byte, bool, error) {
@@ -99,7 +146,7 @@ func (j *binaryJournal) Read(ctx context.Context, ver uint64) ([]byte, bool, err
 		ctx,
 		j.DB.GetItemWithContext,
 		j.DecorateGetItem,
-		&j.ReadRequest,
+		&j.GetRequest,
 	)
 	if out.Item == nil || err != nil {
 		return nil, false, err
@@ -109,8 +156,7 @@ func (j *binaryJournal) Read(ctx context.Context, ver uint64) ([]byte, bool, err
 }
 
 func (j *binaryJournal) ReadOldest(ctx context.Context) (uint64, []byte, bool, error) {
-	rec, ok, err := j.Read(ctx, 0)
-	return 0, rec, ok, err
+	return j.readOldest(ctx, true)
 }
 
 func (j *binaryJournal) Write(ctx context.Context, ver uint64, rec []byte) (bool, error) {
@@ -121,7 +167,7 @@ func (j *binaryJournal) Write(ctx context.Context, ver uint64, rec []byte) (bool
 		ctx,
 		j.DB.PutItemWithContext,
 		j.DecoratePutItem,
-		&j.WriteRequest,
+		&j.PutRequest,
 	)
 
 	if awsx.IsErrorCode(err, dynamodb.ErrCodeConditionalCheckFailedException) {
@@ -131,9 +177,79 @@ func (j *binaryJournal) Write(ctx context.Context, ver uint64, rec []byte) (bool
 	return true, err
 }
 
-// Close closes the journal.
+func (j *binaryJournal) Truncate(ctx context.Context, ver uint64) error {
+	oldest, _, ok, err := j.readOldest(ctx, false)
+	if !ok || err != nil {
+		return err
+	}
+
+	for oldest < ver {
+		j.Version.N = aws.String(strconv.FormatUint(ver, 10))
+
+		if _, err := awsx.Do(
+			ctx,
+			j.DB.DeleteItemWithContext,
+			j.DecorateDeleteItem,
+			&j.DeleteRequest,
+		); err != nil {
+			return err
+		}
+
+		oldest++
+	}
+
+	return nil
+}
+
 func (j *binaryJournal) Close() error {
 	return nil
+}
+
+func (j *binaryJournal) readOldest(
+	ctx context.Context,
+	fetchRecord bool,
+) (uint64, []byte, bool, error) {
+	if fetchRecord {
+		j.QueryProjection = "#V, #R"
+		j.QueryRequest.ExpressionAttributeNames["#R"] = aws.String(journalRecordAttr)
+	} else {
+		j.QueryProjection = "#V"
+		delete(j.QueryRequest.ExpressionAttributeNames, "#R")
+	}
+
+	out, err := awsx.Do(
+		ctx,
+		j.DB.QueryWithContext,
+		j.DecorateQuery,
+		&j.QueryRequest,
+	)
+	if len(out.Items) == 0 || err != nil {
+		return 0, nil, false, err
+	}
+
+	item := out.Items[0]
+
+	attr, ok := item[journalVersionAttr]
+	if !ok {
+		return 0, nil, false, errors.New("journal record is corrupt: missing version attribute")
+	}
+
+	ver, err := strconv.ParseUint(aws.StringValue(attr.N), 10, 64)
+	if err != nil {
+		return 0, nil, false, err
+	}
+
+	var rec []byte
+	if fetchRecord {
+		attr, ok := item[journalRecordAttr]
+		if !ok {
+			return 0, nil, false, errors.New("journal record is corrupt: missing record attribute")
+		}
+
+		rec = attr.B
+	}
+
+	return ver, rec, true, nil
 }
 
 // CreateJournalTable creates a DynamoDB for storing journal records.

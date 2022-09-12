@@ -23,7 +23,6 @@ type JournalOpener[R any] struct {
 // the Letter, Mark, Number, Punctuation or Symbol categories.
 func (o *JournalOpener[R]) Open(ctx context.Context, path ...string) (journal.Journal[R], error) {
 	key := keyFromJournalPath(path)
-
 	state, ok := o.journals.Load(key)
 
 	if !ok {
@@ -48,6 +47,9 @@ func NewJournal[R any]() journal.Journal[R] {
 // journalState stores the underlying state of a journal.
 type journalState[R any] struct {
 	sync.RWMutex
+
+	Begin   uint64
+	End     uint64
 	Records []R
 }
 
@@ -65,23 +67,31 @@ func (h *binaryJournal[R]) Read(ctx context.Context, ver uint64) (R, bool, error
 	h.state.RLock()
 	defer h.state.RUnlock()
 
-	index := int(ver)
-	size := len(h.state.Records)
-
-	if index < size {
-		return h.state.Records[index], true, ctx.Err()
+	if ver < h.state.Begin || ver >= h.state.End {
+		var zero R
+		return zero, false, nil
 	}
 
-	var zero R
-	return zero, false, ctx.Err()
+	return h.state.Records[ver-h.state.Begin], true, ctx.Err()
 }
 
 func (h *binaryJournal[R]) ReadOldest(ctx context.Context) (uint64, R, bool, error) {
-	rec, ok, err := h.Read(ctx, 0)
-	return 0, rec, ok, err
+	if h.state == nil {
+		panic("journal is closed")
+	}
+
+	h.state.RLock()
+	defer h.state.RUnlock()
+
+	if h.state.Begin == h.state.End {
+		var zero R
+		return 0, zero, false, ctx.Err()
+	}
+
+	return h.state.Begin, h.state.Records[0], true, ctx.Err()
 }
 
-func (h *binaryJournal[R]) Write(ctx context.Context, v uint64, r R) (bool, error) {
+func (h *binaryJournal[R]) Write(ctx context.Context, ver uint64, rec R) (bool, error) {
 	if h.state == nil {
 		panic("journal is closed")
 	}
@@ -89,18 +99,36 @@ func (h *binaryJournal[R]) Write(ctx context.Context, v uint64, r R) (bool, erro
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	index := int(v)
-	size := len(h.state.Records)
-
 	switch {
-	case index < size:
+	case ver < h.state.End:
 		return false, ctx.Err()
-	case index == size:
-		h.state.Records = append(h.state.Records, r)
+	case ver == h.state.End:
+		h.state.Records = append(h.state.Records, rec)
+		h.state.End++
 		return true, ctx.Err()
 	default:
 		panic("version out of range, this behavior would be undefined in a real journal implementation")
 	}
+}
+
+func (h *binaryJournal[R]) Truncate(ctx context.Context, ver uint64) error {
+	if h.state == nil {
+		panic("journal is closed")
+	}
+
+	h.state.Lock()
+	defer h.state.Unlock()
+
+	if ver > h.state.End {
+		panic("version out of range, this behavior would be undefined in a real journal implementation")
+	}
+
+	if ver > h.state.Begin {
+		h.state.Records = h.state.Records[ver-h.state.Begin:]
+		h.state.Begin = ver
+	}
+
+	return ctx.Err()
 }
 
 func (h *binaryJournal[R]) Close() error {

@@ -6,10 +6,6 @@ import (
 
 // A Journal is an append-only log that stores records of type R.
 //
-// A journal's read/write operations are immediately consistent, meaning that
-// the effect of a call to Write() or Truncate() is immediately observable by
-// the Read() and ReadOldest() methods.
-//
 // Journals are safe for concurrent use.
 type Journal[R any] interface {
 	// Read returns the record written to produce the given version of the
@@ -38,11 +34,16 @@ type Journal[R any] interface {
 	Write(ctx context.Context, ver uint64, rec R) (ok bool, err error)
 
 	// Truncate removes the oldest records from the journal up to (but not
-	// including) the record at the given offset.
+	// including) the record written at the given version.
 	//
-	// Passing an offset larger than the offset of the most recent record
-	// results in undefined behavior.
-	// Truncate(ctx context.Context, offset uint64) error
+	// If it returns a non-nil error the truncation may have been partially
+	// applied. That is, some of the records may have been removed but not all.
+	// It must guarantee that the oldest records are removed first, such that
+	// there is never a "gap" between versions.
+	//
+	// Passing a version larger than the current version of the journal results
+	// in undefined behavior.
+	Truncate(ctx context.Context, ver uint64) error
 
 	// Close closes the journal.
 	Close() error
