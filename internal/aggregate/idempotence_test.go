@@ -25,11 +25,10 @@ import (
 
 var _ = Describe("type CommandExecutor (idempotence)", func() {
 	var (
-		ctx             context.Context
-		packer          *envelope.Packer
-		instanceJournal *journaltest.JournalStub[*JournalRecord]
-		eventsJournal   *journaltest.JournalStub[*eventstream.JournalRecord]
-		journals        journal.Store[*JournalRecord]
+		ctx              context.Context
+		packer           *envelope.Packer
+		eventJournals    *memory.JournalStore[*eventstream.JournalRecord]
+		instanceJournals *memory.JournalStore[*JournalRecord]
 	)
 
 	BeforeEach(func() {
@@ -38,44 +37,32 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		DeferCleanup(cancel)
 
 		packer = envelope.NewTestPacker()
-
-		instanceJournal = &journaltest.JournalStub[*JournalRecord]{
-			Journal: memory.NewJournal[*JournalRecord](),
-		}
-
-		eventsJournal = &journaltest.JournalStub[*eventstream.JournalRecord]{
-			Journal: memory.NewJournal[*eventstream.JournalRecord](),
-		}
-
-		journals = &journaltest.StoreStub[*JournalRecord]{
-			OpenFunc: func(
-				ctx context.Context,
-				path ...string,
-			) (journal.Journal[*JournalRecord], error) {
-				if !slices.Equal(
-					path,
-					[]string{
-						"aggregate",
-						"<handler-key>",
-						"<instance-id>",
-					},
-				) {
-					return nil, fmt.Errorf("unexpected journal path: %s", path)
-				}
-
-				return journaltest.NopCloser[*JournalRecord](instanceJournal), nil
-			},
-		}
+		eventJournals = &memory.JournalStore[*eventstream.JournalRecord]{}
+		instanceJournals = &memory.JournalStore[*JournalRecord]{}
 	})
 
 	DescribeTable(
 		"it handles a command exactly once",
-		func(expectErr string, setup func()) {
-			setup()
-
+		func(
+			expectErr string,
+			setup func(
+				events *journaltest.JournalStub[*eventstream.JournalRecord],
+				instances *journaltest.JournalStub[*JournalRecord],
+			),
+		) {
 			env := packer.Pack(MessageC1)
 
 			tick := func(ctx context.Context) error {
+				j, err := eventJournals.Open(ctx, "<eventstore>")
+				if err != nil {
+					return err
+				}
+				defer j.Close()
+
+				eventJournal := &journaltest.JournalStub[*eventstream.JournalRecord]{
+					Journal: j,
+				}
+
 				exec := &CommandExecutor{
 					HandlerIdentity: &envelopespec.Identity{
 						Name: "<handler-name>",
@@ -90,10 +77,44 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 							s.RecordEvent(MessageE1)
 						},
 					},
-					Packer:       packer,
-					JournalStore: journals,
+					Packer: packer,
+					JournalStore: &journaltest.StoreStub[*JournalRecord]{
+						OpenFunc: func(
+							ctx context.Context,
+							path ...string,
+						) (journal.Journal[*JournalRecord], error) {
+							if !slices.Equal(
+								path,
+								[]string{
+									"aggregate",
+									"<handler-key>",
+									"<instance-id>",
+								},
+							) {
+								return nil, fmt.Errorf("unexpected journal path: %s", path)
+							}
+
+							j, err := instanceJournals.Open(ctx, path...)
+							if err != nil {
+								return nil, err
+							}
+
+							stub := &journaltest.JournalStub[*JournalRecord]{
+								Journal: j,
+							}
+
+							setup(eventJournal, stub)
+							setup = func(
+								events *journaltest.JournalStub[*eventstream.JournalRecord],
+								instances *journaltest.JournalStub[*JournalRecord],
+							) {
+							}
+
+							return stub, nil
+						},
+					},
 					EventAppender: &eventstream.EventStream{
-						Journal: eventsJournal,
+						Journal: eventJournal,
 						Logger:  zapx.NewTesting("eventstream-write"),
 					},
 					Logger: zapx.NewTesting("<handler-name>"),
@@ -151,13 +172,17 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 
 			Expect(needError).To(BeFalse(), "process should fail with the expected error at least once")
 
+			eventJournal, err := eventJournals.Open(ctx, "<eventstore>")
+			Expect(err).ShouldNot(HaveOccurred())
+			defer eventJournal.Close()
+
 			events := &eventstream.EventStream{
-				Journal: eventsJournal,
+				Journal: eventJournal,
 				Logger:  zapx.NewTesting("eventstream-read"),
 			}
 
 			var actual []*envelopespec.Envelope
-			err := events.Range(
+			err = events.Range(
 				ctx,
 				0,
 				func(
@@ -176,14 +201,21 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		Entry(
 			"no faults",
 			"", // no error expected
-			func() {},
+			func(
+				events *journaltest.JournalStub[*eventstream.JournalRecord],
+				instances *journaltest.JournalStub[*JournalRecord],
+			) {
+			},
 		),
 		Entry(
 			"revision fails before journal record is written",
 			"unable to record revision: <error>",
-			func() {
+			func(
+				events *journaltest.JournalStub[*eventstream.JournalRecord],
+				instances *journaltest.JournalStub[*JournalRecord],
+			) {
 				journaltest.FailOnceBeforeWrite(
-					instanceJournal,
+					instances,
 					func(r *JournalRecord) bool {
 						return r.GetRevision() != nil
 					},
@@ -193,9 +225,12 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		Entry(
 			"revision fails after journal record is written",
 			"unable to record revision: <error>",
-			func() {
+			func(
+				events *journaltest.JournalStub[*eventstream.JournalRecord],
+				instances *journaltest.JournalStub[*JournalRecord],
+			) {
 				journaltest.FailOnceAfterWrite(
-					instanceJournal,
+					instances,
 					func(r *JournalRecord) bool {
 						return r.GetRevision() != nil
 					},
@@ -205,9 +240,12 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		Entry(
 			"event stream append fails before journal record is written",
 			"unable to append event(s): <error>",
-			func() {
+			func(
+				events *journaltest.JournalStub[*eventstream.JournalRecord],
+				instances *journaltest.JournalStub[*JournalRecord],
+			) {
 				journaltest.FailOnceBeforeWrite(
-					eventsJournal,
+					events,
 					func(r *eventstream.JournalRecord) bool {
 						return r.GetAppend() != nil
 					},
@@ -217,9 +255,12 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		Entry(
 			"event stream append fails after journal record is written",
 			"unable to append event(s): <error>",
-			func() {
+			func(
+				events *journaltest.JournalStub[*eventstream.JournalRecord],
+				instances *journaltest.JournalStub[*JournalRecord],
+			) {
 				journaltest.FailOnceAfterWrite(
-					eventsJournal,
+					events,
 					func(r *eventstream.JournalRecord) bool {
 						return r.GetAppend() != nil
 					},
