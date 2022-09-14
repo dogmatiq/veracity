@@ -45,7 +45,7 @@ func (j *JournalStub[R]) Write(ctx context.Context, ver uint64, rec R) (ok bool,
 		}
 	}
 
-	return false, nil
+	return true, nil
 }
 
 // FailOnceBeforeWrite configures s to return an error on the first call to

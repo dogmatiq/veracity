@@ -16,9 +16,9 @@ import (
 
 var _ = Describe("type Queue (idempotence)", func() {
 	var (
-		ctx     context.Context
-		packer  *envelope.Packer
-		journal *journaltest.JournalStub[*JournalRecord]
+		ctx    context.Context
+		packer *envelope.Packer
+		opener *memory.JournalOpener[*JournalRecord]
 	)
 
 	BeforeEach(func() {
@@ -27,17 +27,15 @@ var _ = Describe("type Queue (idempotence)", func() {
 		DeferCleanup(cancel)
 
 		packer = envelope.NewTestPacker()
-
-		journal = &journaltest.JournalStub[*JournalRecord]{
-			Journal: memory.NewJournal[*JournalRecord](),
-		}
+		opener = &memory.JournalOpener[*JournalRecord]{}
 	})
 
 	DescribeTable(
 		"it eventually removes each message",
-		func(expectErr string, setup func()) {
-			setup()
-
+		func(
+			expectErr string,
+			setup func(*journaltest.JournalStub[*JournalRecord]),
+		) {
 			messages := []Message{
 				{
 					Envelope: packer.Pack(MessageM1),
@@ -48,9 +46,24 @@ var _ = Describe("type Queue (idempotence)", func() {
 			}
 			enqueued := false
 
-			tick := func(ctx context.Context) error {
+			tick := func(
+				ctx context.Context,
+				setup func(*journaltest.JournalStub[*JournalRecord]),
+			) error {
+				j, err := opener.Open(ctx, "<queue>")
+				if err != nil {
+					return err
+				}
+				defer j.Close()
+
+				stub := &journaltest.JournalStub[*JournalRecord]{
+					Journal: j,
+				}
+
+				setup(stub)
+
 				queue := &Queue{
-					Journal: journal,
+					Journal: stub,
 					Logger:  zapx.NewTesting("queue-write"),
 				}
 
@@ -83,7 +96,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			needError := expectErr != ""
 
 			for remaining > 0 {
-				err := tick(ctx)
+				err := tick(ctx, setup)
 				if err == nil {
 					remaining--
 					continue
@@ -91,12 +104,17 @@ var _ = Describe("type Queue (idempotence)", func() {
 
 				Expect(err).To(MatchError(expectErr))
 				needError = false
+				setup = func(j *journaltest.JournalStub[*JournalRecord]) {}
 			}
 
 			Expect(needError).To(BeFalse(), "process should fail with the expected error at least once")
 
+			j, err := opener.Open(ctx, "<queue>")
+			Expect(err).ShouldNot(HaveOccurred())
+			defer j.Close()
+
 			queue := &Queue{
-				Journal: journal,
+				Journal: j,
 				Logger:  zapx.NewTesting("queue-read"),
 			}
 			_, ok, err := queue.Acquire(ctx)
@@ -106,14 +124,14 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"no faults",
 			"", // no error expected
-			func() {},
+			func(stub *journaltest.JournalStub[*JournalRecord]) {},
 		),
 		Entry(
 			"enqueue fails before journal record is written",
 			"unable to enqueue message(s): <error>",
-			func() {
+			func(stub *journaltest.JournalStub[*JournalRecord]) {
 				journaltest.FailOnceBeforeWrite(
-					journal,
+					stub,
 					func(r *JournalRecord) bool {
 						return r.GetEnqueue() != nil
 					},
@@ -123,9 +141,9 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"enqueue fails after journal record is written",
 			"unable to enqueue message(s): <error>",
-			func() {
+			func(stub *journaltest.JournalStub[*JournalRecord]) {
 				journaltest.FailOnceAfterWrite(
-					journal,
+					stub,
 					func(r *JournalRecord) bool {
 						return r.GetEnqueue() != nil
 					},
@@ -135,9 +153,9 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"acquire fails before journal record is written",
 			"unable to acquire message: <error>",
-			func() {
+			func(stub *journaltest.JournalStub[*JournalRecord]) {
 				journaltest.FailOnceBeforeWrite(
-					journal,
+					stub,
 					func(r *JournalRecord) bool {
 						return r.GetAcquire() != nil
 					},
@@ -147,9 +165,9 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"acquire fails after journal record is written",
 			"unable to acquire message: <error>",
-			func() {
+			func(stub *journaltest.JournalStub[*JournalRecord]) {
 				journaltest.FailOnceAfterWrite(
-					journal,
+					stub,
 					func(r *JournalRecord) bool {
 						return r.GetAcquire() != nil
 					},
@@ -159,9 +177,9 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"release fails before journal record is written",
 			"unable to release message: <error>",
-			func() {
+			func(stub *journaltest.JournalStub[*JournalRecord]) {
 				journaltest.FailOnceBeforeWrite(
-					journal,
+					stub,
 					func(r *JournalRecord) bool {
 						return r.GetRelease() != nil
 					},
@@ -171,9 +189,9 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"release fails after journal record is written",
 			"unable to release message: <error>",
-			func() {
+			func(stub *journaltest.JournalStub[*JournalRecord]) {
 				journaltest.FailOnceAfterWrite(
-					journal,
+					stub,
 					func(r *JournalRecord) bool {
 						return r.GetRelease() != nil
 					},
@@ -183,9 +201,9 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"remove fails before journal record is written",
 			"unable to remove message: <error>",
-			func() {
+			func(stub *journaltest.JournalStub[*JournalRecord]) {
 				journaltest.FailOnceBeforeWrite(
-					journal,
+					stub,
 					func(r *JournalRecord) bool {
 						return r.GetRemove() != nil
 					},
@@ -195,9 +213,9 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"remove fails after journal record is written",
 			"unable to remove message: <error>",
-			func() {
+			func(stub *journaltest.JournalStub[*JournalRecord]) {
 				journaltest.FailOnceAfterWrite(
-					journal,
+					stub,
 					func(r *JournalRecord) bool {
 						return r.GetRemove() != nil
 					},
