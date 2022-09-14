@@ -32,14 +32,14 @@ func (o *JournalOpener[R]) Open(ctx context.Context, path ...string) (journal.Jo
 		)
 	}
 
-	return &binaryJournal[R]{
+	return &journalHandle[R]{
 		state: state.(*journalState[R]),
 	}, ctx.Err()
 }
 
 // NewJournal returns a new standalone journal.
 func NewJournal[R any]() journal.Journal[R] {
-	return &binaryJournal[R]{
+	return &journalHandle[R]{
 		state: &journalState[R]{},
 	}
 }
@@ -53,13 +53,13 @@ type journalState[R any] struct {
 	Records []R
 }
 
-// binaryJournal is an implementation of journal.Journal[R] that accesses
+// journalHandle is an implementation of journal.Journal[R] that accesses
 // journal state.
-type binaryJournal[R any] struct {
+type journalHandle[R any] struct {
 	state *journalState[R]
 }
 
-func (h *binaryJournal[R]) Read(ctx context.Context, ver uint64) (R, bool, error) {
+func (h *journalHandle[R]) Read(ctx context.Context, ver uint64) (R, bool, error) {
 	if h.state == nil {
 		panic("journal is closed")
 	}
@@ -75,7 +75,7 @@ func (h *binaryJournal[R]) Read(ctx context.Context, ver uint64) (R, bool, error
 	return h.state.Records[ver-h.state.Begin], true, ctx.Err()
 }
 
-func (h *binaryJournal[R]) ReadOldest(ctx context.Context) (uint64, R, bool, error) {
+func (h *journalHandle[R]) ReadOldest(ctx context.Context) (uint64, R, bool, error) {
 	if h.state == nil {
 		panic("journal is closed")
 	}
@@ -91,7 +91,7 @@ func (h *binaryJournal[R]) ReadOldest(ctx context.Context) (uint64, R, bool, err
 	return h.state.Begin, h.state.Records[0], true, ctx.Err()
 }
 
-func (h *binaryJournal[R]) Write(ctx context.Context, ver uint64, rec R) (bool, error) {
+func (h *journalHandle[R]) Write(ctx context.Context, ver uint64, rec R) (bool, error) {
 	if h.state == nil {
 		panic("journal is closed")
 	}
@@ -111,7 +111,7 @@ func (h *binaryJournal[R]) Write(ctx context.Context, ver uint64, rec R) (bool, 
 	}
 }
 
-func (h *binaryJournal[R]) Truncate(ctx context.Context, ver uint64) error {
+func (h *journalHandle[R]) Truncate(ctx context.Context, ver uint64) error {
 	if h.state == nil {
 		panic("journal is closed")
 	}
@@ -131,7 +131,7 @@ func (h *binaryJournal[R]) Truncate(ctx context.Context, ver uint64) error {
 	return ctx.Err()
 }
 
-func (h *binaryJournal[R]) Close() error {
+func (h *journalHandle[R]) Close() error {
 	if h.state == nil {
 		return errors.New("journal is already closed")
 	}
