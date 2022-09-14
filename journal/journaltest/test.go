@@ -3,6 +3,7 @@ package journaltest
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -34,9 +35,14 @@ func RunTests(
 
 			ctx, j := setup(t, new)
 
-			expect := [][]byte{
-				[]byte("<record-1>"),
-				[]byte("<record-2>"),
+			var expect [][]byte
+
+			// Ensure we test with a version that becomes 2 digits long.
+			for i := 0; i < 15; i++ {
+				expect = append(
+					expect,
+					[]byte(fmt.Sprintf("<record-%d>", i)),
+				)
 			}
 
 			for i, r := range expect {
@@ -89,9 +95,7 @@ func RunTests(
 
 			ctx, j := setup(t, new)
 
-			expect := []byte("<original>")
-
-			ok, err := j.Write(ctx, 0, expect)
+			ok, err := j.Write(ctx, 0, []byte("<prior>"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -99,7 +103,16 @@ func RunTests(
 				t.Fatal("unexpected optimistic concurrency conflict")
 			}
 
-			ok, err = j.Write(ctx, 0, []byte("<modified>"))
+			expect := []byte("<original>")
+			ok, err = j.Write(ctx, 1, expect)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok {
+				t.Fatal("unexpected optimistic concurrency conflict")
+			}
+
+			ok, err = j.Write(ctx, 1, []byte("<modified>"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -107,7 +120,7 @@ func RunTests(
 				t.Fatal("expected an optimistic concurrency conflict")
 			}
 
-			actual, ok, err := j.Read(ctx, 0)
+			actual, ok, err := j.Read(ctx, 1)
 			if err != nil {
 				t.Fatal(err)
 			}
