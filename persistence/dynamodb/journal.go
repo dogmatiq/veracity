@@ -76,13 +76,15 @@ func (o *JournalOpener) Open(ctx context.Context, path ...string) (journal.Binar
 			journalKeyAttr:     &j.Key,
 			journalVersionAttr: &j.Version,
 		},
-		ProjectionExpression: aws.String(journalRecordAttr),
+		ProjectionExpression: aws.String(`#R`),
+		ExpressionAttributeNames: map[string]*string{
+			"#R": aws.String(journalRecordAttr),
+		},
 	}
 
 	j.QueryRequest = dynamodb.QueryInput{
 		TableName:              aws.String(o.Table),
 		KeyConditionExpression: aws.String(`#K = :K`),
-		ConsistentRead:         aws.Bool(true),
 		ExpressionAttributeNames: map[string]*string{
 			"#K": aws.String(journalKeyAttr),
 			"#V": aws.String(journalVersionAttr),
@@ -184,7 +186,7 @@ func (j *binaryJournal) Truncate(ctx context.Context, ver uint64) error {
 	}
 
 	for oldest < ver {
-		j.Version.N = aws.String(strconv.FormatUint(ver, 10))
+		j.Version.N = aws.String(strconv.FormatUint(oldest, 10))
 
 		if _, err := awsx.Do(
 			ctx,
@@ -303,9 +305,9 @@ func CreateJournalTable(
 }
 
 const (
-	journalKeyAttr     = "K"
-	journalVersionAttr = "V"
-	journalRecordAttr  = "R"
+	journalKeyAttr     = "Key"
+	journalVersionAttr = "Version"
+	journalRecordAttr  = "Record"
 )
 
 func keyFromJournalPath(path []string) string {
