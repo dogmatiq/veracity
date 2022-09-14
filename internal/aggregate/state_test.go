@@ -21,13 +21,13 @@ import (
 
 var _ = Describe("type CommandExecutor (aggregate root state)", func() {
 	var (
-		ctx           context.Context
-		cancel        context.CancelFunc
-		packer        *envelope.Packer
-		handler       *AggregateMessageHandler
-		journalOpener *memory.JournalOpener[*JournalRecord]
-		events        *eventstream.EventStream
-		executor      *CommandExecutor
+		ctx      context.Context
+		cancel   context.CancelFunc
+		packer   *envelope.Packer
+		handler  *AggregateMessageHandler
+		opener   *memory.JournalOpener[*JournalRecord]
+		events   *eventstream.EventStream
+		executor *CommandExecutor
 	)
 
 	BeforeEach(func() {
@@ -36,10 +36,10 @@ var _ = Describe("type CommandExecutor (aggregate root state)", func() {
 
 		packer = envelope.NewTestPacker()
 		handler = &AggregateMessageHandler{}
-		journalOpener = &memory.JournalOpener[*JournalRecord]{}
+		opener = &memory.JournalOpener[*JournalRecord]{}
 
 		events = &eventstream.EventStream{
-			Journal: &memory.Journal[*eventstream.JournalRecord]{},
+			Journal: memory.NewJournal[*eventstream.JournalRecord](),
 			Logger:  zapx.NewTesting("eventstream"),
 		}
 
@@ -50,7 +50,7 @@ var _ = Describe("type CommandExecutor (aggregate root state)", func() {
 			},
 			Handler:       handler,
 			Packer:        packer,
-			JournalOpener: journalOpener,
+			JournalOpener: opener,
 			EventAppender: events,
 			Logger:        zapx.NewTesting("<handler-name>"),
 		}
@@ -99,7 +99,7 @@ var _ = Describe("type CommandExecutor (aggregate root state)", func() {
 				},
 				Handler:       handler,
 				Packer:        packer,
-				JournalOpener: journalOpener,
+				JournalOpener: opener,
 				EventAppender: events,
 				Logger:        zapx.NewTesting("<handler-name>"),
 			}

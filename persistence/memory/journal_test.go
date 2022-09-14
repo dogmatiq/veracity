@@ -11,8 +11,8 @@ import (
 func TestJournal(t *testing.T) {
 	journaltest.RunTests(
 		t,
-		func(t *testing.T) journal.BinaryJournal {
-			return &Journal[[]byte]{}
+		func(t *testing.T) journal.BinaryOpener {
+			return &JournalOpener[[]byte]{}
 		},
 	)
 }

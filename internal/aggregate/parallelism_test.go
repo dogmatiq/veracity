@@ -28,8 +28,8 @@ var _ = Describe("type CommandExecutor (parallelism)", func() {
 		defer cancel()
 
 		packer := envelope.NewTestPacker()
-		journalOpener := &memory.JournalOpener[*JournalRecord]{}
-		eventJournal := &memory.Journal[*eventstream.JournalRecord]{}
+		opener := &memory.JournalOpener[*JournalRecord]{}
+		eventJournal := memory.NewJournal[*eventstream.JournalRecord]()
 
 		var (
 			parallelism = runtime.NumCPU()
@@ -88,7 +88,7 @@ var _ = Describe("type CommandExecutor (parallelism)", func() {
 					},
 				},
 				Packer:        packer,
-				JournalOpener: journalOpener,
+				JournalOpener: opener,
 				EventAppender: &eventstream.EventStream{
 					Journal: eventJournal,
 					Logger:  zap.NewNop(),

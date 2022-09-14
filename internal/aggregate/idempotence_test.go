@@ -19,6 +19,7 @@ import (
 	"github.com/dogmatiq/veracity/persistence/memory"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -39,20 +40,27 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		packer = envelope.NewTestPacker()
 
 		instanceJournal = &journaltest.JournalStub[*JournalRecord]{
-			Journal: &memory.Journal[*JournalRecord]{},
+			Journal: memory.NewJournal[*JournalRecord](),
 		}
 
 		eventsJournal = &journaltest.JournalStub[*eventstream.JournalRecord]{
-			Journal: &memory.Journal[*eventstream.JournalRecord]{},
+			Journal: memory.NewJournal[*eventstream.JournalRecord](),
 		}
 
 		journalOpener = &journaltest.OpenerStub[*JournalRecord]{
 			OpenFunc: func(
 				ctx context.Context,
-				key string,
+				path ...string,
 			) (journal.Journal[*JournalRecord], error) {
-				if key != "aggregate/<handler-key>/<instance-id>" {
-					return nil, fmt.Errorf("unexpected journal key: %s", key)
+				if !slices.Equal(
+					path,
+					[]string{
+						"aggregate",
+						"<handler-key>",
+						"<instance-id>",
+					},
+				) {
+					return nil, fmt.Errorf("unexpected journal path: %s", path)
 				}
 
 				return journaltest.NopCloser[*JournalRecord](instanceJournal), nil

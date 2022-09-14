@@ -3,24 +3,23 @@ package dynamodb
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/dogmatiq/veracity/journal"
 	"github.com/dogmatiq/veracity/persistence/internal/awsx"
 )
 
-// Journal is an implementation of the journal.Journal interface that stores
-// records in a DynamoDB table.
-type Journal struct {
+// JournalOpener is an implementation of journal.BinaryOpener that opens
+// journals that store records in a DynamoDB table.
+type JournalOpener struct {
 	// DB is the DynamoDB client to use.
 	DB *dynamodb.DynamoDB
 
 	// Table is the table name used for storage of journal records.
 	Table string
-
-	// Key uniquely identifies the journal.
-	Key string
 
 	// DecorateGetItem is an optional function that is called before each
 	// DynamoDB "GetItem" request.
@@ -37,95 +36,99 @@ type Journal struct {
 	DecoratePutItem func(*dynamodb.PutItemInput) []request.Option
 }
 
-// Read returns the record that was written to produce the version v of the
-// journal.
+// Open returns the journal at the given path.
 //
-// If the version does not exist ok is false.
-func (j *Journal) Read(ctx context.Context, v uint64) (r []byte, ok bool, err error) {
+// The path uniquely identifies the journal. It must not be empty. Each element
+// must be a non-empty UTF-8 string consisting solely of printable Unicode
+// characters, excluding whitespace. A printable character is any character from
+// the Letter, Mark, Number, Punctuation or Symbol categories.
+func (o *JournalOpener) Open(ctx context.Context, path ...string) (journal.BinaryJournal, error) {
+	key := keyFromJournalPath(path)
+
+	j := &binaryJournal{
+		DB:              o.DB,
+		DecorateGetItem: o.DecorateGetItem,
+		DecoratePutItem: o.DecoratePutItem,
+
+		Key: dynamodb.AttributeValue{S: &key},
+	}
+
+	j.ReadRequest = dynamodb.GetItemInput{
+		TableName: aws.String(o.Table),
+		Key: map[string]*dynamodb.AttributeValue{
+			journalKeyAttr:     &j.Key,
+			journalVersionAttr: &j.Version,
+		},
+		ProjectionExpression: aws.String(journalRecordAttr),
+	}
+
+	j.WriteRequest = dynamodb.PutItemInput{
+		TableName:           aws.String(o.Table),
+		ConditionExpression: aws.String(`attribute_not_exists(#K)`),
+		ExpressionAttributeNames: map[string]*string{
+			"#K": aws.String(journalKeyAttr),
+		},
+		Item: map[string]*dynamodb.AttributeValue{
+			journalKeyAttr:     &j.Key,
+			journalVersionAttr: &j.Version,
+			journalRecordAttr:  &j.Record,
+		},
+	}
+
+	return j, nil
+}
+
+// binaryJournal is an implementation of journal.BinaryJournal that stores
+// records in a DynamoDB table.
+type binaryJournal struct {
+	DB              *dynamodb.DynamoDB
+	DecorateGetItem func(*dynamodb.GetItemInput) []request.Option
+	DecoratePutItem func(*dynamodb.PutItemInput) []request.Option
+
+	Key          dynamodb.AttributeValue
+	Version      dynamodb.AttributeValue
+	Record       dynamodb.AttributeValue
+	ReadRequest  dynamodb.GetItemInput
+	WriteRequest dynamodb.PutItemInput
+}
+
+func (j *binaryJournal) Read(ctx context.Context, ver uint64) (rec []byte, ok bool, err error) {
+	j.Version.N = aws.String(strconv.FormatUint(ver, 10))
+
 	out, err := awsx.Do(
 		ctx,
 		j.DB.GetItemWithContext,
 		j.DecorateGetItem,
-		&dynamodb.GetItemInput{
-			TableName: aws.String(j.Table),
-			Key: map[string]*dynamodb.AttributeValue{
-				"K": marshalString(j.Key),
-				"V": marshalVersion(v),
-			},
-			AttributesToGet: []*string{
-				aws.String("R"),
-			},
-		},
+		&j.ReadRequest,
 	)
 	if out.Item == nil || err != nil {
 		return nil, false, err
 	}
 
-	return unmarshalRecord(out.Item["R"]), true, nil
+	return out.Item[journalRecordAttr].B, true, nil
 }
 
-// Write appends a new record to the journal.
-//
-// v must be the current version of the journal.
-//
-// If v < current then the record is not persisted; ok is false indicating an
-// optimistic concurrency conflict.
-//
-// If v > current then the behavior is undefined.
-func (j *Journal) Write(ctx context.Context, v uint64, r []byte) (ok bool, err error) {
-	if _, err = awsx.Do(
+func (j *binaryJournal) Write(ctx context.Context, ver uint64, rec []byte) (ok bool, err error) {
+	j.Version.N = aws.String(strconv.FormatUint(ver, 10))
+	j.Record.B = rec
+
+	_, err = awsx.Do(
 		ctx,
 		j.DB.PutItemWithContext,
 		j.DecoratePutItem,
-		&dynamodb.PutItemInput{
-			TableName: aws.String(j.Table),
-			ConditionExpression: aws.String(
-				`attribute_not_exists(K)`,
-			),
-			Item: map[string]*dynamodb.AttributeValue{
-				"K": marshalString(j.Key),
-				"V": marshalVersion(v),
-				"R": marshalRecord(r),
-			},
-		},
-	); err != nil {
-		if awsx.IsErrorCode(err, dynamodb.ErrCodeConditionalCheckFailedException) {
-			return false, nil
-		}
+		&j.WriteRequest,
+	)
 
-		return false, err
+	if awsx.IsErrorCode(err, dynamodb.ErrCodeConditionalCheckFailedException) {
+		return false, nil
 	}
 
-	return true, nil
+	return true, err
 }
 
 // Close closes the journal.
-func (j *Journal) Close() error {
+func (j *binaryJournal) Close() error {
 	return nil
-}
-
-// marshalVersion marshals a version to a DynamoDB number.
-func marshalVersion(v uint64) *dynamodb.AttributeValue {
-	return &dynamodb.AttributeValue{
-		N: aws.String(
-			strconv.FormatUint(v, 10),
-		),
-	}
-}
-
-// marshalString marshals a string to a DynamoDB string.
-func marshalString(v string) *dynamodb.AttributeValue {
-	return &dynamodb.AttributeValue{S: &v}
-}
-
-// marshalRecord marshals a record to a DynamoDB binary value.
-func marshalRecord(r []byte) *dynamodb.AttributeValue {
-	return &dynamodb.AttributeValue{B: r}
-}
-
-// unmarshalRecord unmarshals a record from a DynamoDB binary value.
-func unmarshalRecord(v *dynamodb.AttributeValue) []byte {
-	return v.B
 }
 
 // CreateJournalTable creates a DynamoDB for storing journal records.
@@ -149,21 +152,21 @@ func CreateJournalTable(
 			TableName: aws.String(table),
 			AttributeDefinitions: []*dynamodb.AttributeDefinition{
 				{
-					AttributeName: aws.String("K"),
+					AttributeName: aws.String(journalKeyAttr),
 					AttributeType: aws.String("S"),
 				},
 				{
-					AttributeName: aws.String("V"),
+					AttributeName: aws.String(journalVersionAttr),
 					AttributeType: aws.String("N"),
 				},
 			},
 			KeySchema: []*dynamodb.KeySchemaElement{
 				{
-					AttributeName: aws.String("K"),
+					AttributeName: aws.String(journalKeyAttr),
 					KeyType:       aws.String("HASH"),
 				},
 				{
-					AttributeName: aws.String("V"),
+					AttributeName: aws.String(journalVersionAttr),
 					KeyType:       aws.String("RANGE"),
 				},
 			},
@@ -171,5 +174,43 @@ func CreateJournalTable(
 		},
 	)
 
+	if awsx.IsErrorCode(err, dynamodb.ErrCodeResourceInUseException) {
+		return nil
+	}
+
 	return err
+}
+
+const (
+	journalKeyAttr     = "K"
+	journalVersionAttr = "V"
+	journalRecordAttr  = "R"
+)
+
+func keyFromJournalPath(path []string) string {
+	if len(path) == 0 {
+		panic("path must not be empty")
+	}
+
+	var w strings.Builder
+
+	for _, elem := range path {
+		if len(elem) == 0 {
+			panic("path element must not be empty")
+		}
+
+		if w.Len() > 0 {
+			w.WriteByte('/')
+		}
+
+		for _, r := range elem {
+			if r == '/' || r == '\\' {
+				w.WriteByte('\\')
+			}
+
+			w.WriteRune(r)
+		}
+	}
+
+	return w.String()
 }

@@ -7,21 +7,19 @@ import (
 	"github.com/dogmatiq/veracity/journal"
 )
 
-// OpenerStub is a test implementation of the Opener[R] interface.
 type OpenerStub[R any] struct {
 	journal.Opener[R]
 
-	OpenFunc func(ctx context.Context, key string) (journal.Journal[R], error)
+	OpenFunc func(ctx context.Context, path ...string) (journal.Journal[R], error)
 }
 
-// Open opens the journal identified by the given key.
-func (o *OpenerStub[R]) Open(ctx context.Context, key string) (journal.Journal[R], error) {
+func (o *OpenerStub[R]) Open(ctx context.Context, path ...string) (journal.Journal[R], error) {
 	if o.OpenFunc != nil {
-		return o.OpenFunc(ctx, key)
+		return o.OpenFunc(ctx, path...)
 	}
 
 	if o.Opener != nil {
-		return o.Opener.Open(ctx, key)
+		return o.Opener.Open(ctx, path...)
 	}
 
 	return nil, errors.New("<not implemented>")

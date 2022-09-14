@@ -12,30 +12,8 @@ import (
 type JournalStub[R any] struct {
 	journal.Journal[R]
 
-	ReadFunc func(ctx context.Context, v uint64) (R, bool, error)
-
-	WriteFunc   func(ctx context.Context, v uint64, r R) (bool, error)
 	beforeWrite func(ctx context.Context, v uint64, r R) (bool, error)
 	afterWrite  func(ctx context.Context, v uint64, r R, ok bool, err error) (bool, error)
-
-	CloseFunc func() error
-}
-
-// Read returns the record that was written to produce the version v of the
-// journal.
-//
-// If the version does not exist ok is false.
-func (j *JournalStub[R]) Read(ctx context.Context, v uint64) (R, bool, error) {
-	if j.ReadFunc != nil {
-		return j.ReadFunc(ctx, v)
-	}
-
-	if j.Journal != nil {
-		return j.Journal.Read(ctx, v)
-	}
-
-	var zero R
-	return zero, false, nil
 }
 
 // Write appends a new record to the journal.
@@ -60,28 +38,11 @@ func (j *JournalStub[R]) Write(ctx context.Context, v uint64, r R) (ok bool, err
 		}
 	}()
 
-	if j.WriteFunc != nil {
-		return j.WriteFunc(ctx, v, r)
-	}
-
 	if j.Journal != nil {
 		return j.Journal.Write(ctx, v, r)
 	}
 
 	return false, nil
-}
-
-// Close closes the journal.
-func (j *JournalStub[R]) Close() error {
-	if j.CloseFunc != nil {
-		return j.CloseFunc()
-	}
-
-	if j.Journal != nil {
-		return j.Journal.Close()
-	}
-
-	return nil
 }
 
 // FailOnceBeforeWrite configures s to return an error on the first call to

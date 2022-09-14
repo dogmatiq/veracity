@@ -31,7 +31,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 		packer = envelope.NewTestPacker()
 
 		journal = &journaltest.JournalStub[*JournalRecord]{
-			Journal: &memory.Journal[*JournalRecord]{},
+			Journal: memory.NewJournal[*JournalRecord](),
 		}
 	})
 

@@ -23,11 +23,7 @@ var _ = Describe("type EventStream (parallelism)", func() {
 		defer cancel()
 
 		packer := envelope.NewTestPacker()
-
-		stream := &EventStream{
-			Journal: &memory.Journal[*JournalRecord]{},
-			Logger:  zapx.NewTesting("eventstream"),
-		}
+		opener := &memory.JournalOpener[*JournalRecord]{}
 
 		var (
 			parallelism = runtime.NumCPU()
@@ -42,8 +38,14 @@ var _ = Describe("type EventStream (parallelism)", func() {
 		}
 
 		tick := func(ctx context.Context) error {
+			j, err := opener.Open(ctx, "<eventstream>")
+			if err != nil {
+				return err
+			}
+			defer j.Close()
+
 			s := &EventStream{
-				Journal: stream.Journal,
+				Journal: j,
 				Logger:  zap.NewNop(),
 			}
 
@@ -71,6 +73,15 @@ var _ = Describe("type EventStream (parallelism)", func() {
 
 		err := g.Wait()
 		Expect(err).ShouldNot(HaveOccurred())
+
+		j, err := opener.Open(ctx, "<eventstream>")
+		Expect(err).ShouldNot(HaveOccurred())
+		defer j.Close()
+
+		stream := &EventStream{
+			Journal: j,
+			Logger:  zapx.NewTesting("eventstream"),
+		}
 
 		actual := map[string]*envelopespec.Envelope{}
 		err = stream.Range(

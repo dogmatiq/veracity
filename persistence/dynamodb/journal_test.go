@@ -13,7 +13,6 @@ import (
 	"github.com/dogmatiq/veracity/journal/journaltest"
 	. "github.com/dogmatiq/veracity/persistence/dynamodb"
 	"github.com/dogmatiq/veracity/persistence/internal/awsx"
-	"github.com/google/uuid"
 )
 
 func TestJournal(t *testing.T) {
@@ -38,9 +37,7 @@ func TestJournal(t *testing.T) {
 	table := "journal"
 
 	if err := CreateJournalTable(context.Background(), db, table); err != nil {
-		if !awsx.IsErrorCode(err, dynamodb.ErrCodeResourceInUseException) {
-			t.Fatal(err)
-		}
+		t.Fatal(err)
 	}
 
 	t.Cleanup(func() {
@@ -51,11 +48,10 @@ func TestJournal(t *testing.T) {
 
 	journaltest.RunTests(
 		t,
-		func(t *testing.T) journal.BinaryJournal {
-			return &Journal{
+		func(t *testing.T) journal.BinaryOpener {
+			return &JournalOpener{
 				DB:    db,
 				Table: table,
-				Key:   uuid.NewString(),
 			}
 		},
 	)

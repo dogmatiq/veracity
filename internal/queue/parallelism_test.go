@@ -11,8 +11,8 @@ import (
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	. "github.com/dogmatiq/veracity/internal/queue"
-	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/persistence/memory"
+	. "github.com/jmalloc/gomegax"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap"
@@ -25,11 +25,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 		defer cancel()
 
 		packer := envelope.NewTestPacker()
-
-		queue := &Queue{
-			Journal: &memory.Journal[*JournalRecord]{},
-			Logger:  zapx.NewTesting("queue"),
-		}
+		opener := &memory.JournalOpener[*JournalRecord]{}
 
 		var (
 			parallelism = runtime.NumCPU()
@@ -48,8 +44,14 @@ var _ = Describe("type Queue (parallelism)", func() {
 		}
 
 		tick := func(ctx context.Context) error {
+			j, err := opener.Open(ctx, "<queue>")
+			if err != nil {
+				return err
+			}
+			defer j.Close()
+
 			q := &Queue{
-				Journal: queue.Journal,
+				Journal: j,
 				Logger:  zap.NewNop(),
 			}
 
@@ -115,6 +117,6 @@ var _ = Describe("type Queue (parallelism)", func() {
 
 		err := g.Wait()
 		Expect(err).ShouldNot(HaveOccurred())
-		Expect(actual).To(Equal(expect))
+		Expect(actual).To(EqualX(expect))
 	})
 })

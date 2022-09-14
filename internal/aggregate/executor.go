@@ -199,8 +199,12 @@ func (e *CommandExecutor) runInstance(
 	)
 
 	err := func() error {
-		key := journalKey(e.HandlerIdentity.Key, id)
-		j, err := e.JournalOpener.Open(ctx, key)
+		j, err := e.JournalOpener.Open(
+			ctx,
+			"aggregate",
+			e.HandlerIdentity.Key,
+			id,
+		)
 		if err != nil {
 			return err
 		}
