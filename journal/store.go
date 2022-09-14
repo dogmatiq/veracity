@@ -4,12 +4,15 @@ import (
 	"context"
 )
 
-// BinaryOpener is a journal opener that opens journals that contain opaque
-// binary records.
-type BinaryOpener = Opener[[]byte]
+// BinaryStore is a journal store that contains journals of opaque binary
+// records.
+type BinaryStore = Store[[]byte]
 
-// Opener is an interface for accessing journals.
-type Opener[R any] interface {
+// Store is a database of journals.
+//
+// Each journal in the store is identified by a path, represented as a slice of
+// string elements.
+type Store[R any] interface {
 	// Open returns the journal at the given path.
 	//
 	// The path uniquely identifies the journal. It must not be empty. Each

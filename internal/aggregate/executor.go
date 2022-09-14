@@ -35,8 +35,8 @@ type CommandExecutor struct {
 	// recorded by the handler.
 	Packer *envelope.Packer
 
-	// JournalOpener is used to open the journals for each aggregate instance.
-	JournalOpener journal.Opener[*JournalRecord]
+	// JournalStore is the store contain the aggregate instances' journals.
+	JournalStore journal.Store[*JournalRecord]
 
 	// EventAppender is used to append events to the global event stream.
 	EventAppender EventAppender
@@ -199,7 +199,7 @@ func (e *CommandExecutor) runInstance(
 	)
 
 	err := func() error {
-		j, err := e.JournalOpener.Open(
+		j, err := e.JournalStore.Open(
 			ctx,
 			"aggregate",
 			e.HandlerIdentity.Key,

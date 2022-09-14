@@ -28,7 +28,7 @@ var _ = Describe("type CommandExecutor (parallelism)", func() {
 		defer cancel()
 
 		packer := envelope.NewTestPacker()
-		opener := &memory.JournalOpener[*JournalRecord]{}
+		journals := &memory.JournalStore[*JournalRecord]{}
 		eventJournal := memory.NewJournal[*eventstream.JournalRecord]()
 
 		var (
@@ -87,8 +87,8 @@ var _ = Describe("type CommandExecutor (parallelism)", func() {
 						})
 					},
 				},
-				Packer:        packer,
-				JournalOpener: opener,
+				Packer:       packer,
+				JournalStore: journals,
 				EventAppender: &eventstream.EventStream{
 					Journal: eventJournal,
 					Logger:  zap.NewNop(),

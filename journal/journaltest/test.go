@@ -14,12 +14,12 @@ import (
 // RunTests runs tests that confirm a journal implementation behaves correctly.
 func RunTests(
 	t *testing.T,
-	opener func(t *testing.T) journal.BinaryOpener,
+	newStore func(t *testing.T) journal.BinaryStore,
 ) {
-	t.Run("type BinaryOpener", func(t *testing.T) {
+	t.Run("type BinaryStore", func(t *testing.T) {
 		t.Run("func Open()", func(t *testing.T) {
 			t.Run("does not perform naive path concatenation", func(t *testing.T) {
-				o := opener(t)
+				store := newStore(t)
 
 				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 				defer cancel()
@@ -34,7 +34,7 @@ func RunTests(
 				}
 
 				for i, path := range paths {
-					j, err := o.Open(ctx, path...)
+					j, err := store.Open(ctx, path...)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -71,15 +71,15 @@ func RunTests(
 				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 				defer cancel()
 
-				o := opener(t)
+				store := newStore(t)
 
-				j1, err := o.Open(ctx, "<journal>")
+				j1, err := store.Open(ctx, "<journal>")
 				if err != nil {
 					t.Fatal(err)
 				}
 				defer j1.Close()
 
-				j2, err := o.Open(ctx, "<journal>")
+				j2, err := store.Open(ctx, "<journal>")
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -118,7 +118,7 @@ func RunTests(
 			t.Run("it returns false if the version doesn't exist", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, opener)
+				ctx, j := setup(t, newStore)
 
 				_, ok, err := j.Read(ctx, 1)
 				if err != nil {
@@ -132,7 +132,7 @@ func RunTests(
 			t.Run("it returns the record if it exists", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, opener)
+				ctx, j := setup(t, newStore)
 
 				var expect [][]byte
 
@@ -178,7 +178,7 @@ func RunTests(
 			t.Run("it returns the record that produced version 0 if there has been no truncation", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, opener)
+				ctx, j := setup(t, newStore)
 
 				expect := []byte("<record>")
 				ok, err := j.Write(ctx, 0, expect)
@@ -213,7 +213,7 @@ func RunTests(
 			t.Run("it returns false if the journal is empty", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, opener)
+				ctx, j := setup(t, newStore)
 
 				_, _, ok, err := j.ReadOldest(ctx)
 				if err != nil {
@@ -227,7 +227,7 @@ func RunTests(
 			t.Run("it returns the first non-truncated record", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, opener)
+				ctx, j := setup(t, newStore)
 
 				records := [][]byte{
 					[]byte("<record-1>"),
@@ -280,7 +280,7 @@ func RunTests(
 			t.Run("it returns true if the version doesn't exist", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, opener)
+				ctx, j := setup(t, newStore)
 
 				ok, err := j.Write(ctx, 0, []byte("<record>"))
 				if err != nil {
@@ -294,7 +294,7 @@ func RunTests(
 			t.Run("it returns false if the version already exists", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, opener)
+				ctx, j := setup(t, newStore)
 
 				ok, err := j.Write(ctx, 0, []byte("<prior>"))
 				if err != nil {
@@ -343,14 +343,14 @@ func RunTests(
 
 func setup(
 	t *testing.T,
-	opener func(t *testing.T) journal.BinaryOpener,
+	newStore func(t *testing.T) journal.BinaryStore,
 ) (context.Context, journal.BinaryJournal) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	t.Cleanup(cancel)
 
-	o := opener(t)
+	store := newStore(t)
 
-	j, err := o.Open(ctx, uuid.NewString())
+	j, err := store.Open(ctx, uuid.NewString())
 	if err != nil {
 		t.Fatal(err)
 	}

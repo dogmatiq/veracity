@@ -25,7 +25,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 		defer cancel()
 
 		packer := envelope.NewTestPacker()
-		opener := &memory.JournalOpener[*JournalRecord]{}
+		journals := &memory.JournalStore[*JournalRecord]{}
 
 		var (
 			parallelism = runtime.NumCPU()
@@ -44,7 +44,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 		}
 
 		tick := func(ctx context.Context) error {
-			j, err := opener.Open(ctx, "<queue>")
+			j, err := journals.Open(ctx, "<queue>")
 			if err != nil {
 				return err
 			}

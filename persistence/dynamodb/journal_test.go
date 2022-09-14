@@ -52,8 +52,8 @@ func TestJournal(t *testing.T) {
 
 	journaltest.RunTests(
 		t,
-		func(t *testing.T) journal.BinaryOpener {
-			return &JournalOpener{
+		func(t *testing.T) journal.BinaryStore {
+			return &JournalStore{
 				DB:    db,
 				Table: table,
 			}

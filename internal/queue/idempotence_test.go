@@ -16,9 +16,9 @@ import (
 
 var _ = Describe("type Queue (idempotence)", func() {
 	var (
-		ctx    context.Context
-		packer *envelope.Packer
-		opener *memory.JournalOpener[*JournalRecord]
+		ctx      context.Context
+		packer   *envelope.Packer
+		journals *memory.JournalStore[*JournalRecord]
 	)
 
 	BeforeEach(func() {
@@ -27,7 +27,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 		DeferCleanup(cancel)
 
 		packer = envelope.NewTestPacker()
-		opener = &memory.JournalOpener[*JournalRecord]{}
+		journals = &memory.JournalStore[*JournalRecord]{}
 	})
 
 	DescribeTable(
@@ -50,7 +50,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 				ctx context.Context,
 				setup func(*journaltest.JournalStub[*JournalRecord]),
 			) error {
-				j, err := opener.Open(ctx, "<queue>")
+				j, err := journals.Open(ctx, "<queue>")
 				if err != nil {
 					return err
 				}
@@ -109,7 +109,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 
 			Expect(needError).To(BeFalse(), "process should fail with the expected error at least once")
 
-			j, err := opener.Open(ctx, "<queue>")
+			j, err := journals.Open(ctx, "<queue>")
 			Expect(err).ShouldNot(HaveOccurred())
 			defer j.Close()
 

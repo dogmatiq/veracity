@@ -9,9 +9,9 @@ import (
 	"github.com/dogmatiq/veracity/journal"
 )
 
-// JournalOpener is an implementation of journal.Opener[R] that opens in-memory
+// JournalStore is an implementation of journal.Store[R] that contains in-memory
 // journals.
-type JournalOpener[R any] struct {
+type JournalStore[R any] struct {
 	journals sync.Map // map[string]*journalState[R]
 }
 
@@ -21,12 +21,12 @@ type JournalOpener[R any] struct {
 // must be a non-empty UTF-8 string consisting solely of printable Unicode
 // characters, excluding whitespace. A printable character is any character from
 // the Letter, Mark, Number, Punctuation or Symbol categories.
-func (o *JournalOpener[R]) Open(ctx context.Context, path ...string) (journal.Journal[R], error) {
+func (s *JournalStore[R]) Open(ctx context.Context, path ...string) (journal.Journal[R], error) {
 	key := keyFromJournalPath(path)
-	state, ok := o.journals.Load(key)
+	state, ok := s.journals.Load(key)
 
 	if !ok {
-		state, _ = o.journals.LoadOrStore(
+		state, _ = s.journals.LoadOrStore(
 			key,
 			&journalState[R]{},
 		)

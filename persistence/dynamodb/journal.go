@@ -13,9 +13,9 @@ import (
 	"github.com/dogmatiq/veracity/persistence/internal/awsx"
 )
 
-// JournalOpener is an implementation of journal.BinaryOpener that opens
-// journals that store records in a DynamoDB table.
-type JournalOpener struct {
+// JournalStore is an implementation of journal.BinaryStore that contains
+// journals that persist records in a DynamoDB table.
+type JournalStore struct {
 	// DB is the DynamoDB client to use.
 	DB *dynamodb.DynamoDB
 
@@ -57,21 +57,21 @@ type JournalOpener struct {
 // must be a non-empty UTF-8 string consisting solely of printable Unicode
 // characters, excluding whitespace. A printable character is any character from
 // the Letter, Mark, Number, Punctuation or Symbol categories.
-func (o *JournalOpener) Open(ctx context.Context, path ...string) (journal.BinaryJournal, error) {
+func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.BinaryJournal, error) {
 	key := keyFromJournalPath(path)
 
 	j := &binaryJournal{
-		DB:                 o.DB,
-		DecorateGetItem:    o.DecorateGetItem,
-		DecorateQuery:      o.DecorateQuery,
-		DecoratePutItem:    o.DecoratePutItem,
-		DecorateDeleteItem: o.DecorateDeleteItem,
+		DB:                 s.DB,
+		DecorateGetItem:    s.DecorateGetItem,
+		DecorateQuery:      s.DecorateQuery,
+		DecoratePutItem:    s.DecoratePutItem,
+		DecorateDeleteItem: s.DecorateDeleteItem,
 
 		Key: dynamodb.AttributeValue{S: &key},
 	}
 
 	j.GetRequest = dynamodb.GetItemInput{
-		TableName: aws.String(o.Table),
+		TableName: aws.String(s.Table),
 		Key: map[string]*dynamodb.AttributeValue{
 			journalKeyAttr:     &j.Key,
 			journalVersionAttr: &j.Version,
@@ -83,7 +83,7 @@ func (o *JournalOpener) Open(ctx context.Context, path ...string) (journal.Binar
 	}
 
 	j.QueryRequest = dynamodb.QueryInput{
-		TableName:              aws.String(o.Table),
+		TableName:              aws.String(s.Table),
 		KeyConditionExpression: aws.String(`#K = :K`),
 		ExpressionAttributeNames: map[string]*string{
 			"#K": aws.String(journalKeyAttr),
@@ -98,7 +98,7 @@ func (o *JournalOpener) Open(ctx context.Context, path ...string) (journal.Binar
 	}
 
 	j.PutRequest = dynamodb.PutItemInput{
-		TableName:           aws.String(o.Table),
+		TableName:           aws.String(s.Table),
 		ConditionExpression: aws.String(`attribute_not_exists(#K)`),
 		ExpressionAttributeNames: map[string]*string{
 			"#K": aws.String(journalKeyAttr),
@@ -111,7 +111,7 @@ func (o *JournalOpener) Open(ctx context.Context, path ...string) (journal.Binar
 	}
 
 	j.DeleteRequest = dynamodb.DeleteItemInput{
-		TableName: aws.String(o.Table),
+		TableName: aws.String(s.Table),
 		Key: map[string]*dynamodb.AttributeValue{
 			journalKeyAttr:     &j.Key,
 			journalVersionAttr: &j.Version,

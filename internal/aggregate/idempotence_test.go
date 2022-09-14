@@ -29,7 +29,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		packer          *envelope.Packer
 		instanceJournal *journaltest.JournalStub[*JournalRecord]
 		eventsJournal   *journaltest.JournalStub[*eventstream.JournalRecord]
-		journalOpener   journal.Opener[*JournalRecord]
+		journals        journal.Store[*JournalRecord]
 	)
 
 	BeforeEach(func() {
@@ -47,7 +47,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			Journal: memory.NewJournal[*eventstream.JournalRecord](),
 		}
 
-		journalOpener = &journaltest.OpenerStub[*JournalRecord]{
+		journals = &journaltest.StoreStub[*JournalRecord]{
 			OpenFunc: func(
 				ctx context.Context,
 				path ...string,
@@ -90,8 +90,8 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 							s.RecordEvent(MessageE1)
 						},
 					},
-					Packer:        packer,
-					JournalOpener: journalOpener,
+					Packer:       packer,
+					JournalStore: journals,
 					EventAppender: &eventstream.EventStream{
 						Journal: eventsJournal,
 						Logger:  zapx.NewTesting("eventstream-write"),
