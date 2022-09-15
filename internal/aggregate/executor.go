@@ -36,7 +36,7 @@ type CommandExecutor struct {
 	Packer *envelope.Packer
 
 	// JournalStore is the store contain the aggregate instances' journals.
-	JournalStore journal.Store[*JournalRecord]
+	JournalStore journal.BinaryStore
 
 	// EventAppender is used to append events to the global event stream.
 	EventAppender EventAppender

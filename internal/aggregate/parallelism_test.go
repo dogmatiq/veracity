@@ -28,8 +28,7 @@ var _ = Describe("type CommandExecutor (parallelism)", func() {
 		defer cancel()
 
 		packer := envelope.NewTestPacker()
-		journals := &memory.JournalStore[*JournalRecord]{}
-		eventJournal := memory.NewJournal[[]byte]()
+		journals := &memory.JournalStore[[]byte]{}
 
 		var (
 			parallelism = runtime.NumCPU()
@@ -67,6 +66,12 @@ var _ = Describe("type CommandExecutor (parallelism)", func() {
 		}
 
 		tick := func(ctx context.Context) error {
+			eventJournal, err := journals.Open(ctx, "<eventstream>")
+			if err != nil {
+				return err
+			}
+			defer eventJournal.Close()
+
 			exec := &CommandExecutor{
 				HandlerIdentity: &envelopespec.Identity{
 					Name: "<handler-name>",
@@ -139,6 +144,10 @@ var _ = Describe("type CommandExecutor (parallelism)", func() {
 
 		err := g.Wait()
 		Expect(err).ShouldNot(HaveOccurred())
+
+		eventJournal, err := journals.Open(ctx, "<eventstream>")
+		Expect(err).ShouldNot(HaveOccurred())
+		defer eventJournal.Close()
 
 		events := &eventstream.EventStream{
 			Journal: eventJournal,

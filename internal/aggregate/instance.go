@@ -9,6 +9,7 @@ import (
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/fsm"
+	"github.com/dogmatiq/veracity/internal/protojournal"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/journal"
 	"go.uber.org/zap"
@@ -34,7 +35,7 @@ type instance struct {
 	Packer *envelope.Packer
 
 	// Journal is the journal used to store the instance's state.
-	Journal journal.Journal[*JournalRecord]
+	Journal journal.BinaryJournal
 
 	// EventAppender is used to append events to the global event stream.
 	EventAppender EventAppender
@@ -161,8 +162,9 @@ func (i *instance) load(ctx context.Context) error {
 		apply(*instance) error
 	}
 
+	rec := &JournalRecord{}
 	for {
-		r, ok, err := i.Journal.Read(ctx, i.version)
+		ok, err := protojournal.Read(ctx, i.Journal, i.version, rec)
 		if err != nil {
 			return fmt.Errorf("unable to load instance: %w", err)
 		}
@@ -170,7 +172,7 @@ func (i *instance) load(ctx context.Context) error {
 			break
 		}
 
-		if err := r.GetOneOf().(applyer).apply(i); err != nil {
+		if err := rec.GetOneOf().(applyer).apply(i); err != nil {
 			return fmt.Errorf("unable to load instance: %w", err)
 		}
 
@@ -197,8 +199,9 @@ func (i *instance) write(
 	ctx context.Context,
 	r isJournalRecord_OneOf,
 ) error {
-	ok, err := i.Journal.Write(
+	ok, err := protojournal.Write(
 		ctx,
+		i.Journal,
 		i.version,
 		&JournalRecord{
 			OneOf: r,
