@@ -1,4 +1,4 @@
-package journaltest
+package journal
 
 import (
 	"bytes"
@@ -7,14 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dogmatiq/veracity/journal"
 	"github.com/google/uuid"
 )
 
 // RunTests runs tests that confirm a journal implementation behaves correctly.
 func RunTests(
 	t *testing.T,
-	newStore func(t *testing.T) journal.Store,
+	newStore func(t *testing.T) Store,
 ) {
 	t.Run("type Store", func(t *testing.T) {
 		t.Run("func Open()", func(t *testing.T) {
@@ -343,8 +342,8 @@ func RunTests(
 
 func setup(
 	t *testing.T,
-	newStore func(t *testing.T) journal.Store,
-) (context.Context, journal.Journal) {
+	newStore func(t *testing.T) Store,
+) (context.Context, Journal) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	t.Cleanup(cancel)
 

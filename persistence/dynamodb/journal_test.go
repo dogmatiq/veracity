@@ -11,7 +11,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/dogmatiq/veracity/journal"
-	"github.com/dogmatiq/veracity/journal/journaltest"
 	. "github.com/dogmatiq/veracity/persistence/dynamodb"
 	"github.com/dogmatiq/veracity/persistence/internal/awsx"
 )
@@ -50,7 +49,7 @@ func TestJournal(t *testing.T) {
 		}
 	})
 
-	journaltest.RunTests(
+	journal.RunTests(
 		t,
 		func(t *testing.T) journal.Store {
 			return &JournalStore{

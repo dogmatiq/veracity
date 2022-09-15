@@ -4,12 +4,11 @@ import (
 	"testing"
 
 	"github.com/dogmatiq/veracity/journal"
-	"github.com/dogmatiq/veracity/journal/journaltest"
 	. "github.com/dogmatiq/veracity/persistence/memory"
 )
 
 func TestJournal(t *testing.T) {
-	journaltest.RunTests(
+	journal.RunTests(
 		t,
 		func(t *testing.T) journal.Store {
 			return &JournalStore{}
