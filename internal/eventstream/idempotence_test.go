@@ -37,14 +37,14 @@ var _ = Describe("type EventStream (idempotence)", func() {
 		"it acknowledges the message exactly once",
 		func(
 			expectErr string,
-			setup func(stub *journaltest.BinaryJournalStub),
+			setup func(stub *journaltest.JournalStub),
 		) {
 			expect := packer.Pack(MessageE1)
 			appended := false
 
 			tick := func(
 				ctx context.Context,
-				setup func(*journaltest.BinaryJournalStub),
+				setup func(*journaltest.JournalStub),
 			) error {
 				j, err := journals.Open(ctx, "<eventstream>")
 				if err != nil {
@@ -52,8 +52,8 @@ var _ = Describe("type EventStream (idempotence)", func() {
 				}
 				defer j.Close()
 
-				stub := &journaltest.BinaryJournalStub{
-					Journal: j,
+				stub := &journaltest.JournalStub{
+					BinaryJournal: j,
 				}
 
 				setup(stub)
@@ -83,7 +83,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 
 				Expect(err).To(MatchError(expectErr))
 				needError = false
-				setup = func(stub *journaltest.BinaryJournalStub) {}
+				setup = func(stub *journaltest.JournalStub) {}
 			}
 
 			Expect(needError).To(BeFalse(), "process should fail with the expected error at least once")
@@ -118,12 +118,12 @@ var _ = Describe("type EventStream (idempotence)", func() {
 		Entry(
 			"no faults",
 			"", // no error expected
-			func(stub *journaltest.BinaryJournalStub) {},
+			func(stub *journaltest.JournalStub) {},
 		),
 		Entry(
 			"append fails before journal record is written",
 			"unable to append event(s): <error>",
-			func(stub *journaltest.BinaryJournalStub) {
+			func(stub *journaltest.JournalStub) {
 				protojournal.FailBeforeWrite(
 					stub,
 					func(r *JournalRecord) bool {
@@ -135,7 +135,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 		Entry(
 			"append fails after journal record is written",
 			"unable to append event(s): <error>",
-			func(stub *journaltest.BinaryJournalStub) {
+			func(stub *journaltest.JournalStub) {
 				protojournal.FailAfterWrite(
 					stub,
 					func(r *JournalRecord) bool {

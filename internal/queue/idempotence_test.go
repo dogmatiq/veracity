@@ -35,7 +35,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 		"it eventually removes each message",
 		func(
 			expectErr string,
-			setup func(*journaltest.BinaryJournalStub),
+			setup func(*journaltest.JournalStub),
 		) {
 			messages := []Message{
 				{
@@ -49,7 +49,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 
 			tick := func(
 				ctx context.Context,
-				setup func(*journaltest.BinaryJournalStub),
+				setup func(*journaltest.JournalStub),
 			) error {
 				j, err := journals.Open(ctx, "<queue>")
 				if err != nil {
@@ -57,8 +57,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 				}
 				defer j.Close()
 
-				stub := &journaltest.BinaryJournalStub{
-					Journal: j,
+				stub := &journaltest.JournalStub{
+					BinaryJournal: j,
 				}
 
 				setup(stub)
@@ -105,7 +105,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 
 				Expect(err).To(MatchError(expectErr))
 				needError = false
-				setup = func(j *journaltest.BinaryJournalStub) {}
+				setup = func(j *journaltest.JournalStub) {}
 			}
 
 			Expect(needError).To(BeFalse(), "process should fail with the expected error at least once")
@@ -125,12 +125,12 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"no faults",
 			"", // no error expected
-			func(stub *journaltest.BinaryJournalStub) {},
+			func(stub *journaltest.JournalStub) {},
 		),
 		Entry(
 			"enqueue fails before journal record is written",
 			"unable to enqueue message(s): <error>",
-			func(stub *journaltest.BinaryJournalStub) {
+			func(stub *journaltest.JournalStub) {
 				protojournal.FailBeforeWrite(
 					stub,
 					func(r *JournalRecord) bool {
@@ -142,7 +142,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"enqueue fails after journal record is written",
 			"unable to enqueue message(s): <error>",
-			func(stub *journaltest.BinaryJournalStub) {
+			func(stub *journaltest.JournalStub) {
 				protojournal.FailAfterWrite(
 					stub,
 					func(r *JournalRecord) bool {
@@ -154,7 +154,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"acquire fails before journal record is written",
 			"unable to acquire message: <error>",
-			func(stub *journaltest.BinaryJournalStub) {
+			func(stub *journaltest.JournalStub) {
 				protojournal.FailBeforeWrite(
 					stub,
 					func(r *JournalRecord) bool {
@@ -166,7 +166,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"acquire fails after journal record is written",
 			"unable to acquire message: <error>",
-			func(stub *journaltest.BinaryJournalStub) {
+			func(stub *journaltest.JournalStub) {
 				protojournal.FailAfterWrite(
 					stub,
 					func(r *JournalRecord) bool {
@@ -178,7 +178,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"release fails before journal record is written",
 			"unable to release message: <error>",
-			func(stub *journaltest.BinaryJournalStub) {
+			func(stub *journaltest.JournalStub) {
 				protojournal.FailBeforeWrite(
 					stub,
 					func(r *JournalRecord) bool {
@@ -190,7 +190,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"release fails after journal record is written",
 			"unable to release message: <error>",
-			func(stub *journaltest.BinaryJournalStub) {
+			func(stub *journaltest.JournalStub) {
 				protojournal.FailAfterWrite(
 					stub,
 					func(r *JournalRecord) bool {
@@ -202,7 +202,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"remove fails before journal record is written",
 			"unable to remove message: <error>",
-			func(stub *journaltest.BinaryJournalStub) {
+			func(stub *journaltest.JournalStub) {
 				protojournal.FailBeforeWrite(
 					stub,
 					func(r *JournalRecord) bool {
@@ -214,7 +214,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"remove fails after journal record is written",
 			"unable to remove message: <error>",
-			func(stub *journaltest.BinaryJournalStub) {
+			func(stub *journaltest.JournalStub) {
 				protojournal.FailAfterWrite(
 					stub,
 					func(r *JournalRecord) bool {

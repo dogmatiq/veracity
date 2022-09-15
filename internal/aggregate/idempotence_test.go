@@ -44,13 +44,13 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		"it handles a command exactly once",
 		func(
 			expectErr string,
-			setup func(events, instances *journaltest.BinaryJournalStub),
+			setup func(events, instances *journaltest.JournalStub),
 		) {
 			env := packer.Pack(MessageC1)
 
 			tick := func(
 				ctx context.Context,
-				setup func(events, instances *journaltest.BinaryJournalStub),
+				setup func(events, instances *journaltest.JournalStub),
 			) error {
 				j, err := journals.Open(ctx, "<eventstream>")
 				if err != nil {
@@ -58,8 +58,8 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 				}
 				defer j.Close()
 
-				eventJournal := &journaltest.BinaryJournalStub{
-					Journal: j,
+				eventJournal := &journaltest.JournalStub{
+					BinaryJournal: j,
 				}
 
 				exec := &CommandExecutor{
@@ -98,12 +98,12 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 								return nil, err
 							}
 
-							stub := &journaltest.JournalStub[[]byte]{
-								Journal: j,
+							stub := &journaltest.JournalStub{
+								BinaryJournal: j,
 							}
 
 							setup(eventJournal, stub)
-							setup = func(events, instances *journaltest.BinaryJournalStub) {}
+							setup = func(events, instances *journaltest.JournalStub) {}
 
 							return stub, nil
 						},
@@ -163,7 +163,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 
 				Expect(err).To(MatchError(expectErr))
 				needError = false
-				setup = func(events, instances *journaltest.BinaryJournalStub) {}
+				setup = func(events, instances *journaltest.JournalStub) {}
 			}
 
 			Expect(needError).To(BeFalse(), "process should fail with the expected error at least once")
@@ -197,13 +197,13 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		Entry(
 			"no faults",
 			"", // no error expected
-			func(events, instances *journaltest.BinaryJournalStub) {
+			func(events, instances *journaltest.JournalStub) {
 			},
 		),
 		Entry(
 			"revision fails before journal record is written",
 			"unable to record revision: <error>",
-			func(events, instances *journaltest.BinaryJournalStub) {
+			func(events, instances *journaltest.JournalStub) {
 				protojournal.FailBeforeWrite(
 					instances,
 					func(r *JournalRecord) bool {
@@ -215,7 +215,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		Entry(
 			"revision fails after journal record is written",
 			"unable to record revision: <error>",
-			func(events, instances *journaltest.BinaryJournalStub) {
+			func(events, instances *journaltest.JournalStub) {
 				protojournal.FailAfterWrite(
 					instances,
 					func(r *JournalRecord) bool {
@@ -227,7 +227,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		Entry(
 			"event stream append fails before journal record is written",
 			"unable to append event(s): <error>",
-			func(events, instances *journaltest.BinaryJournalStub) {
+			func(events, instances *journaltest.JournalStub) {
 				protojournal.FailBeforeWrite(
 					events,
 					func(r *eventstream.JournalRecord) bool {
@@ -239,7 +239,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		Entry(
 			"event stream append fails after journal record is written",
 			"unable to append event(s): <error>",
-			func(events, instances *journaltest.BinaryJournalStub) {
+			func(events, instances *journaltest.JournalStub) {
 				protojournal.FailAfterWrite(
 					events,
 					func(r *eventstream.JournalRecord) bool {

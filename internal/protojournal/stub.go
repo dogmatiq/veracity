@@ -13,7 +13,7 @@ import (
 //
 // The error is returned before the write is actually performed.
 func FailBeforeWrite[R proto.Message](
-	j *journaltest.BinaryJournalStub,
+	j *journaltest.JournalStub,
 	pred func(R) bool,
 ) {
 	j.BeforeWrite = func(data []byte) error {
@@ -39,7 +39,7 @@ func FailBeforeWrite[R proto.Message](
 //
 // The error is returned after the write is actually performed.
 func FailAfterWrite[R proto.Message](
-	j *journaltest.BinaryJournalStub,
+	j *journaltest.JournalStub,
 	pred func(R) bool,
 ) {
 	j.AfterWrite = func(data []byte) error {

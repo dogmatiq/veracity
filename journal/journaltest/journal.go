@@ -2,20 +2,16 @@ package journaltest
 
 import (
 	"context"
-	"errors"
-	"sync/atomic"
 
 	"github.com/dogmatiq/veracity/journal"
 )
 
-type BinaryJournalStub = JournalStub[[]byte]
+// JournalStub is a test implementation of the journal.BinaryJournal interface.
+type JournalStub struct {
+	journal.BinaryJournal
 
-// JournalStub is a test implementation of the journal.Journal[R] interface.
-type JournalStub[R any] struct {
-	journal.Journal[R]
-
-	BeforeWrite func(R) error
-	AfterWrite  func(R) error
+	BeforeWrite func([]byte) error
+	AfterWrite  func([]byte) error
 }
 
 // Write adds a record to the journal.
@@ -27,15 +23,15 @@ type JournalStub[R any] struct {
 // optimistic concurrency conflict.
 //
 // If ver is greater than the "next" version the behavior is undefined.
-func (j *JournalStub[R]) Write(ctx context.Context, ver uint64, rec R) (ok bool, err error) {
+func (j *JournalStub) Write(ctx context.Context, ver uint64, rec []byte) (ok bool, err error) {
 	if j.BeforeWrite != nil {
 		if err := j.BeforeWrite(rec); err != nil {
 			return false, err
 		}
 	}
 
-	if j.Journal != nil {
-		ok, err := j.Journal.Write(ctx, ver, rec)
+	if j.BinaryJournal != nil {
+		ok, err := j.BinaryJournal.Write(ctx, ver, rec)
 		if !ok || err != nil {
 			return false, err
 		}
@@ -48,46 +44,4 @@ func (j *JournalStub[R]) Write(ctx context.Context, ver uint64, rec R) (ok bool,
 	}
 
 	return true, nil
-}
-
-// FailOnceBeforeWrite configures s to return an error on the first call to
-// s.Write() with a record that satisifies the given predicate function.
-//
-// The error is returned before the write is actually performed.
-func FailOnceBeforeWrite[R any](
-	s *JournalStub[R],
-	pred func(R) bool,
-) {
-	var done uint32
-
-	s.BeforeWrite = func(rec R) error {
-		if pred(rec) {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				return errors.New("<error>")
-			}
-		}
-
-		return nil
-	}
-}
-
-// FailOnceAfterWrite configures s to return an error on the first call to
-// s.Write() with a record that satisifies the given predicate function.
-//
-// The error is returned after the write is actually performed.
-func FailOnceAfterWrite[R any](
-	s *JournalStub[R],
-	pred func(R) bool,
-) {
-	var done uint32
-
-	s.AfterWrite = func(rec R) error {
-		if pred(rec) {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				return errors.New("<error>")
-			}
-		}
-
-		return nil
-	}
 }
