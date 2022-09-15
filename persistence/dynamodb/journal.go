@@ -161,7 +161,7 @@ func (j *journalHandle) ReadOldest(ctx context.Context) (uint64, []byte, bool, e
 	return j.readOldest(ctx, true)
 }
 
-func (j *journalHandle) Write(ctx context.Context, ver uint64, rec []byte) (bool, error) {
+func (j *journalHandle) Append(ctx context.Context, ver uint64, rec []byte) (bool, error) {
 	j.Version.N = aws.String(strconv.FormatUint(ver, 10))
 	j.Record.B = rec
 

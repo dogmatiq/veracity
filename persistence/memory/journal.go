@@ -89,7 +89,7 @@ func (h *journalHandle) ReadOldest(ctx context.Context) (uint64, []byte, bool, e
 	return h.state.Begin, h.state.Records[0], true, ctx.Err()
 }
 
-func (h *journalHandle) Write(ctx context.Context, ver uint64, rec []byte) (bool, error) {
+func (h *journalHandle) Append(ctx context.Context, ver uint64, rec []byte) (bool, error) {
 	if h.state == nil {
 		panic("journal is closed")
 	}

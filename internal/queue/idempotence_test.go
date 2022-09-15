@@ -64,7 +64,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 
 				queue := &Queue{
 					Journal: stub,
-					Logger:  zapx.NewTesting("queue-write"),
+					Logger:  zapx.NewTesting("queue-append"),
 				}
 
 				if !enqueued {
@@ -130,7 +130,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"enqueue fails before journal record is written",
 			"unable to enqueue message(s): <error>",
 			func(stub *journaltest.JournalStub) {
-				journaltest.FailBeforeWrite(
+				journaltest.FailBeforeAppend(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetEnqueue() != nil
@@ -142,7 +142,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"enqueue fails after journal record is written",
 			"unable to enqueue message(s): <error>",
 			func(stub *journaltest.JournalStub) {
-				journaltest.FailAfterWrite(
+				journaltest.FailAfterAppend(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetEnqueue() != nil
@@ -154,7 +154,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"acquire fails before journal record is written",
 			"unable to acquire message: <error>",
 			func(stub *journaltest.JournalStub) {
-				journaltest.FailBeforeWrite(
+				journaltest.FailBeforeAppend(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetAcquire() != nil
@@ -166,7 +166,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"acquire fails after journal record is written",
 			"unable to acquire message: <error>",
 			func(stub *journaltest.JournalStub) {
-				journaltest.FailAfterWrite(
+				journaltest.FailAfterAppend(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetAcquire() != nil
@@ -178,7 +178,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"release fails before journal record is written",
 			"unable to release message: <error>",
 			func(stub *journaltest.JournalStub) {
-				journaltest.FailBeforeWrite(
+				journaltest.FailBeforeAppend(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetRelease() != nil
@@ -190,7 +190,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"release fails after journal record is written",
 			"unable to release message: <error>",
 			func(stub *journaltest.JournalStub) {
-				journaltest.FailAfterWrite(
+				journaltest.FailAfterAppend(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetRelease() != nil
@@ -202,7 +202,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"remove fails before journal record is written",
 			"unable to remove message: <error>",
 			func(stub *journaltest.JournalStub) {
-				journaltest.FailBeforeWrite(
+				journaltest.FailBeforeAppend(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetRemove() != nil
@@ -214,7 +214,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"remove fails after journal record is written",
 			"unable to remove message: <error>",
 			func(stub *journaltest.JournalStub) {
-				journaltest.FailAfterWrite(
+				journaltest.FailAfterAppend(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetRemove() != nil

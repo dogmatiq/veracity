@@ -71,7 +71,7 @@ func (q *Queue) Enqueue(
 		},
 	}
 
-	if err := q.write(ctx, r); err != nil {
+	if err := q.append(ctx, r); err != nil {
 		return fmt.Errorf("unable to enqueue message(s): %w", err)
 	}
 
@@ -209,7 +209,7 @@ func (q *Queue) Acquire(ctx context.Context) (m AcquiredMessage, ok bool, err er
 		},
 	}
 
-	if err := q.write(ctx, r); err != nil {
+	if err := q.append(ctx, r); err != nil {
 		return AcquiredMessage{}, false, fmt.Errorf("unable to acquire message: %w", err)
 	}
 
@@ -254,7 +254,7 @@ func (q *Queue) Release(ctx context.Context, m AcquiredMessage) error {
 		},
 	}
 
-	if err := q.write(ctx, r); err != nil {
+	if err := q.append(ctx, r); err != nil {
 		return fmt.Errorf("unable to release message: %w", err)
 	}
 
@@ -316,7 +316,7 @@ func (q *Queue) load(ctx context.Context) error {
 			},
 		}
 
-		if err := q.write(ctx, rec); err != nil {
+		if err := q.append(ctx, rec); err != nil {
 			return fmt.Errorf("unable to release message: %w", err)
 		}
 	}
@@ -345,7 +345,7 @@ func (q *Queue) Remove(ctx context.Context, m AcquiredMessage) error {
 		},
 	}
 
-	if err := q.write(ctx, r); err != nil {
+	if err := q.append(ctx, r); err != nil {
 		return fmt.Errorf("unable to remove message: %w", err)
 	}
 
@@ -377,9 +377,9 @@ func (q *Queue) remove(e *elem) {
 	heap.Remove(&q.queue, e.index)
 }
 
-// write writes a record to the journal.
-func (q *Queue) write(ctx context.Context, r journalRecord) error {
-	ok, err := protojournal.Write(
+// append adds a record to the journal.
+func (q *Queue) append(ctx context.Context, r journalRecord) error {
+	ok, err := protojournal.Append(
 		ctx,
 		q.Journal,
 		q.version,

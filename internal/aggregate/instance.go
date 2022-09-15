@@ -123,7 +123,7 @@ func (i *instance) executeCommand(ctx context.Context, env *envelopespec.Envelop
 		Revision: rev,
 	}
 
-	if err := i.write(ctx, r); err != nil {
+	if err := i.append(ctx, r); err != nil {
 		return fmt.Errorf("unable to record revision: %w", err)
 	}
 
@@ -194,12 +194,9 @@ func (i *instance) load(ctx context.Context) error {
 	return nil
 }
 
-// write writes a record to the journal and applies it to the instance.
-func (i *instance) write(
-	ctx context.Context,
-	r isJournalRecord_OneOf,
-) error {
-	ok, err := protojournal.Write(
+// append adds a record to the journal.
+func (i *instance) append(ctx context.Context, r isJournalRecord_OneOf) error {
+	ok, err := protojournal.Append(
 		ctx,
 		i.Journal,
 		i.version,

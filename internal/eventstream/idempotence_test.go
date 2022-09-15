@@ -59,7 +59,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 
 				stream := &EventStream{
 					Journal: stub,
-					Logger:  zapx.NewTesting("eventstream-write"),
+					Logger:  zapx.NewTesting("eventstream-append"),
 				}
 
 				if !appended {
@@ -123,7 +123,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 			"append fails before journal record is written",
 			"unable to append event(s): <error>",
 			func(stub *journaltest.JournalStub) {
-				journaltest.FailBeforeWrite(
+				journaltest.FailBeforeAppend(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetAppend() != nil
@@ -135,7 +135,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 			"append fails after journal record is written",
 			"unable to append event(s): <error>",
 			func(stub *journaltest.JournalStub) {
-				journaltest.FailAfterWrite(
+				journaltest.FailAfterAppend(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetAppend() != nil

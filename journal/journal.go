@@ -20,7 +20,7 @@ type Journal interface {
 	// ok is false if the journal is empty.
 	ReadOldest(ctx context.Context) (ver uint64, rec []byte, ok bool, err error)
 
-	// Write adds a record to the journal.
+	// Append adds a record to the journal.
 	//
 	// ver is the next version of the journal. That is, the version to produce
 	// as a result of writing this record. The first version is always 0.
@@ -29,7 +29,7 @@ type Journal interface {
 	// optimistic concurrency conflict.
 	//
 	// If ver is greater than the "next" version the behavior is undefined.
-	Write(ctx context.Context, ver uint64, rec []byte) (ok bool, err error)
+	Append(ctx context.Context, ver uint64, rec []byte) (ok bool, err error)
 
 	// Truncate removes the oldest records from the journal up to (but not
 	// including) the record written at the given version.

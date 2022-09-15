@@ -23,8 +23,8 @@ func Read(
 	return true, proto.Unmarshal(data, rec)
 }
 
-// Write marshals rec to its binary representation and writes it to j.
-func Write(
+// Append marshals rec to its binary representation and appends it to j.
+func Append(
 	ctx context.Context,
 	j journal.Journal,
 	ver uint64,
@@ -35,5 +35,5 @@ func Write(
 		return false, fmt.Errorf("unable to marshal journal record: %w", err)
 	}
 
-	return j.Write(ctx, ver, data)
+	return j.Append(ctx, ver, data)
 }

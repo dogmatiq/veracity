@@ -109,7 +109,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 					},
 					EventAppender: &eventstream.EventStream{
 						Journal: eventJournal,
-						Logger:  zapx.NewTesting("eventstream-write"),
+						Logger:  zapx.NewTesting("eventstream-append"),
 					},
 					Logger: zapx.NewTesting("<handler-name>"),
 				}
@@ -203,7 +203,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			"revision fails before journal record is written",
 			"unable to record revision: <error>",
 			func(events, instances *journaltest.JournalStub) {
-				journaltest.FailBeforeWrite(
+				journaltest.FailBeforeAppend(
 					instances,
 					func(r *JournalRecord) bool {
 						return r.GetRevision() != nil
@@ -215,7 +215,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			"revision fails after journal record is written",
 			"unable to record revision: <error>",
 			func(events, instances *journaltest.JournalStub) {
-				journaltest.FailAfterWrite(
+				journaltest.FailAfterAppend(
 					instances,
 					func(r *JournalRecord) bool {
 						return r.GetRevision() != nil
@@ -227,7 +227,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			"event stream append fails before journal record is written",
 			"unable to append event(s): <error>",
 			func(events, instances *journaltest.JournalStub) {
-				journaltest.FailBeforeWrite(
+				journaltest.FailBeforeAppend(
 					events,
 					func(r *eventstream.JournalRecord) bool {
 						return r.GetAppend() != nil
@@ -239,7 +239,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			"event stream append fails after journal record is written",
 			"unable to append event(s): <error>",
 			func(events, instances *journaltest.JournalStub) {
-				journaltest.FailAfterWrite(
+				journaltest.FailAfterAppend(
 					events,
 					func(r *eventstream.JournalRecord) bool {
 						return r.GetAppend() != nil

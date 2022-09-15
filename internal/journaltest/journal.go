@@ -17,7 +17,7 @@ type JournalStub struct {
 	after  func([]byte) error
 }
 
-// Write adds a record to the journal.
+// Append adds a record to the journal.
 //
 // ver is the next version of the journal. That is, the version to produce as a
 // result of writing this record. The first version is always 0.
@@ -26,7 +26,7 @@ type JournalStub struct {
 // optimistic concurrency conflict.
 //
 // If ver is greater than the "next" version the behavior is undefined.
-func (j *JournalStub) Write(ctx context.Context, ver uint64, rec []byte) (ok bool, err error) {
+func (j *JournalStub) Append(ctx context.Context, ver uint64, rec []byte) (ok bool, err error) {
 	if j.before != nil {
 		if err := j.before(rec); err != nil {
 			return false, err
@@ -34,7 +34,7 @@ func (j *JournalStub) Write(ctx context.Context, ver uint64, rec []byte) (ok boo
 	}
 
 	if j.Journal != nil {
-		ok, err := j.Journal.Write(ctx, ver, rec)
+		ok, err := j.Journal.Append(ctx, ver, rec)
 		if !ok || err != nil {
 			return false, err
 		}
@@ -49,11 +49,11 @@ func (j *JournalStub) Write(ctx context.Context, ver uint64, rec []byte) (ok boo
 	return true, nil
 }
 
-// FailBeforeWrite configures k to return an error on the first call to
-// s.Write() with a record that satisifies the given predicate function.
+// FailBeforeAppend configures k to return an error on the first call to
+// s.Append() with a record that satisifies the given predicate function.
 //
-// The error is returned before the write is actually performed.
-func FailBeforeWrite[R proto.Message](
+// The error is returned before the append is actually performed.
+func FailBeforeAppend[R proto.Message](
 	j *JournalStub,
 	pred func(R) bool,
 ) {
@@ -75,11 +75,11 @@ func FailBeforeWrite[R proto.Message](
 	}
 }
 
-// FailAfterWrite configures j to return an error on the first call to
-// j.Write() with a record that satisifies the given predicate function.
+// FailAfterAppend configures j to return an error on the first call to
+// j.Append() with a record that satisifies the given predicate function.
 //
-// The error is returned after the write is actually performed.
-func FailAfterWrite[R proto.Message](
+// The error is returned after the append is actually performed.
+func FailAfterAppend[R proto.Message](
 	j *JournalStub,
 	pred func(R) bool,
 ) {

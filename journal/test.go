@@ -40,7 +40,7 @@ func RunTests(
 					defer j.Close()
 
 					expect := []byte(fmt.Sprintf("<record-%d>", i))
-					ok, err := j.Write(ctx, 0, expect)
+					ok, err := j.Append(ctx, 0, expect)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -85,7 +85,7 @@ func RunTests(
 				defer j2.Close()
 
 				expect := []byte("<record>")
-				ok, err := j1.Write(ctx, 0, expect)
+				ok, err := j1.Append(ctx, 0, expect)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -144,7 +144,7 @@ func RunTests(
 				}
 
 				for i, r := range expect {
-					ok, err := j.Write(ctx, uint64(i), r)
+					ok, err := j.Append(ctx, uint64(i), r)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -180,7 +180,7 @@ func RunTests(
 				ctx, j := setup(t, newStore)
 
 				expect := []byte("<record>")
-				ok, err := j.Write(ctx, 0, expect)
+				ok, err := j.Append(ctx, 0, expect)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -237,7 +237,7 @@ func RunTests(
 				}
 
 				for ver, rec := range records {
-					ok, err := j.Write(ctx, uint64(ver), rec)
+					ok, err := j.Append(ctx, uint64(ver), rec)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -275,13 +275,13 @@ func RunTests(
 			})
 		})
 
-		t.Run("func Write()", func(t *testing.T) {
+		t.Run("func Append()", func(t *testing.T) {
 			t.Run("it returns true if the version doesn't exist", func(t *testing.T) {
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
 
-				ok, err := j.Write(ctx, 0, []byte("<record>"))
+				ok, err := j.Append(ctx, 0, []byte("<record>"))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -295,7 +295,7 @@ func RunTests(
 
 				ctx, j := setup(t, newStore)
 
-				ok, err := j.Write(ctx, 0, []byte("<prior>"))
+				ok, err := j.Append(ctx, 0, []byte("<prior>"))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -304,7 +304,7 @@ func RunTests(
 				}
 
 				expect := []byte("<original>")
-				ok, err = j.Write(ctx, 1, expect)
+				ok, err = j.Append(ctx, 1, expect)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -312,7 +312,7 @@ func RunTests(
 					t.Fatal("unexpected optimistic concurrency conflict")
 				}
 
-				ok, err = j.Write(ctx, 1, []byte("<modified>"))
+				ok, err = j.Append(ctx, 1, []byte("<modified>"))
 				if err != nil {
 					t.Fatal(err)
 				}

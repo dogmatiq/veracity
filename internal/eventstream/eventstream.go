@@ -56,12 +56,12 @@ func (s *EventStream) Append(
 		return nil
 	}
 
-	if err := s.write(ctx, r); err != nil {
+	if err := s.append(ctx, r); err != nil {
 		return fmt.Errorf("unable to append event(s): %w", err)
 	}
 
 	for _, env := range r.Append.Envelopes {
-		s.append(env)
+		s.appendEvent(env)
 
 		s.Logger.Debug(
 			"event appended to stream",
@@ -77,13 +77,13 @@ func (s *EventStream) Append(
 // apply updates the event stream's in-memory state to reflect an append record.
 func (x *JournalRecord_Append) apply(s *EventStream) {
 	for _, env := range x.Append.Envelopes {
-		s.append(env)
+		s.appendEvent(env)
 	}
 }
 
 // append updates the event stream's in-memory state to include an appended
 // event.
-func (s *EventStream) append(env *envelopespec.Envelope) {
+func (s *EventStream) appendEvent(env *envelopespec.Envelope) {
 	id := env.MessageId
 	s.events[id] = struct{}{}
 	s.offset++
@@ -210,12 +210,9 @@ func (s *EventStream) load(ctx context.Context) error {
 	return nil
 }
 
-// write writes a record to the journal.
-func (s *EventStream) write(
-	ctx context.Context,
-	r journalRecord,
-) error {
-	ok, err := protojournal.Write(
+// append adds a record to the journal.
+func (s *EventStream) append(ctx context.Context, r journalRecord) error {
+	ok, err := protojournal.Append(
 		ctx,
 		s.Journal,
 		s.version,
