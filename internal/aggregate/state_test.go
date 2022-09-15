@@ -39,7 +39,7 @@ var _ = Describe("type CommandExecutor (aggregate root state)", func() {
 		journals = &memory.JournalStore[*JournalRecord]{}
 
 		events = &eventstream.EventStream{
-			Journal: memory.NewJournal[*eventstream.JournalRecord](),
+			Journal: memory.NewJournal[[]byte](),
 			Logger:  zapx.NewTesting("eventstream"),
 		}
 

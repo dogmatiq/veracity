@@ -13,6 +13,7 @@ import (
 	. "github.com/dogmatiq/veracity/internal/aggregate"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/eventstream"
+	"github.com/dogmatiq/veracity/internal/protojournal"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/journal"
 	"github.com/dogmatiq/veracity/journal/journaltest"
@@ -27,7 +28,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 	var (
 		ctx              context.Context
 		packer           *envelope.Packer
-		eventJournals    *memory.JournalStore[*eventstream.JournalRecord]
+		eventJournals    *memory.JournalStore[[]byte]
 		instanceJournals *memory.JournalStore[*JournalRecord]
 	)
 
@@ -37,7 +38,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		DeferCleanup(cancel)
 
 		packer = envelope.NewTestPacker()
-		eventJournals = &memory.JournalStore[*eventstream.JournalRecord]{}
+		eventJournals = &memory.JournalStore[[]byte]{}
 		instanceJournals = &memory.JournalStore[*JournalRecord]{}
 	})
 
@@ -46,20 +47,26 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		func(
 			expectErr string,
 			setup func(
-				events *journaltest.JournalStub[*eventstream.JournalRecord],
+				events *journaltest.BinaryJournalStub,
 				instances *journaltest.JournalStub[*JournalRecord],
 			),
 		) {
 			env := packer.Pack(MessageC1)
 
-			tick := func(ctx context.Context) error {
+			tick := func(
+				ctx context.Context,
+				setup func(
+					events *journaltest.BinaryJournalStub,
+					instances *journaltest.JournalStub[*JournalRecord],
+				),
+			) error {
 				j, err := eventJournals.Open(ctx, "<eventstore>")
 				if err != nil {
 					return err
 				}
 				defer j.Close()
 
-				eventJournal := &journaltest.JournalStub[*eventstream.JournalRecord]{
+				eventJournal := &journaltest.BinaryJournalStub{
 					Journal: j,
 				}
 
@@ -105,7 +112,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 
 							setup(eventJournal, stub)
 							setup = func(
-								events *journaltest.JournalStub[*eventstream.JournalRecord],
+								events *journaltest.BinaryJournalStub,
 								instances *journaltest.JournalStub[*JournalRecord],
 							) {
 							}
@@ -161,13 +168,14 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			needError := expectErr != ""
 
 			for {
-				err := tick(ctx)
+				err := tick(ctx, setup)
 				if err == nil {
 					break
 				}
 
 				Expect(err).To(MatchError(expectErr))
 				needError = false
+				setup = func(*journaltest.BinaryJournalStub, *journaltest.JournalStub[*JournalRecord]) {}
 			}
 
 			Expect(needError).To(BeFalse(), "process should fail with the expected error at least once")
@@ -202,7 +210,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			"no faults",
 			"", // no error expected
 			func(
-				events *journaltest.JournalStub[*eventstream.JournalRecord],
+				events *journaltest.BinaryJournalStub,
 				instances *journaltest.JournalStub[*JournalRecord],
 			) {
 			},
@@ -211,7 +219,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			"revision fails before journal record is written",
 			"unable to record revision: <error>",
 			func(
-				events *journaltest.JournalStub[*eventstream.JournalRecord],
+				events *journaltest.BinaryJournalStub,
 				instances *journaltest.JournalStub[*JournalRecord],
 			) {
 				journaltest.FailOnceBeforeWrite(
@@ -226,7 +234,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			"revision fails after journal record is written",
 			"unable to record revision: <error>",
 			func(
-				events *journaltest.JournalStub[*eventstream.JournalRecord],
+				events *journaltest.BinaryJournalStub,
 				instances *journaltest.JournalStub[*JournalRecord],
 			) {
 				journaltest.FailOnceAfterWrite(
@@ -241,10 +249,10 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			"event stream append fails before journal record is written",
 			"unable to append event(s): <error>",
 			func(
-				events *journaltest.JournalStub[*eventstream.JournalRecord],
+				events *journaltest.BinaryJournalStub,
 				instances *journaltest.JournalStub[*JournalRecord],
 			) {
-				journaltest.FailOnceBeforeWrite(
+				protojournal.FailBeforeWrite(
 					events,
 					func(r *eventstream.JournalRecord) bool {
 						return r.GetAppend() != nil
@@ -256,10 +264,10 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			"event stream append fails after journal record is written",
 			"unable to append event(s): <error>",
 			func(
-				events *journaltest.JournalStub[*eventstream.JournalRecord],
+				events *journaltest.BinaryJournalStub,
 				instances *journaltest.JournalStub[*JournalRecord],
 			) {
-				journaltest.FailOnceAfterWrite(
+				protojournal.FailAfterWrite(
 					events,
 					func(r *eventstream.JournalRecord) bool {
 						return r.GetAppend() != nil

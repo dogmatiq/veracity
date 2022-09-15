@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/dogmatiq/interopspec/envelopespec"
+	"github.com/dogmatiq/veracity/internal/protojournal"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/journal"
 	"go.uber.org/zap"
@@ -14,7 +15,7 @@ import (
 // EventStream is a durable, chronologically ordered stream of event messages.
 type EventStream struct {
 	// Journal is the journal used to store the queue's state.
-	Journal journal.Journal[*JournalRecord]
+	Journal journal.BinaryJournal
 
 	// Logger is the target for log messages about changes to the event stream.
 	Logger *zap.Logger
@@ -104,12 +105,12 @@ func (s *EventStream) Range(
 		return nil
 	}
 
-	r, v, err := s.search(ctx, offset)
+	rec, ver, err := s.search(ctx, offset)
 	if err != nil {
 		return err
 	}
 
-	append := r.GetAppend()
+	append := rec.GetAppend()
 	begin := append.GetBeginOffset()
 	envelopes := append.GetEnvelopes()
 
@@ -121,14 +122,14 @@ func (s *EventStream) Range(
 	}
 
 	for {
-		v++
+		ver++
 
-		r, ok, err := s.Journal.Read(ctx, v)
+		ok, err := protojournal.Read(ctx, s.Journal, ver, rec)
 		if !ok || err != nil {
 			return err
 		}
 
-		if append := r.GetAppend(); append != nil {
+		if append := rec.GetAppend(); append != nil {
 			for _, env := range append.Envelopes {
 				ok, err := fn(ctx, env)
 				if !ok || err != nil {
@@ -148,30 +149,32 @@ func (s *EventStream) search(
 	ctx context.Context,
 	offset uint64,
 ) (*JournalRecord, uint64, error) {
+	rec := &JournalRecord{}
+
 	if offset == 0 {
-		r, _, err := s.Journal.Read(ctx, 0)
-		return r, 0, err
+		_, err := protojournal.Read(ctx, s.Journal, 0, rec)
+		return rec, 0, err
 	}
 
 	min := uint64(0)
 	max := s.version
 
 	for {
-		v := min>>1 + max>>1
+		ver := min>>1 + max>>1
 
-		r, _, err := s.Journal.Read(ctx, v)
+		_, err := protojournal.Read(ctx, s.Journal, ver, rec)
 		if err != nil {
 			return nil, 0, err
 		}
 
-		append := r.GetAppend()
+		append := rec.GetAppend()
 
 		if offset < append.GetBeginOffset() {
-			max = v
+			max = ver
 		} else if offset >= append.GetEndOffset() { // TODO: test edge case here
-			min = v + 1
+			min = ver + 1
 		} else {
-			return r, v, nil
+			return rec, ver, nil
 		}
 	}
 }
@@ -183,9 +186,10 @@ func (s *EventStream) load(ctx context.Context) error {
 	}
 
 	s.events = map[string]struct{}{}
+	rec := &JournalRecord{}
 
 	for {
-		r, ok, err := s.Journal.Read(ctx, s.version)
+		ok, err := protojournal.Read(ctx, s.Journal, s.version, rec)
 		if err != nil {
 			return fmt.Errorf("unable to load event stream: %w", err)
 		}
@@ -193,7 +197,7 @@ func (s *EventStream) load(ctx context.Context) error {
 			break
 		}
 
-		r.GetOneOf().(journalRecord).apply(s)
+		rec.GetOneOf().(journalRecord).apply(s)
 		s.version++
 	}
 
@@ -211,8 +215,9 @@ func (s *EventStream) write(
 	ctx context.Context,
 	r journalRecord,
 ) error {
-	ok, err := s.Journal.Write(
+	ok, err := protojournal.Write(
 		ctx,
+		s.Journal,
 		s.version,
 		&JournalRecord{
 			OneOf: r,

@@ -11,6 +11,7 @@ import (
 	. "github.com/dogmatiq/veracity/internal/eventstream"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/persistence/memory"
+	. "github.com/jmalloc/gomegax"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap"
@@ -23,7 +24,7 @@ var _ = Describe("type EventStream (parallelism)", func() {
 		defer cancel()
 
 		packer := envelope.NewTestPacker()
-		journals := &memory.JournalStore[*JournalRecord]{}
+		journals := &memory.JournalStore[[]byte]{}
 
 		var (
 			parallelism = runtime.NumCPU()
@@ -96,6 +97,6 @@ var _ = Describe("type EventStream (parallelism)", func() {
 			},
 		)
 		Expect(err).ShouldNot(HaveOccurred())
-		Expect(actual).To(Equal(expect))
+		Expect(actual).To(EqualX(expect))
 	})
 })

@@ -8,6 +8,7 @@ import (
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	. "github.com/dogmatiq/veracity/internal/eventstream"
+	"github.com/dogmatiq/veracity/internal/protojournal"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/journal/journaltest"
 	"github.com/dogmatiq/veracity/persistence/memory"
@@ -18,9 +19,9 @@ import (
 
 var _ = Describe("type EventStream (idempotence)", func() {
 	var (
-		ctx     context.Context
-		packer  *envelope.Packer
-		journal *journaltest.JournalStub[*JournalRecord]
+		ctx      context.Context
+		packer   *envelope.Packer
+		journals *memory.JournalStore[[]byte]
 	)
 
 	BeforeEach(func() {
@@ -29,23 +30,36 @@ var _ = Describe("type EventStream (idempotence)", func() {
 		DeferCleanup(cancel)
 
 		packer = envelope.NewTestPacker()
-
-		journal = &journaltest.JournalStub[*JournalRecord]{
-			Journal: memory.NewJournal[*JournalRecord](),
-		}
+		journals = &memory.JournalStore[[]byte]{}
 	})
 
 	DescribeTable(
 		"it acknowledges the message exactly once",
-		func(expectErr string, setup func()) {
-			setup()
-
+		func(
+			expectErr string,
+			setup func(stub *journaltest.BinaryJournalStub),
+		) {
 			expect := packer.Pack(MessageE1)
 			appended := false
 
-			tick := func(ctx context.Context) error {
+			tick := func(
+				ctx context.Context,
+				setup func(*journaltest.BinaryJournalStub),
+			) error {
+				j, err := journals.Open(ctx, "<eventstream>")
+				if err != nil {
+					return err
+				}
+				defer j.Close()
+
+				stub := &journaltest.BinaryJournalStub{
+					Journal: j,
+				}
+
+				setup(stub)
+
 				stream := &EventStream{
-					Journal: journal,
+					Journal: stub,
 					Logger:  zapx.NewTesting("eventstream-write"),
 				}
 
@@ -62,24 +76,29 @@ var _ = Describe("type EventStream (idempotence)", func() {
 			needError := expectErr != ""
 
 			for {
-				err := tick(ctx)
+				err := tick(ctx, setup)
 				if err == nil {
 					break
 				}
 
 				Expect(err).To(MatchError(expectErr))
 				needError = false
+				setup = func(stub *journaltest.BinaryJournalStub) {}
 			}
 
 			Expect(needError).To(BeFalse(), "process should fail with the expected error at least once")
 
+			j, err := journals.Open(ctx, "<eventstream>")
+			Expect(err).ShouldNot(HaveOccurred())
+			defer j.Close()
+
 			stream := &EventStream{
-				Journal: journal,
+				Journal: j,
 				Logger:  zapx.NewTesting("eventstream-read"),
 			}
 
 			var envelopes []*envelopespec.Envelope
-			err := stream.Range(
+			err = stream.Range(
 				ctx,
 				0,
 				func(
@@ -99,14 +118,14 @@ var _ = Describe("type EventStream (idempotence)", func() {
 		Entry(
 			"no faults",
 			"", // no error expected
-			func() {},
+			func(stub *journaltest.BinaryJournalStub) {},
 		),
 		Entry(
 			"append fails before journal record is written",
 			"unable to append event(s): <error>",
-			func() {
-				journaltest.FailOnceBeforeWrite(
-					journal,
+			func(stub *journaltest.BinaryJournalStub) {
+				protojournal.FailBeforeWrite(
+					stub,
 					func(r *JournalRecord) bool {
 						return r.GetAppend() != nil
 					},
@@ -116,9 +135,9 @@ var _ = Describe("type EventStream (idempotence)", func() {
 		Entry(
 			"append fails after journal record is written",
 			"unable to append event(s): <error>",
-			func() {
-				journaltest.FailOnceAfterWrite(
-					journal,
+			func(stub *journaltest.BinaryJournalStub) {
+				protojournal.FailAfterWrite(
+					stub,
 					func(r *JournalRecord) bool {
 						return r.GetAppend() != nil
 					},

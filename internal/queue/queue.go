@@ -294,10 +294,10 @@ func (q *Queue) load(ctx context.Context) error {
 	q.elements = map[string]*elem{}
 	q.unreleased = map[string]*elem{}
 
-	var rec JournalRecord
+	rec := &JournalRecord{}
 
 	for {
-		ok, err := protojournal.Read(ctx, q.Journal, q.version, &rec)
+		ok, err := protojournal.Read(ctx, q.Journal, q.version, rec)
 		if err != nil {
 			return fmt.Errorf("unable to load queue: %w", err)
 		}
