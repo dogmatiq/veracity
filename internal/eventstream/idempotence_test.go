@@ -125,8 +125,8 @@ var _ = Describe("type EventStream (idempotence)", func() {
 			func(stub *journaltest.JournalStub) {
 				journaltest.FailBeforeAppend(
 					stub,
-					func(r *JournalRecord) bool {
-						return r.GetAppend() != nil
+					func(rec *JournalRecord) bool {
+						return rec.GetAppend() != nil
 					},
 				)
 			},
@@ -137,8 +137,8 @@ var _ = Describe("type EventStream (idempotence)", func() {
 			func(stub *journaltest.JournalStub) {
 				journaltest.FailAfterAppend(
 					stub,
-					func(r *JournalRecord) bool {
-						return r.GetAppend() != nil
+					func(rec *JournalRecord) bool {
+						return rec.GetAppend() != nil
 					},
 				)
 			},

@@ -205,8 +205,8 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			func(events, instances *journaltest.JournalStub) {
 				journaltest.FailBeforeAppend(
 					instances,
-					func(r *JournalRecord) bool {
-						return r.GetRevision() != nil
+					func(rec *JournalRecord) bool {
+						return rec.GetRevision() != nil
 					},
 				)
 			},
@@ -217,8 +217,8 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			func(events, instances *journaltest.JournalStub) {
 				journaltest.FailAfterAppend(
 					instances,
-					func(r *JournalRecord) bool {
-						return r.GetRevision() != nil
+					func(rec *JournalRecord) bool {
+						return rec.GetRevision() != nil
 					},
 				)
 			},
@@ -229,8 +229,8 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			func(events, instances *journaltest.JournalStub) {
 				journaltest.FailBeforeAppend(
 					events,
-					func(r *eventstream.JournalRecord) bool {
-						return r.GetAppend() != nil
+					func(rec *eventstream.JournalRecord) bool {
+						return rec.GetAppend() != nil
 					},
 				)
 			},
@@ -241,8 +241,8 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			func(events, instances *journaltest.JournalStub) {
 				journaltest.FailAfterAppend(
 					events,
-					func(r *eventstream.JournalRecord) bool {
-						return r.GetAppend() != nil
+					func(rec *eventstream.JournalRecord) bool {
+						return rec.GetAppend() != nil
 					},
 				)
 			},

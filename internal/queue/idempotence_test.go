@@ -132,8 +132,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 			func(stub *journaltest.JournalStub) {
 				journaltest.FailBeforeAppend(
 					stub,
-					func(r *JournalRecord) bool {
-						return r.GetEnqueue() != nil
+					func(rec *JournalRecord) bool {
+						return rec.GetEnqueue() != nil
 					},
 				)
 			},
@@ -144,8 +144,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 			func(stub *journaltest.JournalStub) {
 				journaltest.FailAfterAppend(
 					stub,
-					func(r *JournalRecord) bool {
-						return r.GetEnqueue() != nil
+					func(rec *JournalRecord) bool {
+						return rec.GetEnqueue() != nil
 					},
 				)
 			},
@@ -156,8 +156,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 			func(stub *journaltest.JournalStub) {
 				journaltest.FailBeforeAppend(
 					stub,
-					func(r *JournalRecord) bool {
-						return r.GetAcquire() != nil
+					func(rec *JournalRecord) bool {
+						return rec.GetAcquire() != nil
 					},
 				)
 			},
@@ -168,8 +168,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 			func(stub *journaltest.JournalStub) {
 				journaltest.FailAfterAppend(
 					stub,
-					func(r *JournalRecord) bool {
-						return r.GetAcquire() != nil
+					func(rec *JournalRecord) bool {
+						return rec.GetAcquire() != nil
 					},
 				)
 			},
@@ -180,8 +180,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 			func(stub *journaltest.JournalStub) {
 				journaltest.FailBeforeAppend(
 					stub,
-					func(r *JournalRecord) bool {
-						return r.GetRelease() != nil
+					func(rec *JournalRecord) bool {
+						return rec.GetRelease() != nil
 					},
 				)
 			},
@@ -192,8 +192,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 			func(stub *journaltest.JournalStub) {
 				journaltest.FailAfterAppend(
 					stub,
-					func(r *JournalRecord) bool {
-						return r.GetRelease() != nil
+					func(rec *JournalRecord) bool {
+						return rec.GetRelease() != nil
 					},
 				)
 			},
@@ -204,8 +204,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 			func(stub *journaltest.JournalStub) {
 				journaltest.FailBeforeAppend(
 					stub,
-					func(r *JournalRecord) bool {
-						return r.GetRemove() != nil
+					func(rec *JournalRecord) bool {
+						return rec.GetRemove() != nil
 					},
 				)
 			},
@@ -216,8 +216,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 			func(stub *journaltest.JournalStub) {
 				journaltest.FailAfterAppend(
 					stub,
-					func(r *JournalRecord) bool {
-						return r.GetRemove() != nil
+					func(rec *JournalRecord) bool {
+						return rec.GetRemove() != nil
 					},
 				)
 			},

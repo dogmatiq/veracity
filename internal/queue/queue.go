@@ -305,7 +305,10 @@ func (q *Queue) load(ctx context.Context) error {
 			break
 		}
 
-		rec.GetOneOf().(journalRecord).apply(q)
+		type applyer interface {
+			apply(*Queue)
+		}
+		rec.GetOneOf().(applyer).apply(q)
 		q.version++
 	}
 
@@ -378,7 +381,7 @@ func (q *Queue) remove(e *elem) {
 }
 
 // append adds a record to the journal.
-func (q *Queue) append(ctx context.Context, r journalRecord) error {
+func (q *Queue) append(ctx context.Context, r isJournalRecord_OneOf) error {
 	ok, err := protojournal.Append(
 		ctx,
 		q.Journal,
@@ -397,9 +400,4 @@ func (q *Queue) append(ctx context.Context, r journalRecord) error {
 	q.version++
 
 	return nil
-}
-
-type journalRecord interface {
-	isJournalRecord_OneOf
-	apply(*Queue)
 }

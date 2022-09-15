@@ -119,11 +119,11 @@ func (i *instance) executeCommand(ctx context.Context, env *envelopespec.Envelop
 
 	i.Handler.HandleCommand(i.root, sc, cmd)
 
-	r := &JournalRecord_Revision{
+	rec := &JournalRecord_Revision{
 		Revision: rev,
 	}
 
-	if err := i.append(ctx, r); err != nil {
+	if err := i.append(ctx, rec); err != nil {
 		return fmt.Errorf("unable to record revision: %w", err)
 	}
 
@@ -137,11 +137,11 @@ func (x *JournalRecord_Revision) apply(i *instance) error {
 	i.commands[x.Revision.CommandId] = struct{}{}
 	i.unpublished = nil
 
-	for _, a := range x.Revision.Actions {
-		if r := a.GetRecordEvent(); r != nil {
-			i.unpublished = append(i.unpublished, r.Envelope)
+	for _, act := range x.Revision.Actions {
+		if rec := act.GetRecordEvent(); rec != nil {
+			i.unpublished = append(i.unpublished, rec.Envelope)
 
-			event, err := i.Packer.Unpack(r.Envelope)
+			event, err := i.Packer.Unpack(rec.Envelope)
 			if err != nil {
 				return fmt.Errorf("unable to unmarshal historical event: %w", err)
 			}
@@ -157,12 +157,8 @@ func (x *JournalRecord_Revision) apply(i *instance) error {
 func (i *instance) load(ctx context.Context) error {
 	i.commands = map[string]struct{}{}
 	i.root = i.Handler.New()
-
-	type applyer interface {
-		apply(*instance) error
-	}
-
 	rec := &JournalRecord{}
+
 	for {
 		ok, err := protojournal.Read(ctx, i.Journal, i.version, rec)
 		if err != nil {
@@ -172,6 +168,9 @@ func (i *instance) load(ctx context.Context) error {
 			break
 		}
 
+		type applyer interface {
+			apply(*instance) error
+		}
 		if err := rec.GetOneOf().(applyer).apply(i); err != nil {
 			return fmt.Errorf("unable to load instance: %w", err)
 		}
@@ -195,13 +194,13 @@ func (i *instance) load(ctx context.Context) error {
 }
 
 // append adds a record to the journal.
-func (i *instance) append(ctx context.Context, r isJournalRecord_OneOf) error {
+func (i *instance) append(ctx context.Context, rec isJournalRecord_OneOf) error {
 	ok, err := protojournal.Append(
 		ctx,
 		i.Journal,
 		i.version,
 		&JournalRecord{
-			OneOf: r,
+			OneOf: rec,
 		},
 	)
 	if err != nil {

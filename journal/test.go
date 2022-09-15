@@ -143,8 +143,8 @@ func RunTests(
 					)
 				}
 
-				for i, r := range expect {
-					ok, err := j.Append(ctx, uint64(i), r)
+				for ver, rec := range expect {
+					ok, err := j.Append(ctx, uint64(ver), rec)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -153,8 +153,8 @@ func RunTests(
 					}
 				}
 
-				for i, r := range expect {
-					actual, ok, err := j.Read(ctx, uint64(i))
+				for ver, rec := range expect {
+					actual, ok, err := j.Read(ctx, uint64(ver))
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -162,10 +162,10 @@ func RunTests(
 						t.Fatal("expected record to exist")
 					}
 
-					if !bytes.Equal(r, actual) {
+					if !bytes.Equal(rec, actual) {
 						t.Fatalf(
 							"unexpected record, want %q, got %q",
-							string(r),
+							string(rec),
 							string(actual),
 						)
 					}

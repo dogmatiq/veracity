@@ -34,7 +34,7 @@ func (s *EventStream) Append(
 		return err
 	}
 
-	r := &JournalRecord_Append{
+	rec := &JournalRecord_Append{
 		Append: &AppendRecord{
 			BeginOffset: s.offset,
 		},
@@ -49,18 +49,18 @@ func (s *EventStream) Append(
 			continue
 		}
 
-		r.Append.Envelopes = append(r.Append.Envelopes, env)
+		rec.Append.Envelopes = append(rec.Append.Envelopes, env)
 	}
 
-	if len(r.Append.Envelopes) == 0 {
+	if len(rec.Append.Envelopes) == 0 {
 		return nil
 	}
 
-	if err := s.append(ctx, r); err != nil {
+	if err := s.append(ctx, rec); err != nil {
 		return fmt.Errorf("unable to append event(s): %w", err)
 	}
 
-	for _, env := range r.Append.Envelopes {
+	for _, env := range rec.Append.Envelopes {
 		s.appendEvent(env)
 
 		s.Logger.Debug(
@@ -197,7 +197,10 @@ func (s *EventStream) load(ctx context.Context) error {
 			break
 		}
 
-		rec.GetOneOf().(journalRecord).apply(s)
+		type applyer interface {
+			apply(*EventStream)
+		}
+		rec.GetOneOf().(applyer).apply(s)
 		s.version++
 	}
 
@@ -211,13 +214,13 @@ func (s *EventStream) load(ctx context.Context) error {
 }
 
 // append adds a record to the journal.
-func (s *EventStream) append(ctx context.Context, r journalRecord) error {
+func (s *EventStream) append(ctx context.Context, rec isJournalRecord_OneOf) error {
 	ok, err := protojournal.Append(
 		ctx,
 		s.Journal,
 		s.version,
 		&JournalRecord{
-			OneOf: r,
+			OneOf: rec,
 		},
 	)
 	if err != nil {
@@ -230,9 +233,4 @@ func (s *EventStream) append(ctx context.Context, r journalRecord) error {
 	s.version++
 
 	return nil
-}
-
-type journalRecord interface {
-	isJournalRecord_OneOf
-	apply(s *EventStream)
 }
