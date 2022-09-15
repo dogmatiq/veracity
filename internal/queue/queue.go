@@ -8,6 +8,7 @@ import (
 
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/marshalkit"
+	"github.com/dogmatiq/veracity/internal/protojournal"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/journal"
 	"go.uber.org/zap"
@@ -18,7 +19,7 @@ import (
 // Queue is a durable priority queue of messages.
 type Queue struct {
 	// Journal is the journal used to store the queue's state.
-	Journal journal.Journal[*JournalRecord]
+	Journal journal.BinaryJournal
 
 	// DeriveIdempotencyKey is a function that derives the idempotency key to
 	// use for each message on the queue.
@@ -293,8 +294,10 @@ func (q *Queue) load(ctx context.Context) error {
 	q.elements = map[string]*elem{}
 	q.unreleased = map[string]*elem{}
 
+	var rec JournalRecord
+
 	for {
-		r, ok, err := q.Journal.Read(ctx, q.version)
+		ok, err := protojournal.Read(ctx, q.Journal, q.version, &rec)
 		if err != nil {
 			return fmt.Errorf("unable to load queue: %w", err)
 		}
@@ -302,18 +305,18 @@ func (q *Queue) load(ctx context.Context) error {
 			break
 		}
 
-		r.GetOneOf().(journalRecord).apply(q)
+		rec.GetOneOf().(journalRecord).apply(q)
 		q.version++
 	}
 
 	for _, e := range q.unreleased {
-		r := &JournalRecord_Release{
+		rec := &JournalRecord_Release{
 			Release: &ReleaseRecord{
 				IdempotencyKey: e.IdempotencyKey,
 			},
 		}
 
-		if err := q.write(ctx, r); err != nil {
+		if err := q.write(ctx, rec); err != nil {
 			return fmt.Errorf("unable to release message: %w", err)
 		}
 	}
@@ -376,8 +379,9 @@ func (q *Queue) remove(e *elem) {
 
 // write writes a record to the journal.
 func (q *Queue) write(ctx context.Context, r journalRecord) error {
-	ok, err := q.Journal.Write(
+	ok, err := protojournal.Write(
 		ctx,
+		q.Journal,
 		q.version,
 		&JournalRecord{
 			OneOf: r,

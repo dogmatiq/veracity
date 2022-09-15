@@ -25,7 +25,7 @@ var _ = Describe("type Queue (parallelism)", func() {
 		defer cancel()
 
 		packer := envelope.NewTestPacker()
-		journals := &memory.JournalStore[*JournalRecord]{}
+		journals := &memory.JournalStore[[]byte]{}
 
 		var (
 			parallelism = runtime.NumCPU()

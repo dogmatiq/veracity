@@ -8,12 +8,14 @@ import (
 	"github.com/dogmatiq/veracity/journal"
 )
 
+type BinaryJournalStub = JournalStub[[]byte]
+
 // JournalStub is a test implementation of the journal.Journal[R] interface.
 type JournalStub[R any] struct {
 	journal.Journal[R]
 
-	beforeWrite func(R) error
-	afterWrite  func(R) error
+	BeforeWrite func(R) error
+	AfterWrite  func(R) error
 }
 
 // Write adds a record to the journal.
@@ -26,8 +28,8 @@ type JournalStub[R any] struct {
 //
 // If ver is greater than the "next" version the behavior is undefined.
 func (j *JournalStub[R]) Write(ctx context.Context, ver uint64, rec R) (ok bool, err error) {
-	if j.beforeWrite != nil {
-		if err := j.beforeWrite(rec); err != nil {
+	if j.BeforeWrite != nil {
+		if err := j.BeforeWrite(rec); err != nil {
 			return false, err
 		}
 	}
@@ -39,8 +41,8 @@ func (j *JournalStub[R]) Write(ctx context.Context, ver uint64, rec R) (ok bool,
 		}
 	}
 
-	if j.afterWrite != nil {
-		if err := j.afterWrite(rec); err != nil {
+	if j.AfterWrite != nil {
+		if err := j.AfterWrite(rec); err != nil {
 			return false, err
 		}
 	}
@@ -58,7 +60,7 @@ func FailOnceBeforeWrite[R any](
 ) {
 	var done uint32
 
-	s.beforeWrite = func(rec R) error {
+	s.BeforeWrite = func(rec R) error {
 		if pred(rec) {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
 				return errors.New("<error>")
@@ -79,7 +81,7 @@ func FailOnceAfterWrite[R any](
 ) {
 	var done uint32
 
-	s.afterWrite = func(rec R) error {
+	s.AfterWrite = func(rec R) error {
 		if pred(rec) {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
 				return errors.New("<error>")

@@ -6,6 +6,7 @@ import (
 
 	. "github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/veracity/internal/envelope"
+	"github.com/dogmatiq/veracity/internal/protojournal"
 	. "github.com/dogmatiq/veracity/internal/queue"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/journal/journaltest"
@@ -18,7 +19,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 	var (
 		ctx      context.Context
 		packer   *envelope.Packer
-		journals *memory.JournalStore[*JournalRecord]
+		journals *memory.JournalStore[[]byte]
 	)
 
 	BeforeEach(func() {
@@ -27,14 +28,14 @@ var _ = Describe("type Queue (idempotence)", func() {
 		DeferCleanup(cancel)
 
 		packer = envelope.NewTestPacker()
-		journals = &memory.JournalStore[*JournalRecord]{}
+		journals = &memory.JournalStore[[]byte]{}
 	})
 
 	DescribeTable(
 		"it eventually removes each message",
 		func(
 			expectErr string,
-			setup func(*journaltest.JournalStub[*JournalRecord]),
+			setup func(*journaltest.BinaryJournalStub),
 		) {
 			messages := []Message{
 				{
@@ -48,7 +49,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 
 			tick := func(
 				ctx context.Context,
-				setup func(*journaltest.JournalStub[*JournalRecord]),
+				setup func(*journaltest.BinaryJournalStub),
 			) error {
 				j, err := journals.Open(ctx, "<queue>")
 				if err != nil {
@@ -56,7 +57,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 				}
 				defer j.Close()
 
-				stub := &journaltest.JournalStub[*JournalRecord]{
+				stub := &journaltest.BinaryJournalStub{
 					Journal: j,
 				}
 
@@ -104,7 +105,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 
 				Expect(err).To(MatchError(expectErr))
 				needError = false
-				setup = func(j *journaltest.JournalStub[*JournalRecord]) {}
+				setup = func(j *journaltest.BinaryJournalStub) {}
 			}
 
 			Expect(needError).To(BeFalse(), "process should fail with the expected error at least once")
@@ -124,13 +125,13 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"no faults",
 			"", // no error expected
-			func(stub *journaltest.JournalStub[*JournalRecord]) {},
+			func(stub *journaltest.BinaryJournalStub) {},
 		),
 		Entry(
 			"enqueue fails before journal record is written",
 			"unable to enqueue message(s): <error>",
-			func(stub *journaltest.JournalStub[*JournalRecord]) {
-				journaltest.FailOnceBeforeWrite(
+			func(stub *journaltest.BinaryJournalStub) {
+				protojournal.FailBeforeWrite(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetEnqueue() != nil
@@ -141,8 +142,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"enqueue fails after journal record is written",
 			"unable to enqueue message(s): <error>",
-			func(stub *journaltest.JournalStub[*JournalRecord]) {
-				journaltest.FailOnceAfterWrite(
+			func(stub *journaltest.BinaryJournalStub) {
+				protojournal.FailAfterWrite(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetEnqueue() != nil
@@ -153,8 +154,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"acquire fails before journal record is written",
 			"unable to acquire message: <error>",
-			func(stub *journaltest.JournalStub[*JournalRecord]) {
-				journaltest.FailOnceBeforeWrite(
+			func(stub *journaltest.BinaryJournalStub) {
+				protojournal.FailBeforeWrite(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetAcquire() != nil
@@ -165,8 +166,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"acquire fails after journal record is written",
 			"unable to acquire message: <error>",
-			func(stub *journaltest.JournalStub[*JournalRecord]) {
-				journaltest.FailOnceAfterWrite(
+			func(stub *journaltest.BinaryJournalStub) {
+				protojournal.FailAfterWrite(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetAcquire() != nil
@@ -177,8 +178,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"release fails before journal record is written",
 			"unable to release message: <error>",
-			func(stub *journaltest.JournalStub[*JournalRecord]) {
-				journaltest.FailOnceBeforeWrite(
+			func(stub *journaltest.BinaryJournalStub) {
+				protojournal.FailBeforeWrite(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetRelease() != nil
@@ -189,8 +190,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"release fails after journal record is written",
 			"unable to release message: <error>",
-			func(stub *journaltest.JournalStub[*JournalRecord]) {
-				journaltest.FailOnceAfterWrite(
+			func(stub *journaltest.BinaryJournalStub) {
+				protojournal.FailAfterWrite(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetRelease() != nil
@@ -201,8 +202,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"remove fails before journal record is written",
 			"unable to remove message: <error>",
-			func(stub *journaltest.JournalStub[*JournalRecord]) {
-				journaltest.FailOnceBeforeWrite(
+			func(stub *journaltest.BinaryJournalStub) {
+				protojournal.FailBeforeWrite(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetRemove() != nil
@@ -213,8 +214,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"remove fails after journal record is written",
 			"unable to remove message: <error>",
-			func(stub *journaltest.JournalStub[*JournalRecord]) {
-				journaltest.FailOnceAfterWrite(
+			func(stub *journaltest.BinaryJournalStub) {
+				protojournal.FailAfterWrite(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetRemove() != nil
