@@ -13,8 +13,8 @@ import (
 	"github.com/dogmatiq/veracity/persistence/internal/awsx"
 )
 
-// JournalStore is an implementation of journal.BinaryStore that contains
-// journals that persist records in a DynamoDB table.
+// JournalStore is an implementation of journal.Store that contains journals
+// that persist records in a DynamoDB table.
 type JournalStore struct {
 	// DB is the DynamoDB client to use.
 	DB *dynamodb.DynamoDB

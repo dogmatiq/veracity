@@ -7,9 +7,9 @@ import (
 	"github.com/dogmatiq/veracity/journal"
 )
 
-// StoreStub is a test implementation of the journal.BinaryStore interface.
+// StoreStub is a test implementation of the journal.Store interface.
 type StoreStub struct {
-	journal.BinaryStore
+	journal.Store
 
 	OpenFunc func(ctx context.Context, path ...string) (journal.Journal, error)
 }
@@ -20,8 +20,8 @@ func (s *StoreStub) Open(ctx context.Context, path ...string) (journal.Journal, 
 		return s.OpenFunc(ctx, path...)
 	}
 
-	if s.BinaryStore != nil {
-		return s.BinaryStore.Open(ctx, path...)
+	if s.Store != nil {
+		return s.Store.Open(ctx, path...)
 	}
 
 	return nil, errors.New("<not implemented>")

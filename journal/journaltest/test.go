@@ -14,9 +14,9 @@ import (
 // RunTests runs tests that confirm a journal implementation behaves correctly.
 func RunTests(
 	t *testing.T,
-	newStore func(t *testing.T) journal.BinaryStore,
+	newStore func(t *testing.T) journal.Store,
 ) {
-	t.Run("type BinaryStore", func(t *testing.T) {
+	t.Run("type Store", func(t *testing.T) {
 		t.Run("func Open()", func(t *testing.T) {
 			t.Run("does not perform naive path concatenation", func(t *testing.T) {
 				store := newStore(t)
@@ -343,7 +343,7 @@ func RunTests(
 
 func setup(
 	t *testing.T,
-	newStore func(t *testing.T) journal.BinaryStore,
+	newStore func(t *testing.T) journal.Store,
 ) (context.Context, journal.Journal) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	t.Cleanup(cancel)

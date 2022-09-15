@@ -9,8 +9,8 @@ import (
 	"github.com/dogmatiq/veracity/journal"
 )
 
-// JournalStore is an implementation of journal.BinaryStore that stores journal
-// in memory.
+// JournalStore is an implementation of journal.Store that stores journal in
+// memory.
 type JournalStore struct {
 	journals sync.Map // map[string]*journalState
 }
