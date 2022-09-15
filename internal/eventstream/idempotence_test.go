@@ -8,9 +8,8 @@ import (
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	. "github.com/dogmatiq/veracity/internal/eventstream"
-	"github.com/dogmatiq/veracity/internal/protojournal"
+	"github.com/dogmatiq/veracity/internal/journaltest"
 	"github.com/dogmatiq/veracity/internal/zapx"
-	"github.com/dogmatiq/veracity/journal/journaltest"
 	"github.com/dogmatiq/veracity/persistence/memory"
 	. "github.com/jmalloc/gomegax"
 	. "github.com/onsi/ginkgo/v2"
@@ -124,7 +123,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 			"append fails before journal record is written",
 			"unable to append event(s): <error>",
 			func(stub *journaltest.JournalStub) {
-				protojournal.FailBeforeWrite(
+				journaltest.FailBeforeWrite(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetAppend() != nil
@@ -136,7 +135,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 			"append fails after journal record is written",
 			"unable to append event(s): <error>",
 			func(stub *journaltest.JournalStub) {
-				protojournal.FailAfterWrite(
+				journaltest.FailAfterWrite(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetAppend() != nil

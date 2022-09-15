@@ -13,10 +13,9 @@ import (
 	. "github.com/dogmatiq/veracity/internal/aggregate"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/eventstream"
-	"github.com/dogmatiq/veracity/internal/protojournal"
+	"github.com/dogmatiq/veracity/internal/journaltest"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/journal"
-	"github.com/dogmatiq/veracity/journal/journaltest"
 	"github.com/dogmatiq/veracity/persistence/memory"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -204,7 +203,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			"revision fails before journal record is written",
 			"unable to record revision: <error>",
 			func(events, instances *journaltest.JournalStub) {
-				protojournal.FailBeforeWrite(
+				journaltest.FailBeforeWrite(
 					instances,
 					func(r *JournalRecord) bool {
 						return r.GetRevision() != nil
@@ -216,7 +215,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			"revision fails after journal record is written",
 			"unable to record revision: <error>",
 			func(events, instances *journaltest.JournalStub) {
-				protojournal.FailAfterWrite(
+				journaltest.FailAfterWrite(
 					instances,
 					func(r *JournalRecord) bool {
 						return r.GetRevision() != nil
@@ -228,7 +227,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			"event stream append fails before journal record is written",
 			"unable to append event(s): <error>",
 			func(events, instances *journaltest.JournalStub) {
-				protojournal.FailBeforeWrite(
+				journaltest.FailBeforeWrite(
 					events,
 					func(r *eventstream.JournalRecord) bool {
 						return r.GetAppend() != nil
@@ -240,7 +239,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			"event stream append fails after journal record is written",
 			"unable to append event(s): <error>",
 			func(events, instances *journaltest.JournalStub) {
-				protojournal.FailAfterWrite(
+				journaltest.FailAfterWrite(
 					events,
 					func(r *eventstream.JournalRecord) bool {
 						return r.GetAppend() != nil

@@ -6,10 +6,9 @@ import (
 
 	. "github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/veracity/internal/envelope"
-	"github.com/dogmatiq/veracity/internal/protojournal"
+	"github.com/dogmatiq/veracity/internal/journaltest"
 	. "github.com/dogmatiq/veracity/internal/queue"
 	"github.com/dogmatiq/veracity/internal/zapx"
-	"github.com/dogmatiq/veracity/journal/journaltest"
 	"github.com/dogmatiq/veracity/persistence/memory"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -131,7 +130,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"enqueue fails before journal record is written",
 			"unable to enqueue message(s): <error>",
 			func(stub *journaltest.JournalStub) {
-				protojournal.FailBeforeWrite(
+				journaltest.FailBeforeWrite(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetEnqueue() != nil
@@ -143,7 +142,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"enqueue fails after journal record is written",
 			"unable to enqueue message(s): <error>",
 			func(stub *journaltest.JournalStub) {
-				protojournal.FailAfterWrite(
+				journaltest.FailAfterWrite(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetEnqueue() != nil
@@ -155,7 +154,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"acquire fails before journal record is written",
 			"unable to acquire message: <error>",
 			func(stub *journaltest.JournalStub) {
-				protojournal.FailBeforeWrite(
+				journaltest.FailBeforeWrite(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetAcquire() != nil
@@ -167,7 +166,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"acquire fails after journal record is written",
 			"unable to acquire message: <error>",
 			func(stub *journaltest.JournalStub) {
-				protojournal.FailAfterWrite(
+				journaltest.FailAfterWrite(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetAcquire() != nil
@@ -179,7 +178,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"release fails before journal record is written",
 			"unable to release message: <error>",
 			func(stub *journaltest.JournalStub) {
-				protojournal.FailBeforeWrite(
+				journaltest.FailBeforeWrite(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetRelease() != nil
@@ -191,7 +190,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"release fails after journal record is written",
 			"unable to release message: <error>",
 			func(stub *journaltest.JournalStub) {
-				protojournal.FailAfterWrite(
+				journaltest.FailAfterWrite(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetRelease() != nil
@@ -203,7 +202,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"remove fails before journal record is written",
 			"unable to remove message: <error>",
 			func(stub *journaltest.JournalStub) {
-				protojournal.FailBeforeWrite(
+				journaltest.FailBeforeWrite(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetRemove() != nil
@@ -215,7 +214,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 			"remove fails after journal record is written",
 			"unable to remove message: <error>",
 			func(stub *journaltest.JournalStub) {
-				protojournal.FailAfterWrite(
+				journaltest.FailAfterWrite(
 					stub,
 					func(r *JournalRecord) bool {
 						return r.GetRemove() != nil
