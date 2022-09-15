@@ -28,7 +28,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 	var (
 		ctx      context.Context
 		packer   *envelope.Packer
-		journals *memory.JournalStore[[]byte]
+		journals *memory.JournalStore
 	)
 
 	BeforeEach(func() {
@@ -37,7 +37,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		DeferCleanup(cancel)
 
 		packer = envelope.NewTestPacker()
-		journals = &memory.JournalStore[[]byte]{}
+		journals = &memory.JournalStore{}
 	})
 
 	DescribeTable(
@@ -77,11 +77,11 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 						},
 					},
 					Packer: packer,
-					JournalStore: &journaltest.StoreStub[[]byte]{
+					JournalStore: &journaltest.StoreStub{
 						OpenFunc: func(
 							ctx context.Context,
 							path ...string,
-						) (journal.Journal[[]byte], error) {
+						) (journal.BinaryJournal, error) {
 							if !slices.Equal(
 								path,
 								[]string{

@@ -24,7 +24,7 @@ var _ = Describe("type EventStream (parallelism)", func() {
 		defer cancel()
 
 		packer := envelope.NewTestPacker()
-		journals := &memory.JournalStore[[]byte]{}
+		journals := &memory.JournalStore{}
 
 		var (
 			parallelism = runtime.NumCPU()

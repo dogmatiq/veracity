@@ -21,7 +21,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 	var (
 		ctx      context.Context
 		packer   *envelope.Packer
-		journals *memory.JournalStore[[]byte]
+		journals *memory.JournalStore
 	)
 
 	BeforeEach(func() {
@@ -30,7 +30,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 		DeferCleanup(cancel)
 
 		packer = envelope.NewTestPacker()
-		journals = &memory.JournalStore[[]byte]{}
+		journals = &memory.JournalStore{}
 	})
 
 	DescribeTable(

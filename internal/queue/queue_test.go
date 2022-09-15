@@ -32,7 +32,7 @@ var _ = Describe("type Queue", func() {
 		packer = envelope.NewTestPacker()
 
 		queue = &Queue{
-			Journal: memory.NewJournal[[]byte](),
+			Journal: memory.NewJournal(),
 			Logger:  zapx.NewTesting("queue"),
 		}
 	})

@@ -12,7 +12,7 @@ func TestJournal(t *testing.T) {
 	journaltest.RunTests(
 		t,
 		func(t *testing.T) journal.BinaryStore {
-			return &JournalStore[[]byte]{}
+			return &JournalStore{}
 		},
 	)
 }

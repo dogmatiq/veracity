@@ -30,7 +30,7 @@ var _ = Describe("type EventStream", func() {
 		packer = envelope.NewTestPacker()
 
 		stream = &EventStream{
-			Journal: memory.NewJournal[[]byte](),
+			Journal: memory.NewJournal(),
 			Logger:  zapx.NewTesting("eventstream"),
 		}
 	})

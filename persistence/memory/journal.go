@@ -9,10 +9,10 @@ import (
 	"github.com/dogmatiq/veracity/journal"
 )
 
-// JournalStore is an implementation of journal.Store[R] that contains in-memory
-// journals.
-type JournalStore[R any] struct {
-	journals sync.Map // map[string]*journalState[R]
+// JournalStore is an implementation of journal.BinaryStore that stores journal
+// in memory.
+type JournalStore struct {
+	journals sync.Map // map[string]*journalState
 }
 
 // Open returns the journal at the given path.
@@ -21,45 +21,45 @@ type JournalStore[R any] struct {
 // must be a non-empty UTF-8 string consisting solely of printable Unicode
 // characters, excluding whitespace. A printable character is any character from
 // the Letter, Mark, Number, Punctuation or Symbol categories.
-func (s *JournalStore[R]) Open(ctx context.Context, path ...string) (journal.Journal[R], error) {
+func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.BinaryJournal, error) {
 	key := keyFromJournalPath(path)
 	state, ok := s.journals.Load(key)
 
 	if !ok {
 		state, _ = s.journals.LoadOrStore(
 			key,
-			&journalState[R]{},
+			&journalState{},
 		)
 	}
 
-	return &journalHandle[R]{
-		state: state.(*journalState[R]),
+	return &journalHandle{
+		state: state.(*journalState),
 	}, ctx.Err()
 }
 
 // NewJournal returns a new standalone journal.
-func NewJournal[R any]() journal.Journal[R] {
-	return &journalHandle[R]{
-		state: &journalState[R]{},
+func NewJournal() journal.BinaryJournal {
+	return &journalHandle{
+		state: &journalState{},
 	}
 }
 
 // journalState stores the underlying state of a journal.
-type journalState[R any] struct {
+type journalState struct {
 	sync.RWMutex
 
 	Begin   uint64
 	End     uint64
-	Records []R
+	Records [][]byte
 }
 
 // journalHandle is an implementation of journal.Journal[R] that accesses
 // journal state.
-type journalHandle[R any] struct {
-	state *journalState[R]
+type journalHandle struct {
+	state *journalState
 }
 
-func (h *journalHandle[R]) Read(ctx context.Context, ver uint64) (R, bool, error) {
+func (h *journalHandle) Read(ctx context.Context, ver uint64) ([]byte, bool, error) {
 	if h.state == nil {
 		panic("journal is closed")
 	}
@@ -68,14 +68,13 @@ func (h *journalHandle[R]) Read(ctx context.Context, ver uint64) (R, bool, error
 	defer h.state.RUnlock()
 
 	if ver < h.state.Begin || ver >= h.state.End {
-		var zero R
-		return zero, false, nil
+		return nil, false, nil
 	}
 
 	return h.state.Records[ver-h.state.Begin], true, ctx.Err()
 }
 
-func (h *journalHandle[R]) ReadOldest(ctx context.Context) (uint64, R, bool, error) {
+func (h *journalHandle) ReadOldest(ctx context.Context) (uint64, []byte, bool, error) {
 	if h.state == nil {
 		panic("journal is closed")
 	}
@@ -84,14 +83,13 @@ func (h *journalHandle[R]) ReadOldest(ctx context.Context) (uint64, R, bool, err
 	defer h.state.RUnlock()
 
 	if h.state.Begin == h.state.End {
-		var zero R
-		return 0, zero, false, ctx.Err()
+		return 0, nil, false, ctx.Err()
 	}
 
 	return h.state.Begin, h.state.Records[0], true, ctx.Err()
 }
 
-func (h *journalHandle[R]) Write(ctx context.Context, ver uint64, rec R) (bool, error) {
+func (h *journalHandle) Write(ctx context.Context, ver uint64, rec []byte) (bool, error) {
 	if h.state == nil {
 		panic("journal is closed")
 	}
@@ -111,7 +109,7 @@ func (h *journalHandle[R]) Write(ctx context.Context, ver uint64, rec R) (bool, 
 	}
 }
 
-func (h *journalHandle[R]) Truncate(ctx context.Context, ver uint64) error {
+func (h *journalHandle) Truncate(ctx context.Context, ver uint64) error {
 	if h.state == nil {
 		panic("journal is closed")
 	}
@@ -131,7 +129,7 @@ func (h *journalHandle[R]) Truncate(ctx context.Context, ver uint64) error {
 	return ctx.Err()
 }
 
-func (h *journalHandle[R]) Close() error {
+func (h *journalHandle) Close() error {
 	if h.state == nil {
 		return errors.New("journal is already closed")
 	}
