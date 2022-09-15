@@ -58,7 +58,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 				defer j.Close()
 
 				stub := &journaltest.JournalStub{
-					BinaryJournal: j,
+					Journal: j,
 				}
 
 				setup(stub)

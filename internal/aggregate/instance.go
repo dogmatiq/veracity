@@ -35,7 +35,7 @@ type instance struct {
 	Packer *envelope.Packer
 
 	// Journal is the journal used to store the instance's state.
-	Journal journal.BinaryJournal
+	Journal journal.Journal
 
 	// EventAppender is used to append events to the global event stream.
 	EventAppender EventAppender

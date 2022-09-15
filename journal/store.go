@@ -16,7 +16,7 @@ type BinaryStore interface {
 	// Unicode characters, excluding whitespace. A printable character is any
 	// character from the Letter, Mark, Number, Punctuation or Symbol
 	// categories.
-	Open(ctx context.Context, path ...string) (BinaryJournal, error)
+	Open(ctx context.Context, path ...string) (Journal, error)
 }
 
 // Store is a database of journals.
@@ -31,5 +31,5 @@ type Store[R any] interface {
 	// Unicode characters, excluding whitespace. A printable character is any
 	// character from the Letter, Mark, Number, Punctuation or Symbol
 	// categories.
-	Open(ctx context.Context, path ...string) (BinaryJournal, error)
+	Open(ctx context.Context, path ...string) (Journal, error)
 }

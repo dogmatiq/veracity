@@ -11,11 +11,11 @@ import (
 type StoreStub struct {
 	journal.BinaryStore
 
-	OpenFunc func(ctx context.Context, path ...string) (journal.BinaryJournal, error)
+	OpenFunc func(ctx context.Context, path ...string) (journal.Journal, error)
 }
 
 // Open returns the journal at the given path.
-func (s *StoreStub) Open(ctx context.Context, path ...string) (journal.BinaryJournal, error) {
+func (s *StoreStub) Open(ctx context.Context, path ...string) (journal.Journal, error) {
 	if s.OpenFunc != nil {
 		return s.OpenFunc(ctx, path...)
 	}

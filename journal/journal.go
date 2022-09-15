@@ -4,8 +4,8 @@ import (
 	"context"
 )
 
-// A BinaryJournal is an append-only log of binary records.
-type BinaryJournal interface {
+// A Journal is an append-only log of binary records.
+type Journal interface {
 	// Read returns the record written to produce the given version of the
 	// journal.
 	//

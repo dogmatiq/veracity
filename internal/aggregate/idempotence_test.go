@@ -59,7 +59,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 				defer j.Close()
 
 				eventJournal := &journaltest.JournalStub{
-					BinaryJournal: j,
+					Journal: j,
 				}
 
 				exec := &CommandExecutor{
@@ -81,7 +81,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 						OpenFunc: func(
 							ctx context.Context,
 							path ...string,
-						) (journal.BinaryJournal, error) {
+						) (journal.Journal, error) {
 							if !slices.Equal(
 								path,
 								[]string{
@@ -99,7 +99,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 							}
 
 							stub := &journaltest.JournalStub{
-								BinaryJournal: j,
+								Journal: j,
 							}
 
 							setup(eventJournal, stub)

@@ -11,7 +11,7 @@ import (
 // Read reads a record from j and unmarshals it into rec.
 func Read(
 	ctx context.Context,
-	j journal.BinaryJournal,
+	j journal.Journal,
 	ver uint64,
 	rec proto.Message,
 ) (bool, error) {
@@ -26,7 +26,7 @@ func Read(
 // Write marshals rec to its binary representation and writes it to j.
 func Write(
 	ctx context.Context,
-	j journal.BinaryJournal,
+	j journal.Journal,
 	ver uint64,
 	rec proto.Message,
 ) (bool, error) {

@@ -15,7 +15,7 @@ import (
 // EventStream is a durable, chronologically ordered stream of event messages.
 type EventStream struct {
 	// Journal is the journal used to store the queue's state.
-	Journal journal.BinaryJournal
+	Journal journal.Journal
 
 	// Logger is the target for log messages about changes to the event stream.
 	Logger *zap.Logger

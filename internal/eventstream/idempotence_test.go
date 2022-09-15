@@ -53,7 +53,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 				defer j.Close()
 
 				stub := &journaltest.JournalStub{
-					BinaryJournal: j,
+					Journal: j,
 				}
 
 				setup(stub)

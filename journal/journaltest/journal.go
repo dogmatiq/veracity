@@ -6,9 +6,9 @@ import (
 	"github.com/dogmatiq/veracity/journal"
 )
 
-// JournalStub is a test implementation of the journal.BinaryJournal interface.
+// JournalStub is a test implementation of the journal.Journal interface.
 type JournalStub struct {
-	journal.BinaryJournal
+	journal.Journal
 
 	BeforeWrite func([]byte) error
 	AfterWrite  func([]byte) error
@@ -30,8 +30,8 @@ func (j *JournalStub) Write(ctx context.Context, ver uint64, rec []byte) (ok boo
 		}
 	}
 
-	if j.BinaryJournal != nil {
-		ok, err := j.BinaryJournal.Write(ctx, ver, rec)
+	if j.Journal != nil {
+		ok, err := j.Journal.Write(ctx, ver, rec)
 		if !ok || err != nil {
 			return false, err
 		}

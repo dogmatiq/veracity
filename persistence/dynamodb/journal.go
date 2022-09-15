@@ -57,10 +57,10 @@ type JournalStore struct {
 // must be a non-empty UTF-8 string consisting solely of printable Unicode
 // characters, excluding whitespace. A printable character is any character from
 // the Letter, Mark, Number, Punctuation or Symbol categories.
-func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.BinaryJournal, error) {
+func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journal, error) {
 	key := keyFromJournalPath(path)
 
-	j := &binaryJournal{
+	j := &journalHandle{
 		DB:                 s.DB,
 		DecorateGetItem:    s.DecorateGetItem,
 		DecorateQuery:      s.DecorateQuery,
@@ -121,9 +121,9 @@ func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Binary
 	return j, nil
 }
 
-// binaryJournal is an implementation of journal.BinaryJournal that stores
-// records in a DynamoDB table.
-type binaryJournal struct {
+// journalHandle is an implementation of journal.Journal that stores records in
+// a DynamoDB table.
+type journalHandle struct {
 	DB                 *dynamodb.DynamoDB
 	DecorateGetItem    func(*dynamodb.GetItemInput) []request.Option
 	DecorateQuery      func(*dynamodb.QueryInput) []request.Option
@@ -141,7 +141,7 @@ type binaryJournal struct {
 	DeleteRequest dynamodb.DeleteItemInput
 }
 
-func (j *binaryJournal) Read(ctx context.Context, ver uint64) ([]byte, bool, error) {
+func (j *journalHandle) Read(ctx context.Context, ver uint64) ([]byte, bool, error) {
 	j.Version.N = aws.String(strconv.FormatUint(ver, 10))
 
 	out, err := awsx.Do(
@@ -157,11 +157,11 @@ func (j *binaryJournal) Read(ctx context.Context, ver uint64) ([]byte, bool, err
 	return out.Item[journalRecordAttr].B, true, nil
 }
 
-func (j *binaryJournal) ReadOldest(ctx context.Context) (uint64, []byte, bool, error) {
+func (j *journalHandle) ReadOldest(ctx context.Context) (uint64, []byte, bool, error) {
 	return j.readOldest(ctx, true)
 }
 
-func (j *binaryJournal) Write(ctx context.Context, ver uint64, rec []byte) (bool, error) {
+func (j *journalHandle) Write(ctx context.Context, ver uint64, rec []byte) (bool, error) {
 	j.Version.N = aws.String(strconv.FormatUint(ver, 10))
 	j.Record.B = rec
 
@@ -179,7 +179,7 @@ func (j *binaryJournal) Write(ctx context.Context, ver uint64, rec []byte) (bool
 	return true, err
 }
 
-func (j *binaryJournal) Truncate(ctx context.Context, ver uint64) error {
+func (j *journalHandle) Truncate(ctx context.Context, ver uint64) error {
 	oldest, _, ok, err := j.readOldest(ctx, false)
 	if !ok || err != nil {
 		return err
@@ -203,11 +203,11 @@ func (j *binaryJournal) Truncate(ctx context.Context, ver uint64) error {
 	return nil
 }
 
-func (j *binaryJournal) Close() error {
+func (j *journalHandle) Close() error {
 	return nil
 }
 
-func (j *binaryJournal) readOldest(
+func (j *journalHandle) readOldest(
 	ctx context.Context,
 	fetchRecord bool,
 ) (uint64, []byte, bool, error) {

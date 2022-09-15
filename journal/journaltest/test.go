@@ -113,7 +113,7 @@ func RunTests(
 		})
 	})
 
-	t.Run("type BinaryJournal", func(t *testing.T) {
+	t.Run("type Journal", func(t *testing.T) {
 		t.Run("func Read()", func(t *testing.T) {
 			t.Run("it returns false if the version doesn't exist", func(t *testing.T) {
 				t.Parallel()
@@ -344,7 +344,7 @@ func RunTests(
 func setup(
 	t *testing.T,
 	newStore func(t *testing.T) journal.BinaryStore,
-) (context.Context, journal.BinaryJournal) {
+) (context.Context, journal.Journal) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	t.Cleanup(cancel)
 

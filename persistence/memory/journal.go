@@ -21,7 +21,7 @@ type JournalStore struct {
 // must be a non-empty UTF-8 string consisting solely of printable Unicode
 // characters, excluding whitespace. A printable character is any character from
 // the Letter, Mark, Number, Punctuation or Symbol categories.
-func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.BinaryJournal, error) {
+func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journal, error) {
 	key := keyFromJournalPath(path)
 	state, ok := s.journals.Load(key)
 
@@ -38,7 +38,7 @@ func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Binary
 }
 
 // NewJournal returns a new standalone journal.
-func NewJournal() journal.BinaryJournal {
+func NewJournal() journal.Journal {
 	return &journalHandle{
 		state: &journalState{},
 	}

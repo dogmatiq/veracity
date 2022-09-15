@@ -19,7 +19,7 @@ import (
 // Queue is a durable priority queue of messages.
 type Queue struct {
 	// Journal is the journal used to store the queue's state.
-	Journal journal.BinaryJournal
+	Journal journal.Journal
 
 	// DeriveIdempotencyKey is a function that derives the idempotency key to
 	// use for each message on the queue.
