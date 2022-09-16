@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"strconv"
-	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/dogmatiq/veracity/journal"
 	"github.com/dogmatiq/veracity/persistence/internal/awsx"
+	"github.com/dogmatiq/veracity/persistence/internal/pathkey"
 )
 
 // JournalStore is an implementation of journal.Store that contains journals
@@ -51,6 +51,12 @@ type JournalStore struct {
 	DecorateDeleteItem func(*dynamodb.DeleteItemInput) []request.Option
 }
 
+const (
+	journalKeyAttr     = "Key"
+	journalVersionAttr = "Version"
+	journalRecordAttr  = "Record"
+)
+
 // Open returns the journal at the given path.
 //
 // The path uniquely identifies the journal. It must not be empty. Each element
@@ -58,7 +64,7 @@ type JournalStore struct {
 // characters, excluding whitespace. A printable character is any character from
 // the Letter, Mark, Number, Punctuation or Symbol categories.
 func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journal, error) {
-	key := keyFromJournalPath(path)
+	key := pathkey.New(path)
 
 	j := &journalHandle{
 		DB:                 s.DB,
@@ -302,38 +308,4 @@ func CreateJournalTable(
 	}
 
 	return err
-}
-
-const (
-	journalKeyAttr     = "Key"
-	journalVersionAttr = "Version"
-	journalRecordAttr  = "Record"
-)
-
-func keyFromJournalPath(path []string) string {
-	if len(path) == 0 {
-		panic("path must not be empty")
-	}
-
-	var w strings.Builder
-
-	for _, elem := range path {
-		if len(elem) == 0 {
-			panic("path element must not be empty")
-		}
-
-		if w.Len() > 0 {
-			w.WriteByte('/')
-		}
-
-		for _, r := range elem {
-			if r == '/' || r == '\\' {
-				w.WriteByte('\\')
-			}
-
-			w.WriteRune(r)
-		}
-	}
-
-	return w.String()
 }
