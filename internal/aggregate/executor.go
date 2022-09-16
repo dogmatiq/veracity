@@ -9,7 +9,7 @@ import (
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/fsm"
-	"github.com/dogmatiq/veracity/journal"
+	"github.com/dogmatiq/veracity/persistence/journal"
 	"go.uber.org/zap"
 )
 

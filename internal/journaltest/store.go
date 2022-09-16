@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/dogmatiq/veracity/journal"
+	"github.com/dogmatiq/veracity/persistence/journal"
 )
 
 // StoreStub is a test implementation of the journal.Store interface.

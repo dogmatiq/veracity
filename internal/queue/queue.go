@@ -10,7 +10,7 @@ import (
 	"github.com/dogmatiq/marshalkit"
 	"github.com/dogmatiq/veracity/internal/protojournal"
 	"github.com/dogmatiq/veracity/internal/zapx"
-	"github.com/dogmatiq/veracity/journal"
+	"github.com/dogmatiq/veracity/persistence/journal"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"

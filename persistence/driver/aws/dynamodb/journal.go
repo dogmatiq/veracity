@@ -8,9 +8,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/dogmatiq/veracity/journal"
-	"github.com/dogmatiq/veracity/persistence/internal/awsx"
+	"github.com/dogmatiq/veracity/persistence/driver/aws/internal/awsx"
 	"github.com/dogmatiq/veracity/persistence/internal/pathkey"
+	"github.com/dogmatiq/veracity/persistence/journal"
 )
 
 // JournalStore is an implementation of journal.Store that contains journals

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/dogmatiq/veracity/journal"
 	"github.com/dogmatiq/veracity/persistence/internal/pathkey"
+	"github.com/dogmatiq/veracity/persistence/journal"
 )
 
 // JournalStore is an implementation of journal.Store that stores journal in

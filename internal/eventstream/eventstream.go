@@ -8,7 +8,7 @@ import (
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/internal/protojournal"
 	"github.com/dogmatiq/veracity/internal/zapx"
-	"github.com/dogmatiq/veracity/journal"
+	"github.com/dogmatiq/veracity/persistence/journal"
 	"go.uber.org/zap"
 )
 

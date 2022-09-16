@@ -5,7 +5,7 @@ import (
 	"errors"
 	"reflect"
 
-	"github.com/dogmatiq/veracity/journal"
+	"github.com/dogmatiq/veracity/persistence/journal"
 	"google.golang.org/protobuf/proto"
 )
 
