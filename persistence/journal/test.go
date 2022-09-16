@@ -48,7 +48,7 @@ func RunTests(
 						t.Fatal("unexpected optimistic concurrency conflict")
 					}
 
-					actual, ok, err := j.Read(ctx, 0)
+					actual, ok, err := j.Get(ctx, 0)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -93,7 +93,7 @@ func RunTests(
 					t.Fatal("unexpected optimistic concurrency conflict")
 				}
 
-				actual, ok, err := j2.Read(ctx, 0)
+				actual, ok, err := j2.Get(ctx, 0)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -113,13 +113,13 @@ func RunTests(
 	})
 
 	t.Run("type Journal", func(t *testing.T) {
-		t.Run("func Read()", func(t *testing.T) {
+		t.Run("func Get()", func(t *testing.T) {
 			t.Run("it returns false if the version doesn't exist", func(t *testing.T) {
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
 
-				_, ok, err := j.Read(ctx, 1)
+				_, ok, err := j.Get(ctx, 1)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -154,7 +154,7 @@ func RunTests(
 				}
 
 				for ver, rec := range expect {
-					actual, ok, err := j.Read(ctx, uint64(ver))
+					actual, ok, err := j.Get(ctx, uint64(ver))
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -320,7 +320,7 @@ func RunTests(
 					t.Fatal("expected an optimistic concurrency conflict")
 				}
 
-				actual, ok, err := j.Read(ctx, 1)
+				actual, ok, err := j.Get(ctx, 1)
 				if err != nil {
 					t.Fatal(err)
 				}

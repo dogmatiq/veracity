@@ -93,7 +93,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 
 			stream := &EventStream{
 				Journal: j,
-				Logger:  zapx.NewTesting("eventstream-read"),
+				Logger:  zapx.NewTesting("eventstream-get"),
 			}
 
 			var envelopes []*envelopespec.Envelope

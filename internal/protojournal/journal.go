@@ -8,14 +8,14 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Read reads a record from j and unmarshals it into rec.
-func Read(
+// Get reads a record from j and unmarshals it into rec.
+func Get(
 	ctx context.Context,
 	j journal.Journal,
 	ver uint64,
 	rec proto.Message,
 ) (bool, error) {
-	data, ok, err := j.Read(ctx, ver)
+	data, ok, err := j.Get(ctx, ver)
 	if !ok || err != nil {
 		return false, err
 	}

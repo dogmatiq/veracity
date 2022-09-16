@@ -115,7 +115,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 
 			queue := &Queue{
 				Journal: j,
-				Logger:  zapx.NewTesting("queue-read"),
+				Logger:  zapx.NewTesting("queue-get"),
 			}
 			_, ok, err := queue.Acquire(ctx)
 			Expect(err).ShouldNot(HaveOccurred())

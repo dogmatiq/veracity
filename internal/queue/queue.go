@@ -297,7 +297,7 @@ func (q *Queue) load(ctx context.Context) error {
 	rec := &JournalRecord{}
 
 	for {
-		ok, err := protojournal.Read(ctx, q.Journal, q.version, rec)
+		ok, err := protojournal.Get(ctx, q.Journal, q.version, rec)
 		if err != nil {
 			return fmt.Errorf("unable to load queue: %w", err)
 		}

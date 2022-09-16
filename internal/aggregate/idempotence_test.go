@@ -173,7 +173,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 
 			events := &eventstream.EventStream{
 				Journal: eventJournal,
-				Logger:  zapx.NewTesting("eventstream-read"),
+				Logger:  zapx.NewTesting("eventstream-get"),
 			}
 
 			var actual []*envelopespec.Envelope

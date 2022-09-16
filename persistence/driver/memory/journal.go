@@ -59,7 +59,7 @@ type journalHandle struct {
 	state *journalState
 }
 
-func (h *journalHandle) Read(ctx context.Context, ver uint64) ([]byte, bool, error) {
+func (h *journalHandle) Get(ctx context.Context, ver uint64) ([]byte, bool, error) {
 	if h.state == nil {
 		panic("journal is closed")
 	}

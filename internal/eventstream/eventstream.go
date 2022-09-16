@@ -124,7 +124,7 @@ func (s *EventStream) Range(
 	for {
 		ver++
 
-		ok, err := protojournal.Read(ctx, s.Journal, ver, rec)
+		ok, err := protojournal.Get(ctx, s.Journal, ver, rec)
 		if !ok || err != nil {
 			return err
 		}
@@ -152,7 +152,7 @@ func (s *EventStream) search(
 	rec := &JournalRecord{}
 
 	if offset == 0 {
-		_, err := protojournal.Read(ctx, s.Journal, 0, rec)
+		_, err := protojournal.Get(ctx, s.Journal, 0, rec)
 		return rec, 0, err
 	}
 
@@ -162,7 +162,7 @@ func (s *EventStream) search(
 	for {
 		ver := min>>1 + max>>1
 
-		_, err := protojournal.Read(ctx, s.Journal, ver, rec)
+		_, err := protojournal.Get(ctx, s.Journal, ver, rec)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -189,7 +189,7 @@ func (s *EventStream) load(ctx context.Context) error {
 	rec := &JournalRecord{}
 
 	for {
-		ok, err := protojournal.Read(ctx, s.Journal, s.version, rec)
+		ok, err := protojournal.Get(ctx, s.Journal, s.version, rec)
 		if err != nil {
 			return fmt.Errorf("unable to load event stream: %w", err)
 		}

@@ -147,7 +147,7 @@ type journalHandle struct {
 	DeleteRequest dynamodb.DeleteItemInput
 }
 
-func (j *journalHandle) Read(ctx context.Context, ver uint64) ([]byte, bool, error) {
+func (j *journalHandle) Get(ctx context.Context, ver uint64) ([]byte, bool, error) {
 	j.Version.N = aws.String(strconv.FormatUint(ver, 10))
 
 	out, err := awsx.Do(

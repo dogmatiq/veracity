@@ -6,12 +6,12 @@ import (
 
 // A Journal is an append-only log of binary records.
 type Journal interface {
-	// Read returns the record written to produce the given version of the
+	// Get returns the record written to produce the given version of the
 	// journal.
 	//
 	// ok is false if the record does not exist, either because it has been
 	// truncated or because the given version has not been written yet.
-	Read(ctx context.Context, ver uint64) (rec []byte, ok bool, err error)
+	Get(ctx context.Context, ver uint64) (rec []byte, ok bool, err error)
 
 	// GetOldest returns oldest record in the journal.
 	//

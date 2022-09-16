@@ -160,7 +160,7 @@ func (i *instance) load(ctx context.Context) error {
 	rec := &JournalRecord{}
 
 	for {
-		ok, err := protojournal.Read(ctx, i.Journal, i.version, rec)
+		ok, err := protojournal.Get(ctx, i.Journal, i.version, rec)
 		if err != nil {
 			return fmt.Errorf("unable to load instance: %w", err)
 		}
