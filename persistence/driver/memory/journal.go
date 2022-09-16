@@ -9,7 +9,7 @@ import (
 	"github.com/dogmatiq/veracity/persistence/journal"
 )
 
-// JournalStore is an implementation of journal.Store that stores journal in
+// JournalStore is an implementation of journal.Store that stores journals in
 // memory.
 type JournalStore struct {
 	journals sync.Map // map[string]*journalState
