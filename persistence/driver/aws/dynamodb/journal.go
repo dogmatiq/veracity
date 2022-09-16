@@ -163,8 +163,8 @@ func (j *journalHandle) Read(ctx context.Context, ver uint64) ([]byte, bool, err
 	return out.Item[journalRecordAttr].B, true, nil
 }
 
-func (j *journalHandle) ReadOldest(ctx context.Context) (uint64, []byte, bool, error) {
-	return j.readOldest(ctx, true)
+func (j *journalHandle) GetOldest(ctx context.Context) (uint64, []byte, bool, error) {
+	return j.getOldest(ctx, true)
 }
 
 func (j *journalHandle) Append(ctx context.Context, ver uint64, rec []byte) (bool, error) {
@@ -186,7 +186,7 @@ func (j *journalHandle) Append(ctx context.Context, ver uint64, rec []byte) (boo
 }
 
 func (j *journalHandle) Truncate(ctx context.Context, ver uint64) error {
-	oldest, _, ok, err := j.readOldest(ctx, false)
+	oldest, _, ok, err := j.getOldest(ctx, false)
 	if !ok || err != nil {
 		return err
 	}
@@ -213,7 +213,7 @@ func (j *journalHandle) Close() error {
 	return nil
 }
 
-func (j *journalHandle) readOldest(
+func (j *journalHandle) getOldest(
 	ctx context.Context,
 	fetchRecord bool,
 ) (uint64, []byte, bool, error) {

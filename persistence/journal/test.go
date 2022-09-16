@@ -173,7 +173,7 @@ func RunTests(
 			})
 		})
 
-		t.Run("func ReadOldest()", func(t *testing.T) {
+		t.Run("func GetOldest()", func(t *testing.T) {
 			t.Run("it returns the record that produced version 0 if there has been no truncation", func(t *testing.T) {
 				t.Parallel()
 
@@ -188,7 +188,7 @@ func RunTests(
 					t.Fatal("unexpected optimistic concurrency conflict")
 				}
 
-				ver, actual, ok, err := j.ReadOldest(ctx)
+				ver, actual, ok, err := j.GetOldest(ctx)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -214,7 +214,7 @@ func RunTests(
 
 				ctx, j := setup(t, newStore)
 
-				_, _, ok, err := j.ReadOldest(ctx)
+				_, _, ok, err := j.GetOldest(ctx)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -253,7 +253,7 @@ func RunTests(
 				}
 
 				expect := records[retainVersion]
-				ver, actual, ok, err := j.ReadOldest(ctx)
+				ver, actual, ok, err := j.GetOldest(ctx)
 				if err != nil {
 					t.Fatal(err)
 				}

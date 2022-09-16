@@ -74,7 +74,7 @@ func (h *journalHandle) Read(ctx context.Context, ver uint64) ([]byte, bool, err
 	return h.state.Records[ver-h.state.Begin], true, ctx.Err()
 }
 
-func (h *journalHandle) ReadOldest(ctx context.Context) (uint64, []byte, bool, error) {
+func (h *journalHandle) GetOldest(ctx context.Context) (uint64, []byte, bool, error) {
 	if h.state == nil {
 		panic("journal is closed")
 	}
