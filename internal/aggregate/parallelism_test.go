@@ -24,7 +24,7 @@ import (
 
 var _ = Describe("type CommandExecutor (parallelism)", func() {
 	It("handles each command exactly once", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
 		packer := envelope.NewTestPacker()
