@@ -6,7 +6,7 @@ import (
 
 	. "github.com/dogmatiq/dogma/fixtures"
 	"github.com/dogmatiq/veracity/internal/envelope"
-	"github.com/dogmatiq/veracity/internal/journaltest"
+	"github.com/dogmatiq/veracity/internal/persisttest"
 	. "github.com/dogmatiq/veracity/internal/queue"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/persistence/driver/memory"
@@ -34,7 +34,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 		"it eventually removes each message",
 		func(
 			expectErr string,
-			setup func(*journaltest.JournalStub),
+			setup func(*persisttest.JournalStub),
 		) {
 			messages := []Message{
 				{
@@ -48,7 +48,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 
 			tick := func(
 				ctx context.Context,
-				setup func(*journaltest.JournalStub),
+				setup func(*persisttest.JournalStub),
 			) error {
 				j, err := journals.Open(ctx, "<queue>")
 				if err != nil {
@@ -56,7 +56,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 				}
 				defer j.Close()
 
-				stub := &journaltest.JournalStub{
+				stub := &persisttest.JournalStub{
 					Journal: j,
 				}
 
@@ -104,7 +104,7 @@ var _ = Describe("type Queue (idempotence)", func() {
 
 				Expect(err).To(MatchError(expectErr))
 				needError = false
-				setup = func(j *journaltest.JournalStub) {}
+				setup = func(j *persisttest.JournalStub) {}
 			}
 
 			Expect(needError).To(BeFalse(), "process should fail with the expected error at least once")
@@ -124,13 +124,13 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"no faults",
 			"", // no error expected
-			func(stub *journaltest.JournalStub) {},
+			func(stub *persisttest.JournalStub) {},
 		),
 		Entry(
 			"enqueue fails before journal record is written",
 			"unable to enqueue message(s): <error>",
-			func(stub *journaltest.JournalStub) {
-				journaltest.FailBeforeAppend(
+			func(stub *persisttest.JournalStub) {
+				persisttest.FailBeforeAppend(
 					stub,
 					func(rec *JournalRecord) bool {
 						return rec.GetEnqueue() != nil
@@ -141,8 +141,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"enqueue fails after journal record is written",
 			"unable to enqueue message(s): <error>",
-			func(stub *journaltest.JournalStub) {
-				journaltest.FailAfterAppend(
+			func(stub *persisttest.JournalStub) {
+				persisttest.FailAfterAppend(
 					stub,
 					func(rec *JournalRecord) bool {
 						return rec.GetEnqueue() != nil
@@ -153,8 +153,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"acquire fails before journal record is written",
 			"unable to acquire message: <error>",
-			func(stub *journaltest.JournalStub) {
-				journaltest.FailBeforeAppend(
+			func(stub *persisttest.JournalStub) {
+				persisttest.FailBeforeAppend(
 					stub,
 					func(rec *JournalRecord) bool {
 						return rec.GetAcquire() != nil
@@ -165,8 +165,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"acquire fails after journal record is written",
 			"unable to acquire message: <error>",
-			func(stub *journaltest.JournalStub) {
-				journaltest.FailAfterAppend(
+			func(stub *persisttest.JournalStub) {
+				persisttest.FailAfterAppend(
 					stub,
 					func(rec *JournalRecord) bool {
 						return rec.GetAcquire() != nil
@@ -177,8 +177,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"release fails before journal record is written",
 			"unable to release message: <error>",
-			func(stub *journaltest.JournalStub) {
-				journaltest.FailBeforeAppend(
+			func(stub *persisttest.JournalStub) {
+				persisttest.FailBeforeAppend(
 					stub,
 					func(rec *JournalRecord) bool {
 						return rec.GetRelease() != nil
@@ -189,8 +189,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"release fails after journal record is written",
 			"unable to release message: <error>",
-			func(stub *journaltest.JournalStub) {
-				journaltest.FailAfterAppend(
+			func(stub *persisttest.JournalStub) {
+				persisttest.FailAfterAppend(
 					stub,
 					func(rec *JournalRecord) bool {
 						return rec.GetRelease() != nil
@@ -201,8 +201,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"remove fails before journal record is written",
 			"unable to remove message: <error>",
-			func(stub *journaltest.JournalStub) {
-				journaltest.FailBeforeAppend(
+			func(stub *persisttest.JournalStub) {
+				persisttest.FailBeforeAppend(
 					stub,
 					func(rec *JournalRecord) bool {
 						return rec.GetRemove() != nil
@@ -213,8 +213,8 @@ var _ = Describe("type Queue (idempotence)", func() {
 		Entry(
 			"remove fails after journal record is written",
 			"unable to remove message: <error>",
-			func(stub *journaltest.JournalStub) {
-				journaltest.FailAfterAppend(
+			func(stub *persisttest.JournalStub) {
+				persisttest.FailAfterAppend(
 					stub,
 					func(rec *JournalRecord) bool {
 						return rec.GetRemove() != nil

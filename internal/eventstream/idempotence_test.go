@@ -8,7 +8,7 @@ import (
 	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	. "github.com/dogmatiq/veracity/internal/eventstream"
-	"github.com/dogmatiq/veracity/internal/journaltest"
+	"github.com/dogmatiq/veracity/internal/persisttest"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/persistence/driver/memory"
 	. "github.com/jmalloc/gomegax"
@@ -36,14 +36,14 @@ var _ = Describe("type EventStream (idempotence)", func() {
 		"it acknowledges the message exactly once",
 		func(
 			expectErr string,
-			setup func(stub *journaltest.JournalStub),
+			setup func(stub *persisttest.JournalStub),
 		) {
 			expect := packer.Pack(MessageE1)
 			appended := false
 
 			tick := func(
 				ctx context.Context,
-				setup func(*journaltest.JournalStub),
+				setup func(*persisttest.JournalStub),
 			) error {
 				j, err := journals.Open(ctx, "<eventstream>")
 				if err != nil {
@@ -51,7 +51,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 				}
 				defer j.Close()
 
-				stub := &journaltest.JournalStub{
+				stub := &persisttest.JournalStub{
 					Journal: j,
 				}
 
@@ -82,7 +82,7 @@ var _ = Describe("type EventStream (idempotence)", func() {
 
 				Expect(err).To(MatchError(expectErr))
 				needError = false
-				setup = func(stub *journaltest.JournalStub) {}
+				setup = func(stub *persisttest.JournalStub) {}
 			}
 
 			Expect(needError).To(BeFalse(), "process should fail with the expected error at least once")
@@ -117,13 +117,13 @@ var _ = Describe("type EventStream (idempotence)", func() {
 		Entry(
 			"no faults",
 			"", // no error expected
-			func(stub *journaltest.JournalStub) {},
+			func(stub *persisttest.JournalStub) {},
 		),
 		Entry(
 			"append fails before journal record is written",
 			"unable to append event(s): <error>",
-			func(stub *journaltest.JournalStub) {
-				journaltest.FailBeforeAppend(
+			func(stub *persisttest.JournalStub) {
+				persisttest.FailBeforeAppend(
 					stub,
 					func(rec *JournalRecord) bool {
 						return rec.GetAppend() != nil
@@ -134,8 +134,8 @@ var _ = Describe("type EventStream (idempotence)", func() {
 		Entry(
 			"append fails after journal record is written",
 			"unable to append event(s): <error>",
-			func(stub *journaltest.JournalStub) {
-				journaltest.FailAfterAppend(
+			func(stub *persisttest.JournalStub) {
+				persisttest.FailAfterAppend(
 					stub,
 					func(rec *JournalRecord) bool {
 						return rec.GetAppend() != nil

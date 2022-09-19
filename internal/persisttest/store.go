@@ -1,4 +1,4 @@
-package journaltest
+package persisttest
 
 import (
 	"context"
