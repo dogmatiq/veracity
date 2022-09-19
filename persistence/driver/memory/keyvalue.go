@@ -39,7 +39,12 @@ func (s *KeyValueStore) Open(ctx context.Context, path ...string) (kv.Keyspace, 
 }
 
 type keyspaceState struct {
-	Map sync.Map // map[string][]byte
+	sync.RWMutex
+
+	Values map[string][]byte
+
+	BeforeSet func(k, v []byte) error
+	AfterSet  func(k, v []byte) error
 }
 
 type keyspaceHandle struct {
@@ -51,11 +56,10 @@ func (h *keyspaceHandle) Get(ctx context.Context, k []byte) (v []byte, err error
 		panic("keyspace is closed")
 	}
 
-	if x, ok := h.state.Map.Load(string(k)); ok {
-		return x.([]byte), ctx.Err()
-	}
+	h.state.RLock()
+	defer h.state.RUnlock()
 
-	return nil, ctx.Err()
+	return h.state.Values[string(k)], ctx.Err()
 }
 
 func (h *keyspaceHandle) Set(ctx context.Context, k, v []byte) error {
@@ -63,10 +67,29 @@ func (h *keyspaceHandle) Set(ctx context.Context, k, v []byte) error {
 		panic("keyspace is closed")
 	}
 
+	h.state.Lock()
+	defer h.state.Unlock()
+
+	if h.state.BeforeSet != nil {
+		if err := h.state.BeforeSet(k, v); err != nil {
+			return err
+		}
+	}
+
 	if len(v) == 0 {
-		h.state.Map.Delete(string(k))
+		delete(h.state.Values, string(k))
 	} else {
-		h.state.Map.Store(string(k), v)
+		if h.state.Values == nil {
+			h.state.Values = map[string][]byte{}
+		}
+
+		h.state.Values[string(k)] = v
+	}
+
+	if h.state.AfterSet != nil {
+		if err := h.state.AfterSet(k, v); err != nil {
+			return err
+		}
 	}
 
 	return ctx.Err()

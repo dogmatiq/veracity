@@ -9,12 +9,11 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// FailBeforeJournalAppend configures j to return an error on the first call to
-// s.Append() with a record that satisifies the given predicate function.
+// FailBeforeJournalAppend configures the journal at the given path to return an
+// error on the next call to Append() with a record that satisifies the given
+// predicate function.
 //
 // The error is returned before the append is actually performed.
-//
-// It panics if j is not an in-memory journal.
 func FailBeforeJournalAppend[R proto.Message](
 	s *JournalStore,
 	pred func(R) bool,
@@ -31,15 +30,14 @@ func FailBeforeJournalAppend[R proto.Message](
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	h.state.BeforeAppend = failOnce(pred)
+	h.state.BeforeAppend = failAppendOnce(pred)
 }
 
-// FailAfterJournalAppend configures j to return an error on the first call to
-// j.Append() with a record that satisifies the given predicate function.
+// FailAfterJournalAppend configures the journal at the given path to return an
+// error on the next call to Append() with a record that satisifies the given
+// predicate function.
 //
 // The error is returned after the append is actually performed.
-//
-// It panics if j is not an in-memory journal.
 func FailAfterJournalAppend[R proto.Message](
 	s *JournalStore,
 	pred func(R) bool,
@@ -56,13 +54,13 @@ func FailAfterJournalAppend[R proto.Message](
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	h.state.AfterAppend = failOnce(pred)
+	h.state.AfterAppend = failAppendOnce(pred)
 }
 
-func failOnce[R proto.Message](pred func(R) bool) func([]byte) error {
+func failAppendOnce[R proto.Message](pred func(R) bool) func([]byte) error {
 	var once sync.Once
 
-	return func(data []byte) error {
+	return func(data []byte) (err error) {
 		var rec R
 		rec = reflect.New(
 			reflect.TypeOf(rec).Elem(),
@@ -71,8 +69,6 @@ func failOnce[R proto.Message](pred func(R) bool) func([]byte) error {
 		if err := proto.Unmarshal(data, rec); err != nil {
 			panic(err)
 		}
-
-		var err error
 
 		if pred(rec) {
 			once.Do(func() {
