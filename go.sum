@@ -24,8 +24,8 @@ github.com/dogmatiq/dogma v0.11.1/go.mod h1:8TdjQ5jjV2DcCPb/jjHPgSrqU66H6092yMEI
 github.com/dogmatiq/iago v0.4.0 h1:57nZqVT34IZxtCZEW/RFif7DNUEjMXgevfr/Mmd0N8I=
 github.com/dogmatiq/iago v0.4.0/go.mod h1:fishMWBtzYcjgis6d873VTv9kFm/wHYLOzOyO9ECBDc=
 github.com/dogmatiq/interopspec v0.5.0/go.mod h1:30FOKEhMeiM6ZIpq8mQfE7LINrh1Jv7ukErZB79/mTg=
-github.com/dogmatiq/interopspec v0.5.1 h1:tVAfguYpLWkwG0dP3Itfqo5RXXbJ5+JFCXs3xtwQzqo=
-github.com/dogmatiq/interopspec v0.5.1/go.mod h1:7SSW0T1Cz3HiJ6LlM/MBR3wW9XhwlncnbsCx1PyO7LU=
+github.com/dogmatiq/interopspec v0.5.2 h1:opcn/hxV128Lgo+1rBJY8TsIdpagwXNOawx/UTx9e08=
+github.com/dogmatiq/interopspec v0.5.2/go.mod h1:RFQfwrmj1VEYy51/pFTGMcm4BHErA3eLwsxX95COf6U=
 github.com/dogmatiq/marshalkit v0.7.2 h1:ANI+RkyEalTePjB7GHlq6HKPYtX+7UcMnI+sx/BWpos=
 github.com/dogmatiq/marshalkit v0.7.2/go.mod h1:ajuO/+J4xbh/BRQUitlpPNxvqoy2dNF+NdX0ORn2r3I=
 github.com/emicklei/dot v0.15.0/go.mod h1:DeV7GvQtIw4h2u73RKBkkFdvVAz0D9fzeJrgPW6gy/s=
