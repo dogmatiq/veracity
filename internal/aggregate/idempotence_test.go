@@ -3,7 +3,6 @@ package aggregate_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/dogmatiq/dogma"
@@ -16,10 +15,8 @@ import (
 	"github.com/dogmatiq/veracity/internal/persisttest"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/persistence/driver/memory"
-	"github.com/dogmatiq/veracity/persistence/journal"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -28,6 +25,16 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		ctx      context.Context
 		packer   *envelope.Packer
 		journals *memory.JournalStore
+
+		streamJournalPath = []string{
+			"eventstream",
+		}
+
+		instanceJournalPath = []string{
+			"aggregate",
+			"<handler-key>",
+			"<instance-id>",
+		}
 	)
 
 	BeforeEach(func() {
@@ -43,15 +50,14 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		"it handles a command exactly once",
 		func(
 			expectErr string,
-			setup func(events, instances *persisttest.JournalStub),
+			setup func(),
 		) {
+			setup()
+
 			env := packer.Pack(MessageC1)
 
-			tick := func(
-				ctx context.Context,
-				setup func(events, instances *persisttest.JournalStub),
-			) error {
-				j, err := journals.Open(ctx, "<eventstream>")
+			tick := func(ctx context.Context) error {
+				j, err := journals.Open(ctx, streamJournalPath...)
 				if err != nil {
 					return err
 				}
@@ -75,38 +81,8 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 							s.RecordEvent(MessageE1)
 						},
 					},
-					Packer: packer,
-					JournalStore: &persisttest.StoreStub{
-						OpenFunc: func(
-							ctx context.Context,
-							path ...string,
-						) (journal.Journal, error) {
-							if !slices.Equal(
-								path,
-								[]string{
-									"aggregate",
-									"<handler-key>",
-									"<instance-id>",
-								},
-							) {
-								return nil, fmt.Errorf("unexpected journal path: %s", path)
-							}
-
-							j, err := journals.Open(ctx, path...)
-							if err != nil {
-								return nil, err
-							}
-
-							stub := &persisttest.JournalStub{
-								Journal: j,
-							}
-
-							setup(eventJournal, stub)
-							setup = func(events, instances *persisttest.JournalStub) {}
-
-							return stub, nil
-						},
-					},
+					Packer:       packer,
+					JournalStore: journals,
 					EventAppender: &eventstream.EventStream{
 						Journal: eventJournal,
 						Logger:  zapx.NewTesting("eventstream-append"),
@@ -155,19 +131,18 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			needError := expectErr != ""
 
 			for {
-				err := tick(ctx, setup)
+				err := tick(ctx)
 				if err == nil {
 					break
 				}
 
 				Expect(err).To(MatchError(expectErr))
 				needError = false
-				setup = func(events, instances *persisttest.JournalStub) {}
 			}
 
 			Expect(needError).To(BeFalse(), "process should fail with the expected error at least once")
 
-			eventJournal, err := journals.Open(ctx, "<eventstream>")
+			eventJournal, err := journals.Open(ctx, streamJournalPath...)
 			Expect(err).ShouldNot(HaveOccurred())
 			defer eventJournal.Close()
 
@@ -196,54 +171,57 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 		Entry(
 			"no faults",
 			"", // no error expected
-			func(events, instances *persisttest.JournalStub) {
-			},
+			func() {},
 		),
 		Entry(
 			"revision fails before journal record is written",
 			"unable to record revision: <error>",
-			func(events, instances *persisttest.JournalStub) {
-				persisttest.FailBeforeAppend(
-					instances,
+			func() {
+				memory.FailBeforeJournalAppend(
+					journals,
 					func(rec *JournalRecord) bool {
 						return rec.GetRevision() != nil
 					},
+					instanceJournalPath...,
 				)
 			},
 		),
 		Entry(
 			"revision fails after journal record is written",
 			"unable to record revision: <error>",
-			func(events, instances *persisttest.JournalStub) {
-				persisttest.FailAfterAppend(
-					instances,
+			func() {
+				memory.FailAfterJournalAppend(
+					journals,
 					func(rec *JournalRecord) bool {
 						return rec.GetRevision() != nil
 					},
+					instanceJournalPath...,
 				)
 			},
 		),
 		Entry(
 			"event stream append fails before journal record is written",
 			"unable to append event(s): <error>",
-			func(events, instances *persisttest.JournalStub) {
-				persisttest.FailBeforeAppend(
-					events,
+			func() {
+				memory.FailBeforeJournalAppend(
+					journals,
 					func(rec *eventstream.JournalRecord) bool {
 						return rec.GetAppend() != nil
 					},
+					streamJournalPath...,
 				)
 			},
 		),
 		Entry(
 			"event stream append fails after journal record is written",
 			"unable to append event(s): <error>",
-			func(events, instances *persisttest.JournalStub) {
-				persisttest.FailAfterAppend(
-					events,
+			func() {
+				memory.FailAfterJournalAppend(
+					journals,
 					func(rec *eventstream.JournalRecord) bool {
 						return rec.GetAppend() != nil
 					},
+					streamJournalPath...,
 				)
 			},
 		),

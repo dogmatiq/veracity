@@ -51,6 +51,9 @@ type journalState struct {
 	Begin   uint64
 	End     uint64
 	Records [][]byte
+
+	BeforeAppend func([]byte) error
+	AfterAppend  func([]byte) error
 }
 
 // journalHandle is an implementation of journal.Journal[R] that accesses
@@ -97,16 +100,29 @@ func (h *journalHandle) Append(ctx context.Context, ver uint64, rec []byte) (boo
 	h.state.Lock()
 	defer h.state.Unlock()
 
+	if h.state.BeforeAppend != nil {
+		if err := h.state.BeforeAppend(rec); err != nil {
+			return false, err
+		}
+	}
+
 	switch {
 	case ver < h.state.End:
 		return false, ctx.Err()
 	case ver == h.state.End:
 		h.state.Records = append(h.state.Records, rec)
 		h.state.End++
-		return true, ctx.Err()
 	default:
 		panic("version out of range, this behavior would be undefined in a real journal implementation")
 	}
+
+	if h.state.AfterAppend != nil {
+		if err := h.state.AfterAppend(rec); err != nil {
+			return false, err
+		}
+	}
+
+	return true, ctx.Err()
 }
 
 func (h *journalHandle) Truncate(ctx context.Context, ver uint64) error {
