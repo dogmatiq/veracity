@@ -12,6 +12,7 @@ import (
 	"github.com/dogmatiq/veracity/internal/protojournal"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/persistence/journal"
+	"github.com/dogmatiq/veracity/persistence/kv"
 	"go.uber.org/zap"
 )
 
@@ -37,6 +38,9 @@ type instance struct {
 	// Journal is the journal used to store the instance's state.
 	Journal journal.Journal
 
+	// Keyspace is the key-value store used to store the instance's state.
+	Keyspace kv.Keyspace
+
 	// EventAppender is used to append events to the global event stream.
 	EventAppender EventAppender
 
@@ -44,10 +48,9 @@ type instance struct {
 	// management of aggregate state.
 	Logger *zap.Logger
 
-	version  uint64
-	commands map[string]struct{}
-	pending  *RevisionRecord
-	root     dogma.AggregateRoot
+	version     uint64
+	unpublished *RevisionRecord
+	root        dogma.AggregateRoot
 }
 
 // Run executes commands against the aggregate instance until ctx is canceled,
@@ -85,11 +88,15 @@ func (i *instance) stateHandle(ctx context.Context, req request) (fsm.Action, er
 
 // executeCommand executes a command against the aggregate instance.
 func (i *instance) executeCommand(ctx context.Context, env *envelopespec.Envelope) error {
-	if i.pending != nil {
+	if i.unpublished != nil {
 		panic("cannot handle command while last revision is pending")
 	}
 
-	if _, ok := i.commands[env.MessageId]; ok {
+	handled, err := i.hasHandledMessage(ctx, env.MessageId)
+	if err != nil {
+		return fmt.Errorf("Unable to check if command has been handled: %w", err)
+	}
+	if handled {
 		i.Logger.Debug(
 			"ignored duplicate command",
 			zapx.Envelope("command", env),
@@ -127,17 +134,14 @@ func (i *instance) executeCommand(ctx context.Context, env *envelopespec.Envelop
 		return fmt.Errorf("unable to record revision: %w", err)
 	}
 
-	i.commands[env.MessageId] = struct{}{}
-
-	return i.EventAppender.Append(ctx, sc.Revision.EventEnvelopes...)
+	return i.publishRevision(ctx, rev)
 }
 
 // apply updates the instance's in-memory state to reflect a revision record.
 func (x *JournalRecord_Revision) apply(i *instance) error {
-	i.commands[x.Revision.CommandId] = struct{}{}
-	i.pending = x.Revision
+	i.unpublished = x.Revision
 
-	for _, env := range i.pending.EventEnvelopes {
+	for _, env := range i.unpublished.EventEnvelopes {
 		event, err := i.Packer.Unpack(env)
 		if err != nil {
 			return fmt.Errorf("unable to unmarshal historical event: %w", err)
@@ -151,7 +155,6 @@ func (x *JournalRecord_Revision) apply(i *instance) error {
 
 // load reads all records from the journal and applies them to the instance.
 func (i *instance) load(ctx context.Context) error {
-	i.commands = map[string]struct{}{}
 	i.root = i.Handler.New()
 	rec := &JournalRecord{}
 
@@ -174,12 +177,12 @@ func (i *instance) load(ctx context.Context) error {
 		i.version++
 	}
 
-	if i.pending != nil {
-		if err := i.EventAppender.Append(ctx, i.pending.EventEnvelopes...); err != nil {
-			return err
+	if i.unpublished != nil {
+		if err := i.publishRevision(ctx, i.unpublished); err != nil {
+			return fmt.Errorf("unable to load instance: %w", err)
 		}
 
-		i.pending = nil
+		i.unpublished = nil
 	}
 
 	i.Logger.Debug(
@@ -210,4 +213,54 @@ func (i *instance) append(ctx context.Context, rec isJournalRecord_OneOf) error 
 	i.version++
 
 	return nil
+}
+
+// publishRevision makes the result of a revision known outside the instance's
+// own journal.
+func (i *instance) publishRevision(ctx context.Context, rev *RevisionRecord) error {
+	if err := i.EventAppender.Append(ctx, rev.EventEnvelopes...); err != nil {
+		return err
+	}
+
+	if err := i.markCommandAsHandled(ctx, rev.CommandId); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// hasHandledMessage returns true if the command with the given ID has already
+// been handled.
+func (i *instance) hasHandledMessage(
+	ctx context.Context,
+	id string,
+) (bool, error) {
+	return i.Keyspace.Has(
+		ctx,
+		commandKey(id),
+	)
+}
+
+var trueValue = []byte{1}
+
+// markCommandAsHandled marks the command with the given ID as handled.
+func (i *instance) markCommandAsHandled(
+	ctx context.Context,
+	id string,
+) error {
+	if err := i.Keyspace.Set(
+		ctx,
+		commandKey(id),
+		trueValue,
+	); err != nil {
+		return fmt.Errorf("unable to mark command as handled: %w", err)
+	}
+
+	return nil
+}
+
+// commandKey returns the keyspace key used to store a value that indicates that
+// the command with the given ID has been handled.
+func commandKey(id string) []byte {
+	return []byte("command." + id)
 }

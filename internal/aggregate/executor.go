@@ -10,6 +10,7 @@ import (
 	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/fsm"
 	"github.com/dogmatiq/veracity/persistence/journal"
+	"github.com/dogmatiq/veracity/persistence/kv"
 	"go.uber.org/zap"
 )
 
@@ -37,6 +38,9 @@ type CommandExecutor struct {
 
 	// JournalStore is the store contain the aggregate instances' journals.
 	JournalStore journal.Store
+
+	// KeyValueStore is the store used to store the aggregate instances' state.
+	KeyValueStore kv.Store
 
 	// EventAppender is used to append events to the global event stream.
 	EventAppender EventAppender
@@ -210,12 +214,24 @@ func (e *CommandExecutor) runInstance(
 		}
 		defer j.Close()
 
+		ks, err := e.KeyValueStore.Open(
+			ctx,
+			"aggregate",
+			e.HandlerIdentity.Key,
+			id,
+		)
+		if err != nil {
+			return err
+		}
+		defer ks.Close()
+
 		inst := &instance{
 			HandlerIdentity: e.HandlerIdentity,
 			InstanceID:      id,
 			Handler:         e.Handler,
 			Requests:        requests,
 			Journal:         j,
+			Keyspace:        ks,
 			Packer:          e.Packer,
 			EventAppender:   e.EventAppender,
 			Logger: e.Logger.With(

@@ -21,9 +21,10 @@ import (
 
 var _ = Describe("type CommandExecutor (idempotence)", func() {
 	var (
-		ctx      context.Context
-		packer   *envelope.Packer
-		journals *memory.JournalStore
+		ctx       context.Context
+		packer    *envelope.Packer
+		journals  *memory.JournalStore
+		keyspaces *memory.KeyValueStore
 
 		streamJournalPath = []string{
 			"eventstream",
@@ -34,6 +35,8 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			"<handler-key>",
 			"<instance-id>",
 		}
+
+		instanceKeyspacePath = instanceJournalPath
 	)
 
 	BeforeEach(func() {
@@ -43,6 +46,7 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 
 		packer = envelope.NewTestPacker()
 		journals = &memory.JournalStore{}
+		keyspaces = &memory.KeyValueStore{}
 	})
 
 	DescribeTable(
@@ -76,8 +80,9 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 							s.RecordEvent(MessageE1)
 						},
 					},
-					Packer:       packer,
-					JournalStore: journals,
+					Packer:        packer,
+					JournalStore:  journals,
+					KeyValueStore: keyspaces,
 					EventAppender: &eventstream.EventStream{
 						Journal: eventJournal,
 						Logger:  zapx.NewTesting("eventstream-append"),
@@ -217,6 +222,32 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 						return rec.GetAppend() != nil
 					},
 					streamJournalPath...,
+				)
+			},
+		),
+		Entry(
+			"keyspace set fails before command is marked as handled",
+			"unable to mark command as handled: <error>",
+			func() {
+				memory.FailBeforeKeyspaceSet(
+					keyspaces,
+					func(k, v []byte) bool {
+						return true
+					},
+					instanceKeyspacePath...,
+				)
+			},
+		),
+		Entry(
+			"keyspace set fails after command is marked as handled",
+			"unable to mark command as handled: <error>",
+			func() {
+				memory.FailAfterKeyspaceSet(
+					keyspaces,
+					func(k, v []byte) bool {
+						return true
+					},
+					instanceKeyspacePath...,
 				)
 			},
 		),

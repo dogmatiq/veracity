@@ -112,7 +112,7 @@ func RunTests(
 	})
 
 	t.Run("type Keyspace", func(t *testing.T) {
-		t.Run("func Set() and Get()", func(t *testing.T) {
+		t.Run("func Get()", func(t *testing.T) {
 			t.Run("it returns an empty value if the key doesn't exist", func(t *testing.T) {
 				t.Parallel()
 
@@ -127,7 +127,7 @@ func RunTests(
 				}
 			})
 
-			t.Run("it returns an empty value if the key has been set to nil", func(t *testing.T) {
+			t.Run("it returns an empty value if the key has been deleted", func(t *testing.T) {
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
@@ -181,6 +181,66 @@ func RunTests(
 							string(actual),
 						)
 					}
+				}
+			})
+		})
+
+		t.Run("func Has()", func(t *testing.T) {
+			t.Run("it returns false if the key doesn't exist", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, j := setup(t, newStore)
+
+				ok, err := j.Has(ctx, []byte("<key>"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if ok {
+					t.Fatal("expected ok to be false")
+				}
+			})
+
+			t.Run("it returns true if the key exists", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, j := setup(t, newStore)
+
+				k := []byte("<key>")
+
+				if err := j.Set(ctx, k, []byte("<value>")); err != nil {
+					t.Fatal(err)
+				}
+
+				ok, err := j.Has(ctx, k)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !ok {
+					t.Fatal("expected ok to be true")
+				}
+			})
+
+			t.Run("it returns false if the key has been deleted", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, j := setup(t, newStore)
+
+				k := []byte("<key>")
+
+				if err := j.Set(ctx, k, []byte("<value>")); err != nil {
+					t.Fatal(err)
+				}
+
+				if err := j.Set(ctx, k, nil); err != nil {
+					t.Fatal(err)
+				}
+
+				ok, err := j.Has(ctx, k)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if ok {
+					t.Fatal("expected ok to be false")
 				}
 			})
 		})

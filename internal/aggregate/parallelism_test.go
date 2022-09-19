@@ -29,6 +29,7 @@ var _ = Describe("type CommandExecutor (parallelism)", func() {
 
 		packer := envelope.NewTestPacker()
 		journals := &memory.JournalStore{}
+		keyspaces := &memory.KeyValueStore{}
 
 		var (
 			parallelism = runtime.NumCPU()
@@ -92,8 +93,9 @@ var _ = Describe("type CommandExecutor (parallelism)", func() {
 						})
 					},
 				},
-				Packer:       packer,
-				JournalStore: journals,
+				Packer:        packer,
+				JournalStore:  journals,
+				KeyValueStore: keyspaces,
 				EventAppender: &eventstream.EventStream{
 					Journal: eventJournal,
 					Logger:  zap.NewNop(),

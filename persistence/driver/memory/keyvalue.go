@@ -62,6 +62,18 @@ func (h *keyspaceHandle) Get(ctx context.Context, k []byte) (v []byte, err error
 	return h.state.Values[string(k)], ctx.Err()
 }
 
+func (h *keyspaceHandle) Has(ctx context.Context, k []byte) (ok bool, err error) {
+	if h.state == nil {
+		panic("keyspace is closed")
+	}
+
+	h.state.RLock()
+	defer h.state.RUnlock()
+
+	_, ok = h.state.Values[string(k)]
+	return ok, ctx.Err()
+}
+
 func (h *keyspaceHandle) Set(ctx context.Context, k, v []byte) error {
 	if h.state == nil {
 		panic("keyspace is closed")
