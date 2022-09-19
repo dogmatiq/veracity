@@ -11,17 +11,6 @@ message JournalRecord {
 
 message RevisionRecord {
   string command_id = 1;
-  repeated RevisionAction actions = 2;
+  repeated dogma.interop.v1.envelope.Envelope event_envelopes = 2;
+  bool instance_destroyed = 3;
 }
-
-message RevisionAction {
-  oneof OneOf {
-    RecordEventAction record_event = 1;
-    LogAction log = 2;
-    DestroyAction destroy = 3;
-  }
-}
-
-message RecordEventAction { dogma.interop.v1.envelope.Envelope envelope = 1; }
-message LogAction { string message = 1; }
-message DestroyAction { bool is_cancelled = 1; }

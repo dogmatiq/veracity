@@ -19,9 +19,6 @@ type scope struct {
 	Logger          *zap.Logger
 	CommandEnvelope *envelopespec.Envelope
 	Revision        *RevisionRecord
-	EventEnvelopes  []*envelopespec.Envelope
-
-	destroy *DestroyAction
 }
 
 func (s *scope) InstanceID() string {
@@ -29,27 +26,15 @@ func (s *scope) InstanceID() string {
 }
 
 func (s *scope) Destroy() {
-	if s.destroy != nil {
-		return
+	if !s.Revision.InstanceDestroyed {
+		s.Revision.InstanceDestroyed = true
+		s.Logger.Info("scheduled instance for destruction")
 	}
-
-	s.destroy = &DestroyAction{}
-	s.Revision.Actions = append(
-		s.Revision.Actions,
-		&RevisionAction{
-			OneOf: &RevisionAction_Destroy{
-				Destroy: s.destroy,
-			},
-		},
-	)
-
-	s.Logger.Info("scheduled instance for destruction")
 }
 
 func (s *scope) RecordEvent(m dogma.Message) {
-	if s.destroy != nil {
-		s.destroy.IsCancelled = true
-		s.destroy = nil
+	if s.Revision.InstanceDestroyed {
+		s.Revision.InstanceDestroyed = false
 		s.Logger.Info("canceled instance destruction")
 	}
 
@@ -61,17 +46,7 @@ func (s *scope) RecordEvent(m dogma.Message) {
 	)
 
 	s.Root.ApplyEvent(m)
-	s.EventEnvelopes = append(s.EventEnvelopes, env)
-	s.Revision.Actions = append(
-		s.Revision.Actions,
-		&RevisionAction{
-			OneOf: &RevisionAction_RecordEvent{
-				RecordEvent: &RecordEventAction{
-					Envelope: env,
-				},
-			},
-		},
-	)
+	s.Revision.EventEnvelopes = append(s.Revision.EventEnvelopes, env)
 
 	s.Logger.Info(
 		"recorded a domain event",
@@ -81,17 +56,6 @@ func (s *scope) RecordEvent(m dogma.Message) {
 
 func (s *scope) Log(f string, v ...interface{}) {
 	message := fmt.Sprintf(f, v...)
-
-	s.Revision.Actions = append(
-		s.Revision.Actions,
-		&RevisionAction{
-			OneOf: &RevisionAction_Log{
-				Log: &LogAction{
-					Message: message,
-				},
-			},
-		},
-	)
 
 	s.Logger.Info(
 		"logged an application message",

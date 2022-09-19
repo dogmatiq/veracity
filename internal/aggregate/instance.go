@@ -44,10 +44,10 @@ type instance struct {
 	// management of aggregate state.
 	Logger *zap.Logger
 
-	version     uint64
-	commands    map[string]struct{}
-	unpublished []*envelopespec.Envelope
-	root        dogma.AggregateRoot
+	version  uint64
+	commands map[string]struct{}
+	pending  *RevisionRecord
+	root     dogma.AggregateRoot
 }
 
 // Run executes commands against the aggregate instance until ctx is canceled,
@@ -85,8 +85,8 @@ func (i *instance) stateHandle(ctx context.Context, req request) (fsm.Action, er
 
 // executeCommand executes a command against the aggregate instance.
 func (i *instance) executeCommand(ctx context.Context, env *envelopespec.Envelope) error {
-	if len(i.unpublished) != 0 {
-		panic("cannot handle command while there are unpublished events")
+	if i.pending != nil {
+		panic("cannot handle command while last revision is pending")
 	}
 
 	if _, ok := i.commands[env.MessageId]; ok {
@@ -129,25 +129,21 @@ func (i *instance) executeCommand(ctx context.Context, env *envelopespec.Envelop
 
 	i.commands[env.MessageId] = struct{}{}
 
-	return i.EventAppender.Append(ctx, sc.EventEnvelopes...)
+	return i.EventAppender.Append(ctx, sc.Revision.EventEnvelopes...)
 }
 
 // apply updates the instance's in-memory state to reflect a revision record.
 func (x *JournalRecord_Revision) apply(i *instance) error {
 	i.commands[x.Revision.CommandId] = struct{}{}
-	i.unpublished = nil
+	i.pending = x.Revision
 
-	for _, act := range x.Revision.Actions {
-		if rec := act.GetRecordEvent(); rec != nil {
-			i.unpublished = append(i.unpublished, rec.Envelope)
-
-			event, err := i.Packer.Unpack(rec.Envelope)
-			if err != nil {
-				return fmt.Errorf("unable to unmarshal historical event: %w", err)
-			}
-
-			i.root.ApplyEvent(event)
+	for _, env := range i.pending.EventEnvelopes {
+		event, err := i.Packer.Unpack(env)
+		if err != nil {
+			return fmt.Errorf("unable to unmarshal historical event: %w", err)
 		}
+
+		i.root.ApplyEvent(event)
 	}
 
 	return nil
@@ -178,11 +174,12 @@ func (i *instance) load(ctx context.Context) error {
 		i.version++
 	}
 
-	if len(i.unpublished) != 0 {
-		if err := i.EventAppender.Append(ctx, i.unpublished...); err != nil {
+	if i.pending != nil {
+		if err := i.EventAppender.Append(ctx, i.pending.EventEnvelopes...); err != nil {
 			return err
 		}
-		i.unpublished = nil
+
+		i.pending = nil
 	}
 
 	i.Logger.Debug(
