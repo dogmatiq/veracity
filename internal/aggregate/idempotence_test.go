@@ -12,7 +12,6 @@ import (
 	. "github.com/dogmatiq/veracity/internal/aggregate"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/eventstream"
-	"github.com/dogmatiq/veracity/internal/persisttest"
 	"github.com/dogmatiq/veracity/internal/zapx"
 	"github.com/dogmatiq/veracity/persistence/driver/memory"
 	. "github.com/onsi/ginkgo/v2"
@@ -57,15 +56,11 @@ var _ = Describe("type CommandExecutor (idempotence)", func() {
 			env := packer.Pack(MessageC1)
 
 			tick := func(ctx context.Context) error {
-				j, err := journals.Open(ctx, streamJournalPath...)
+				eventJournal, err := journals.Open(ctx, streamJournalPath...)
 				if err != nil {
 					return err
 				}
-				defer j.Close()
-
-				eventJournal := &persisttest.JournalStub{
-					Journal: j,
-				}
+				defer eventJournal.Close()
 
 				exec := &CommandExecutor{
 					HandlerIdentity: &envelopespec.Identity{
