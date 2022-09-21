@@ -91,7 +91,7 @@ func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journa
 
 	j.QueryRequest = dynamodb.QueryInput{
 		TableName:              aws.String(s.Table),
-		KeyConditionExpression: aws.String(`#K = :K`),
+		KeyConditionExpression: aws.String(`#K = :K AND #V >= :V`),
 		ExpressionAttributeNames: map[string]*string{
 			"#K": aws.String(journalKeyAttr),
 			"#V": aws.String(journalVersionAttr),
@@ -99,6 +99,7 @@ func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journa
 		},
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 			":K": &j.Key,
+			":V": &j.Version,
 		},
 		ProjectionExpression: aws.String("#V, #R"),
 	}
@@ -146,14 +147,14 @@ type journalHandle struct {
 	DeleteRequest dynamodb.DeleteItemInput
 }
 
-func (j *journalHandle) Get(ctx context.Context, ver uint64) ([]byte, bool, error) {
-	j.Version.N = aws.String(strconv.FormatUint(ver, 10))
+func (h *journalHandle) Get(ctx context.Context, ver uint64) ([]byte, bool, error) {
+	h.Version.N = aws.String(strconv.FormatUint(ver, 10))
 
 	out, err := awsx.Do(
 		ctx,
-		j.DB.GetItemWithContext,
-		j.DecorateGetItem,
-		&j.GetRequest,
+		h.DB.GetItemWithContext,
+		h.DecorateGetItem,
+		&h.GetRequest,
 	)
 	if out.Item == nil || err != nil {
 		return nil, false, err
@@ -162,18 +163,56 @@ func (j *journalHandle) Get(ctx context.Context, ver uint64) ([]byte, bool, erro
 	return out.Item[journalRecordAttr].B, true, nil
 }
 
-func (j *journalHandle) RangeAll(
+func (h *journalHandle) Range(
+	ctx context.Context,
+	ver uint64,
+	fn func(context.Context, []byte) (bool, error),
+) error {
+	checkVersion := true
+
+	return h.rangeQuery(
+		ctx,
+		ver,
+		func(
+			ctx context.Context,
+			v uint64,
+			rec []byte,
+		) (bool, error) {
+			if checkVersion {
+				if v != ver {
+					return false, errors.New("cannot range over truncated records")
+				}
+				checkVersion = false
+			}
+
+			return fn(ctx, rec)
+		},
+	)
+}
+
+func (h *journalHandle) RangeAll(
 	ctx context.Context,
 	fn func(context.Context, uint64, []byte) (bool, error),
 ) error {
+	return h.rangeQuery(ctx, 0, fn)
+}
+
+func (h *journalHandle) rangeQuery(
+	ctx context.Context,
+	begin uint64,
+	fn func(context.Context, uint64, []byte) (bool, error),
+) error {
+	h.QueryRequest.ExclusiveStartKey = nil
+	h.Version.N = aws.String(strconv.FormatUint(begin, 10))
+
 	var expectVer uint64
 
 	for {
 		out, err := awsx.Do(
 			ctx,
-			j.DB.QueryWithContext,
-			j.DecorateQuery,
-			&j.QueryRequest,
+			h.DB.QueryWithContext,
+			h.DecorateQuery,
+			&h.QueryRequest,
 		)
 		if err != nil {
 			return err
@@ -211,19 +250,19 @@ func (j *journalHandle) RangeAll(
 			return nil
 		}
 
-		j.QueryRequest.ExclusiveStartKey = out.LastEvaluatedKey
+		h.QueryRequest.ExclusiveStartKey = out.LastEvaluatedKey
 	}
 }
 
-func (j *journalHandle) Append(ctx context.Context, ver uint64, rec []byte) (bool, error) {
-	j.Version.N = aws.String(strconv.FormatUint(ver, 10))
-	j.Record.B = rec
+func (h *journalHandle) Append(ctx context.Context, ver uint64, rec []byte) (bool, error) {
+	h.Version.N = aws.String(strconv.FormatUint(ver, 10))
+	h.Record.B = rec
 
 	_, err := awsx.Do(
 		ctx,
-		j.DB.PutItemWithContext,
-		j.DecoratePutItem,
-		&j.PutRequest,
+		h.DB.PutItemWithContext,
+		h.DecoratePutItem,
+		&h.PutRequest,
 	)
 
 	if awsx.IsErrorCode(err, dynamodb.ErrCodeConditionalCheckFailedException) {
@@ -233,28 +272,28 @@ func (j *journalHandle) Append(ctx context.Context, ver uint64, rec []byte) (boo
 	return true, err
 }
 
-func (j *journalHandle) Truncate(ctx context.Context, ver uint64) error {
-	return j.RangeAll(
+func (h *journalHandle) Truncate(ctx context.Context, ver uint64) error {
+	return h.RangeAll(
 		ctx,
 		func(ctx context.Context, v uint64, _ []byte) (bool, error) {
 			if v >= ver {
 				return false, nil
 			}
 
-			j.Version.N = aws.String(strconv.FormatUint(v, 10))
+			h.Version.N = aws.String(strconv.FormatUint(v, 10))
 
 			_, err := awsx.Do(
 				ctx,
-				j.DB.DeleteItemWithContext,
-				j.DecorateDeleteItem,
-				&j.DeleteRequest,
+				h.DB.DeleteItemWithContext,
+				h.DecorateDeleteItem,
+				&h.DeleteRequest,
 			)
 			return true, err
 		},
 	)
 }
 
-func (j *journalHandle) Close() error {
+func (h *journalHandle) Close() error {
 	return nil
 }
 

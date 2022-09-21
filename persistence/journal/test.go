@@ -175,6 +175,126 @@ func RunTests(
 			})
 		})
 
+		t.Run("func Range()", func(t *testing.T) {
+			t.Run("calls the function for each record in the journal", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, j := setup(t, newStore)
+
+				var expect [][]byte
+
+				for ver := uint64(0); ver < 100; ver++ {
+					rec := []byte(fmt.Sprintf("<record-%d>", ver))
+					ok, err := j.Append(ctx, ver, rec)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !ok {
+						t.Fatal("unexpected optimistic concurrency conflict")
+					}
+
+					expect = append(expect, rec)
+				}
+
+				var actual [][]byte
+				expectVer := uint64(50)
+				expect = expect[expectVer:]
+
+				if err := j.Range(
+					ctx,
+					expectVer,
+					func(ctx context.Context, rec []byte) (bool, error) {
+						actual = append(actual, rec)
+						return true, nil
+					},
+				); err != nil {
+					t.Fatal(err)
+				}
+
+				if diff := cmp.Diff(expect, actual); diff != "" {
+					t.Fatal(diff)
+				}
+			})
+
+			t.Run("it stops iterating if the function returns false", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, j := setup(t, newStore)
+
+				for ver := uint64(0); ver < 2; ver++ {
+					ok, err := j.Append(ctx, ver, []byte("<record>"))
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !ok {
+						t.Fatal("unexpected optimistic concurrency conflict")
+					}
+				}
+
+				called := false
+				if err := j.Range(
+					ctx,
+					0,
+					func(ctx context.Context, rec []byte) (bool, error) {
+						if called {
+							return false, errors.New("unexpected call")
+						}
+
+						called = true
+						return false, nil
+					},
+				); err != nil {
+					t.Fatal(err)
+				}
+			})
+
+			t.Run("returns an error if the first record is truncated", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, j := setup(t, newStore)
+
+				records := [][]byte{
+					[]byte("<record-1>"),
+					[]byte("<record-2>"),
+					[]byte("<record-3>"),
+					[]byte("<record-4>"),
+					[]byte("<record-5>"),
+				}
+
+				for ver, rec := range records {
+					ok, err := j.Append(ctx, uint64(ver), rec)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !ok {
+						t.Fatal("unexpected optimistic concurrency conflict")
+					}
+				}
+
+				retainVersion := uint64(len(records) - 1)
+				err := j.Truncate(ctx, retainVersion)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				err = j.Range(
+					ctx,
+					1,
+					func(ctx context.Context, rec []byte) (bool, error) {
+						panic("unexpected call")
+					},
+				)
+				if err == nil {
+					t.Fatal("expected error")
+				}
+
+				expect := "cannot range over truncated records"
+				if err.Error() != expect {
+					t.Fatalf("unexpected error: want %s, got %s", expect, err.Error())
+				}
+			})
+		})
+
 		t.Run("func RangeAll()", func(t *testing.T) {
 			t.Run("calls the function for each record in the journal", func(t *testing.T) {
 				t.Parallel()

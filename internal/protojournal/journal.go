@@ -24,6 +24,32 @@ func Get(
 	return true, proto.Unmarshal(data, rec)
 }
 
+// Range invokes fn for each record in j, beginning at the given version, in
+// order.
+func Range[R proto.Message](
+	ctx context.Context,
+	j journal.Journal,
+	ver uint64,
+	fn func(context.Context, R) (bool, error),
+) error {
+	var rec R
+	rec = reflect.New(
+		reflect.TypeOf(rec).Elem(),
+	).Interface().(R)
+
+	return j.Range(
+		ctx,
+		ver,
+		func(ctx context.Context, data []byte) (bool, error) {
+			if err := proto.Unmarshal(data, rec); err != nil {
+				return false, fmt.Errorf("unable to unmarshal record: %w", err)
+			}
+
+			return fn(ctx, rec)
+		},
+	)
+}
+
 // RangeAll invokes fn for each record in j, in order.
 func RangeAll[R proto.Message](
 	ctx context.Context,

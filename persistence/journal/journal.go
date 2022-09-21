@@ -13,6 +13,14 @@ type Journal interface {
 	// truncated or because the given version has not been written yet.
 	Get(ctx context.Context, ver uint64) (rec []byte, ok bool, err error)
 
+	// Range invokes fn for each record in the journal, beginning at the given
+	// version, in order.
+	Range(
+		ctx context.Context,
+		ver uint64,
+		fn func(ctx context.Context, rec []byte) (bool, error),
+	) error
+
 	// RangeAll invokes fn for each record in the journal, in order.
 	RangeAll(
 		ctx context.Context,

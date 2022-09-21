@@ -121,23 +121,26 @@ func (s *EventStream) Range(
 		}
 	}
 
-	for {
-		ver++
-
-		ok, err := protojournal.Get(ctx, s.Journal, ver, rec)
-		if !ok || err != nil {
-			return err
-		}
-
-		if append := rec.GetAppend(); append != nil {
-			for _, env := range append.Envelopes {
-				ok, err := fn(ctx, env)
-				if !ok || err != nil {
-					return err
+	return protojournal.Range(
+		ctx,
+		s.Journal,
+		ver+1,
+		func(
+			ctx context.Context,
+			rec *JournalRecord,
+		) (bool, error) {
+			if append := rec.GetAppend(); append != nil {
+				for _, env := range append.Envelopes {
+					ok, err := fn(ctx, env)
+					if !ok || err != nil {
+						return false, err
+					}
 				}
 			}
-		}
-	}
+
+			return true, nil
+		},
+	)
 }
 
 // search performs a binary search to find the record that contains the event at

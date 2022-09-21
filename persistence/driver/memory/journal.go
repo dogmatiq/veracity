@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/dogmatiq/veracity/persistence/internal/pathkey"
@@ -75,6 +76,35 @@ func (h *journalHandle) Get(ctx context.Context, ver uint64) ([]byte, bool, erro
 	}
 
 	return h.state.Records[ver-h.state.Begin], true, ctx.Err()
+}
+
+func (h *journalHandle) Range(
+	ctx context.Context,
+	ver uint64,
+	fn func(context.Context, []byte) (bool, error),
+) error {
+	if h.state == nil {
+		panic("journal is closed")
+	}
+
+	h.state.RLock()
+	begin := h.state.Begin
+	records := h.state.Records
+	h.state.RUnlock()
+
+	if begin > ver {
+		return fmt.Errorf("cannot range over truncated records")
+	}
+
+	for _, rec := range records[ver-begin:] {
+		ok, err := fn(ctx, rec)
+		if !ok || err != nil {
+			return err
+		}
+		ver++
+	}
+
+	return ctx.Err()
 }
 
 func (h *journalHandle) RangeAll(
