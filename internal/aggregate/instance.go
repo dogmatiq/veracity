@@ -156,25 +156,24 @@ func (x *JournalRecord_Revision) apply(i *instance) error {
 // load reads all records from the journal and applies them to the instance.
 func (i *instance) load(ctx context.Context) error {
 	i.root = i.Handler.New()
-	rec := &JournalRecord{}
 
-	for {
-		ok, err := protojournal.Get(ctx, i.Journal, i.version, rec)
-		if err != nil {
-			return fmt.Errorf("unable to load instance: %w", err)
-		}
-		if !ok {
-			break
-		}
+	if err := protojournal.RangeAll(
+		ctx,
+		i.Journal,
+		func(
+			ctx context.Context,
+			ver uint64,
+			rec *JournalRecord,
+		) (bool, error) {
+			i.version = ver + 1
 
-		type applyer interface {
-			apply(*instance) error
-		}
-		if err := rec.GetOneOf().(applyer).apply(i); err != nil {
-			return fmt.Errorf("unable to load instance: %w", err)
-		}
-
-		i.version++
+			type applyer interface {
+				apply(*instance) error
+			}
+			return true, rec.GetOneOf().(applyer).apply(i)
+		},
+	); err != nil {
+		return fmt.Errorf("unable to load instance: %w", err)
 	}
 
 	if i.unpublished != nil {

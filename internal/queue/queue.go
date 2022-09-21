@@ -294,22 +294,25 @@ func (q *Queue) load(ctx context.Context) error {
 	q.elements = map[string]*elem{}
 	q.unreleased = map[string]*elem{}
 
-	rec := &JournalRecord{}
+	if err := protojournal.RangeAll(
+		ctx,
+		q.Journal,
+		func(
+			ctx context.Context,
+			ver uint64,
+			rec *JournalRecord,
+		) (bool, error) {
+			q.version = ver + 1
 
-	for {
-		ok, err := protojournal.Get(ctx, q.Journal, q.version, rec)
-		if err != nil {
-			return fmt.Errorf("unable to load queue: %w", err)
-		}
-		if !ok {
-			break
-		}
+			type applyer interface {
+				apply(*Queue)
+			}
+			rec.GetOneOf().(applyer).apply(q)
 
-		type applyer interface {
-			apply(*Queue)
-		}
-		rec.GetOneOf().(applyer).apply(q)
-		q.version++
+			return true, nil
+		},
+	); err != nil {
+		return fmt.Errorf("unable to load queue: %w", err)
 	}
 
 	for _, e := range q.unreleased {

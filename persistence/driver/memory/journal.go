@@ -77,19 +77,28 @@ func (h *journalHandle) Get(ctx context.Context, ver uint64) ([]byte, bool, erro
 	return h.state.Records[ver-h.state.Begin], true, ctx.Err()
 }
 
-func (h *journalHandle) GetOldest(ctx context.Context) (uint64, []byte, bool, error) {
+func (h *journalHandle) RangeAll(
+	ctx context.Context,
+	fn func(context.Context, uint64, []byte) (bool, error),
+) error {
 	if h.state == nil {
 		panic("journal is closed")
 	}
 
 	h.state.RLock()
-	defer h.state.RUnlock()
+	ver := h.state.Begin
+	records := h.state.Records
+	h.state.RUnlock()
 
-	if h.state.Begin == h.state.End {
-		return 0, nil, false, ctx.Err()
+	for _, rec := range records {
+		ok, err := fn(ctx, ver, rec)
+		if !ok || err != nil {
+			return err
+		}
+		ver++
 	}
 
-	return h.state.Begin, h.state.Records[0], true, ctx.Err()
+	return ctx.Err()
 }
 
 func (h *journalHandle) Append(ctx context.Context, ver uint64, rec []byte) (bool, error) {

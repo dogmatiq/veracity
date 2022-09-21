@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 )
 
@@ -173,57 +174,52 @@ func RunTests(
 			})
 		})
 
-		t.Run("func GetOldest()", func(t *testing.T) {
-			t.Run("it returns the record that produced version 0 if there has been no truncation", func(t *testing.T) {
+		t.Run("func RangeAll()", func(t *testing.T) {
+			t.Run("calls the function for each record in the journal", func(t *testing.T) {
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
 
-				expect := []byte("<record>")
-				ok, err := j.Append(ctx, 0, expect)
-				if err != nil {
+				var expect [][]byte
+
+				for ver := uint64(0); ver < 100; ver++ {
+					rec := []byte(fmt.Sprintf("<record-%d>", ver))
+					ok, err := j.Append(ctx, ver, rec)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !ok {
+						t.Fatal("unexpected optimistic concurrency conflict")
+					}
+
+					expect = append(expect, rec)
+				}
+
+				var actual [][]byte
+				var expectVer uint64
+
+				if err := j.RangeAll(
+					ctx,
+					func(ctx context.Context, ver uint64, rec []byte) (bool, error) {
+						if ver != expectVer {
+							t.Fatalf("unexpected version: want %d, got %d", expectVer, ver)
+						}
+
+						actual = append(actual, rec)
+						expectVer++
+
+						return true, nil
+					},
+				); err != nil {
 					t.Fatal(err)
 				}
-				if !ok {
-					t.Fatal("unexpected optimistic concurrency conflict")
-				}
 
-				ver, actual, ok, err := j.GetOldest(ctx)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !ok {
-					t.Fatal("expected record to exist")
-				}
-
-				if !bytes.Equal(expect, actual) {
-					t.Fatalf(
-						"unexpected record, want %q, got %q",
-						string(expect),
-						string(actual),
-					)
-				}
-
-				if ver != 0 {
-					t.Fatalf("unexpected version, want 0, got %d", ver)
+				if diff := cmp.Diff(expect, actual); diff != "" {
+					t.Fatal(diff)
 				}
 			})
 
-			t.Run("it returns false if the journal is empty", func(t *testing.T) {
-				t.Parallel()
-
-				ctx, j := setup(t, newStore)
-
-				_, _, ok, err := j.GetOldest(ctx)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if ok {
-					t.Fatal("returned ok == true for non-existent record")
-				}
-			})
-
-			t.Run("it returns the first non-truncated record", func(t *testing.T) {
+			t.Run("it starts at the first non-truncated record", func(t *testing.T) {
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
@@ -252,25 +248,21 @@ func RunTests(
 					t.Fatal(err)
 				}
 
-				expect := records[retainVersion]
-				ver, actual, ok, err := j.GetOldest(ctx)
-				if err != nil {
+				if err := j.RangeAll(
+					ctx,
+					func(ctx context.Context, ver uint64, rec []byte) (bool, error) {
+						if ver != retainVersion {
+							t.Fatalf("unexpected version: want %d, got %d", retainVersion, ver)
+						}
+
+						if !bytes.Equal(rec, records[retainVersion]) {
+							t.Fatalf("unexpected record: want %q, got %q", records[retainVersion], rec)
+						}
+
+						return false, nil
+					},
+				); err != nil {
 					t.Fatal(err)
-				}
-				if !ok {
-					t.Fatal("expected record to exist")
-				}
-
-				if !bytes.Equal(expect, actual) {
-					t.Fatalf(
-						"unexpected record, want %q, got %q",
-						string(expect),
-						string(actual),
-					)
-				}
-
-				if ver != retainVersion {
-					t.Fatalf("unexpected version, want %d, got %d", retainVersion, ver)
 				}
 			})
 		})

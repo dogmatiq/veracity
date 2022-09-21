@@ -186,22 +186,26 @@ func (s *EventStream) load(ctx context.Context) error {
 	}
 
 	s.events = map[string]struct{}{}
-	rec := &JournalRecord{}
 
-	for {
-		ok, err := protojournal.Get(ctx, s.Journal, s.version, rec)
-		if err != nil {
-			return fmt.Errorf("unable to load event stream: %w", err)
-		}
-		if !ok {
-			break
-		}
+	if err := protojournal.RangeAll(
+		ctx,
+		s.Journal,
+		func(
+			ctx context.Context,
+			ver uint64,
+			rec *JournalRecord,
+		) (bool, error) {
+			s.version = ver + 1
 
-		type applyer interface {
-			apply(*EventStream)
-		}
-		rec.GetOneOf().(applyer).apply(s)
-		s.version++
+			type applyer interface {
+				apply(*EventStream)
+			}
+			rec.GetOneOf().(applyer).apply(s)
+
+			return true, nil
+		},
+	); err != nil {
+		return fmt.Errorf("unable to load event stream: %w", err)
 	}
 
 	s.Logger.Debug(

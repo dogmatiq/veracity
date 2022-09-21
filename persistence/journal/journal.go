@@ -13,12 +13,11 @@ type Journal interface {
 	// truncated or because the given version has not been written yet.
 	Get(ctx context.Context, ver uint64) (rec []byte, ok bool, err error)
 
-	// GetOldest returns oldest record in the journal.
-	//
-	// ver is the version of the journal at which the record was written.
-	//
-	// ok is false if the journal is empty.
-	GetOldest(ctx context.Context) (ver uint64, rec []byte, ok bool, err error)
+	// RangeAll invokes fn for each record in the journal, in order.
+	RangeAll(
+		ctx context.Context,
+		fn func(ctx context.Context, ver uint64, rec []byte) (bool, error),
+	) error
 
 	// Append adds a record to the journal.
 	//

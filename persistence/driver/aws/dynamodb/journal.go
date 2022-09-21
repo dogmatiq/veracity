@@ -3,6 +3,7 @@ package dynamodb
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -94,13 +95,13 @@ func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journa
 		ExpressionAttributeNames: map[string]*string{
 			"#K": aws.String(journalKeyAttr),
 			"#V": aws.String(journalVersionAttr),
+			"#R": aws.String(journalRecordAttr),
 		},
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 			":K": &j.Key,
 		},
-		ProjectionExpression: &j.QueryProjection,
+		ProjectionExpression: aws.String("#V, #R"),
 		ScanIndexForward:     aws.Bool(true),
-		Limit:                aws.Int64(1),
 	}
 
 	j.PutRequest = dynamodb.PutItemInput{
@@ -136,10 +137,9 @@ type journalHandle struct {
 	DecoratePutItem    func(*dynamodb.PutItemInput) []request.Option
 	DecorateDeleteItem func(*dynamodb.DeleteItemInput) []request.Option
 
-	Key             dynamodb.AttributeValue
-	Version         dynamodb.AttributeValue
-	Record          dynamodb.AttributeValue
-	QueryProjection string
+	Key     dynamodb.AttributeValue
+	Version dynamodb.AttributeValue
+	Record  dynamodb.AttributeValue
 
 	GetRequest    dynamodb.GetItemInput
 	QueryRequest  dynamodb.QueryInput
@@ -163,8 +163,57 @@ func (j *journalHandle) Get(ctx context.Context, ver uint64) ([]byte, bool, erro
 	return out.Item[journalRecordAttr].B, true, nil
 }
 
-func (j *journalHandle) GetOldest(ctx context.Context) (uint64, []byte, bool, error) {
-	return j.getOldest(ctx, true)
+func (j *journalHandle) RangeAll(
+	ctx context.Context,
+	fn func(context.Context, uint64, []byte) (bool, error),
+) error {
+	var expectVer uint64
+
+	for {
+		out, err := awsx.Do(
+			ctx,
+			j.DB.QueryWithContext,
+			j.DecorateQuery,
+			&j.QueryRequest,
+		)
+		if err != nil {
+			return err
+		}
+
+		for _, item := range out.Items {
+			attr, ok := item[journalVersionAttr]
+			if !ok {
+				return errors.New("journal is corrupt: item is missing version attribute")
+			}
+
+			ver, err := strconv.ParseUint(aws.StringValue(attr.N), 10, 64)
+			if err != nil {
+				return err
+			}
+
+			if expectVer != 0 && ver != expectVer {
+				return fmt.Errorf("journal is corrupt: item has incorrect version (%d), expected %d", ver, expectVer)
+			}
+
+			expectVer = ver + 1
+
+			attr, ok = item[journalRecordAttr]
+			if !ok {
+				return errors.New("journal is corrupt: item is missing record attribute")
+			}
+
+			ok, err = fn(ctx, ver, attr.B)
+			if !ok || err != nil {
+				return err
+			}
+		}
+
+		if out.LastEvaluatedKey == nil {
+			return nil
+		}
+
+		j.QueryRequest.ExclusiveStartKey = out.LastEvaluatedKey
+	}
 }
 
 func (j *journalHandle) Append(ctx context.Context, ver uint64, rec []byte) (bool, error) {
@@ -186,78 +235,28 @@ func (j *journalHandle) Append(ctx context.Context, ver uint64, rec []byte) (boo
 }
 
 func (j *journalHandle) Truncate(ctx context.Context, ver uint64) error {
-	oldest, _, ok, err := j.getOldest(ctx, false)
-	if !ok || err != nil {
-		return err
-	}
+	return j.RangeAll(
+		ctx,
+		func(ctx context.Context, v uint64, _ []byte) (bool, error) {
+			if v >= ver {
+				return false, nil
+			}
 
-	for oldest < ver {
-		j.Version.N = aws.String(strconv.FormatUint(oldest, 10))
+			j.Version.N = aws.String(strconv.FormatUint(v, 10))
 
-		if _, err := awsx.Do(
-			ctx,
-			j.DB.DeleteItemWithContext,
-			j.DecorateDeleteItem,
-			&j.DeleteRequest,
-		); err != nil {
-			return err
-		}
-
-		oldest++
-	}
-
-	return nil
+			_, err := awsx.Do(
+				ctx,
+				j.DB.DeleteItemWithContext,
+				j.DecorateDeleteItem,
+				&j.DeleteRequest,
+			)
+			return true, err
+		},
+	)
 }
 
 func (j *journalHandle) Close() error {
 	return nil
-}
-
-func (j *journalHandle) getOldest(
-	ctx context.Context,
-	fetchRecord bool,
-) (uint64, []byte, bool, error) {
-	if fetchRecord {
-		j.QueryProjection = "#V, #R"
-		j.QueryRequest.ExpressionAttributeNames["#R"] = aws.String(journalRecordAttr)
-	} else {
-		j.QueryProjection = "#V"
-		delete(j.QueryRequest.ExpressionAttributeNames, "#R")
-	}
-
-	out, err := awsx.Do(
-		ctx,
-		j.DB.QueryWithContext,
-		j.DecorateQuery,
-		&j.QueryRequest,
-	)
-	if len(out.Items) == 0 || err != nil {
-		return 0, nil, false, err
-	}
-
-	item := out.Items[0]
-
-	attr, ok := item[journalVersionAttr]
-	if !ok {
-		return 0, nil, false, errors.New("journal record is corrupt: missing version attribute")
-	}
-
-	ver, err := strconv.ParseUint(aws.StringValue(attr.N), 10, 64)
-	if err != nil {
-		return 0, nil, false, err
-	}
-
-	var rec []byte
-	if fetchRecord {
-		attr, ok := item[journalRecordAttr]
-		if !ok {
-			return 0, nil, false, errors.New("journal record is corrupt: missing record attribute")
-		}
-
-		rec = attr.B
-	}
-
-	return ver, rec, true, nil
 }
 
 // CreateJournalTable creates a DynamoDB for storing journal records.
