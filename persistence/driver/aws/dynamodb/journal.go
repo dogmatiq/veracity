@@ -101,7 +101,6 @@ func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journa
 			":K": &j.Key,
 		},
 		ProjectionExpression: aws.String("#V, #R"),
-		ScanIndexForward:     aws.Bool(true),
 	}
 
 	j.PutRequest = dynamodb.PutItemInput{

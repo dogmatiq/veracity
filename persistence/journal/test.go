@@ -3,6 +3,7 @@ package journal
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -216,6 +217,37 @@ func RunTests(
 
 				if diff := cmp.Diff(expect, actual); diff != "" {
 					t.Fatal(diff)
+				}
+			})
+
+			t.Run("it stops iterating if the function returns false", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, j := setup(t, newStore)
+
+				for ver := uint64(0); ver < 2; ver++ {
+					ok, err := j.Append(ctx, ver, []byte("<record>"))
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !ok {
+						t.Fatal("unexpected optimistic concurrency conflict")
+					}
+				}
+
+				called := false
+				if err := j.RangeAll(
+					ctx,
+					func(ctx context.Context, ver uint64, rec []byte) (bool, error) {
+						if called {
+							return false, errors.New("unexpected call")
+						}
+
+						called = true
+						return false, nil
+					},
+				); err != nil {
+					t.Fatal(err)
 				}
 			})
 
