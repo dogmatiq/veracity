@@ -42,7 +42,7 @@ func Range[R proto.Message](
 		ver,
 		func(ctx context.Context, data []byte) (bool, error) {
 			if err := proto.Unmarshal(data, rec); err != nil {
-				return false, fmt.Errorf("unable to unmarshal record: %w", err)
+				return false, fmt.Errorf("unable to unmarshal journal record: %w", err)
 			}
 
 			return fn(ctx, rec)
@@ -65,7 +65,7 @@ func RangeAll[R proto.Message](
 		ctx,
 		func(ctx context.Context, ver uint64, data []byte) (bool, error) {
 			if err := proto.Unmarshal(data, rec); err != nil {
-				return false, fmt.Errorf("unable to unmarshal record: %w", err)
+				return false, fmt.Errorf("unable to unmarshal journal record: %w", err)
 			}
 
 			return fn(ctx, ver, rec)
@@ -86,4 +86,37 @@ func Append(
 	}
 
 	return j.Append(ctx, ver, data)
+}
+
+// Search performs a binary search to find the record for which cmp() returns 0.
+func Search[R proto.Message](
+	ctx context.Context,
+	j journal.Journal,
+	begin, end uint64,
+	cmp func(R) int,
+) (ver uint64, rec R, ok bool, err error) {
+	rec = reflect.New(
+		reflect.TypeOf(rec).Elem(),
+	).Interface().(R)
+
+	ver, data, ok, err := journal.Search(
+		ctx,
+		j,
+		begin, end,
+		func(ctx context.Context, data []byte) (int, error) {
+			if err := proto.Unmarshal(data, rec); err != nil {
+				return 0, fmt.Errorf("unable to unmarshal journal record: %w", err)
+			}
+			return cmp(rec), nil
+		},
+	)
+	if !ok || err != nil {
+		return 0, rec, false, err
+	}
+
+	if err := proto.Unmarshal(data, rec); err != nil {
+		return 0, rec, false, fmt.Errorf("unable to unmarshal journal record: %w", err)
+	}
+
+	return ver, rec, true, nil
 }

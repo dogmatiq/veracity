@@ -105,9 +105,27 @@ func (s *EventStream) Range(
 		return nil
 	}
 
-	rec, ver, err := s.search(ctx, offset)
+	ver, rec, ok, err := protojournal.Search(
+		ctx,
+		s.Journal,
+		0, s.version,
+		func(rec *JournalRecord) int {
+			append := rec.GetAppend()
+
+			if offset < append.GetBeginOffset() {
+				return -1
+			} else if offset >= append.GetEndOffset() { // TODO: test edge case here
+				return +1
+			} else {
+				return 0
+			}
+		},
+	)
 	if err != nil {
 		return err
+	}
+	if !ok {
+		return errors.New("event stream is corrupt")
 	}
 
 	append := rec.GetAppend()
@@ -141,45 +159,6 @@ func (s *EventStream) Range(
 			return true, nil
 		},
 	)
-}
-
-// search performs a binary search to find the record that contains the event at
-// the given offset.
-//
-// It returns the journal that contains the offset and its version within the
-// journal.
-func (s *EventStream) search(
-	ctx context.Context,
-	offset uint64,
-) (*JournalRecord, uint64, error) {
-	rec := &JournalRecord{}
-
-	if offset == 0 {
-		_, err := protojournal.Get(ctx, s.Journal, 0, rec)
-		return rec, 0, err
-	}
-
-	min := uint64(0)
-	max := s.version
-
-	for {
-		ver := min>>1 + max>>1
-
-		_, err := protojournal.Get(ctx, s.Journal, ver, rec)
-		if err != nil {
-			return nil, 0, err
-		}
-
-		append := rec.GetAppend()
-
-		if offset < append.GetBeginOffset() {
-			max = ver
-		} else if offset >= append.GetEndOffset() { // TODO: test edge case here
-			min = ver + 1
-		} else {
-			return rec, ver, nil
-		}
-	}
 }
 
 // load reads all records from the journal and applies them to the stream.
