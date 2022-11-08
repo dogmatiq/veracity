@@ -3,7 +3,7 @@ module github.com/dogmatiq/veracity
 go 1.18
 
 require (
-	github.com/aws/aws-sdk-go v1.44.129
+	github.com/aws/aws-sdk-go v1.44.132
 	github.com/dogmatiq/dogma v0.11.1
 	github.com/dogmatiq/interopspec v0.5.2
 	github.com/dogmatiq/marshalkit v0.7.2
@@ -13,7 +13,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.4.0
 	github.com/onsi/gomega v1.24.0
 	go.uber.org/zap v1.23.0
-	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
+	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
 	google.golang.org/protobuf v1.28.1
 )
 
