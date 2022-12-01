@@ -12,7 +12,7 @@ require (
 	github.com/jmalloc/gomegax v0.0.0-20200507221434-64fca4c0e03a
 	github.com/onsi/ginkgo/v2 v2.5.1
 	github.com/onsi/gomega v1.24.1
-	go.uber.org/zap v1.23.0
+	go.uber.org/zap v1.24.0
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
 	google.golang.org/protobuf v1.28.1
 )
