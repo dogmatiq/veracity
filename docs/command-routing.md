@@ -1,21 +1,22 @@
 ```mermaid
 flowchart TD
-    subgraph Application
-        Begin("User calls ExecuteCommand()")
-    end
+    Begin("User calls ExecuteCommand()")
+    Network{{Network}}
+    Done(Done)
+
+    Begin --> Execute
 
     subgraph Dogma Engine
-        Begin --> Execute
-
         Execute[Execute the command]
         Valid?{Is the command valid?}
         RouteToHandler[Route the command\nto a handler]
         HandlerType?{Which handler type\nhandles this command?}
         RouteToInstance["Call RouteCommandToInstance()"]
         ThisNode?{"Does this node currently\nmanage the target instance?"}
-        Handle["Call HandleCommand()"]
+        RouteToNode[Route command to\nthe appropriate node]
         Reachable?{"Is the appropriate\nnode reachable?"}
-        Send[Send command to\nthe other node]
+        Send[Send the command\nto the appropriate node]
+        Handle["Call HandleCommand()"]
 
         Execute --> Valid?
 
@@ -31,17 +32,15 @@ flowchart TD
         RouteToInstance --> ThisNode?
 
         ThisNode? -- YES --> Handle
-        ThisNode? -- NO --> Reachable?
+        ThisNode? -- NO --> RouteToNode
 
-        Reachable? -- YES --> Send
+        RouteToNode --> Reachable?
         Reachable? -- NO --> Handle
+        Reachable? -- YES --> Send
     end
 
-    API{{Inter-node gRPC API}}
-    Send -.-> API
-    API -.-> Execute
+    Send -.-> Network
+    Network -.-> Execute
 
-    Done(Done)
     Handle --> Done
-
 ```
