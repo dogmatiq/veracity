@@ -19,22 +19,22 @@ flowchart TD
 
         Execute --> Valid?
 
-        Valid? -- yes --> RouteToHandler
-        Valid? -- no --> NotValid(Return an error)
+        Valid? -- YES --> RouteToHandler
+        Valid? -- NO --> NotValid(Return an error)
 
         RouteToHandler --> HandlerType?
 
-        HandlerType? -- AggregateMessageHandler --> RouteToInstance
-        HandlerType? -- IntegrationMessageHandler --> Handle
-        HandlerType? -- "(unknown)" --> Unknown(Return an error)
+        HandlerType? -- AGGREGATE --> RouteToInstance
+        HandlerType? -- INTEGRATION --> Handle
+        HandlerType? -- UNKNOWN --> Unknown(Return an error)
 
         RouteToInstance --> ThisNode?
 
-        ThisNode? -- yes --> Handle
-        ThisNode? -- no --> Reachable?
+        ThisNode? -- YES --> Handle
+        ThisNode? -- NO --> Reachable?
 
-        Reachable? -- yes --> Send
-        Reachable? -- no --> Handle
+        Reachable? -- YES --> Send
+        Reachable? -- NO --> Handle
     end
 
     API{{Inter-node gRPC API}}
