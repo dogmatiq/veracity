@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/aws/aws-sdk-go v1.44.255
-	github.com/dogmatiq/dogma v0.11.1
+	github.com/dogmatiq/dogma v0.12.0
 	github.com/dogmatiq/interopspec v0.5.2
 	github.com/dogmatiq/marshalkit v0.7.3
 	github.com/google/go-cmp v0.5.9
