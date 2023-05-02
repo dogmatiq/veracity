@@ -3,10 +3,12 @@ package kv
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 )
 
@@ -116,9 +118,9 @@ func RunTests(
 			t.Run("it returns an empty value if the key doesn't exist", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, newStore)
+				ctx, ks := setup(t, newStore)
 
-				v, err := j.Get(ctx, []byte("<key>"))
+				v, err := ks.Get(ctx, []byte("<key>"))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -130,19 +132,19 @@ func RunTests(
 			t.Run("it returns an empty value if the key has been deleted", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, newStore)
+				ctx, ks := setup(t, newStore)
 
 				k := []byte("<key>")
 
-				if err := j.Set(ctx, k, []byte("<value>")); err != nil {
+				if err := ks.Set(ctx, k, []byte("<value>")); err != nil {
 					t.Fatal(err)
 				}
 
-				if err := j.Set(ctx, k, nil); err != nil {
+				if err := ks.Set(ctx, k, nil); err != nil {
 					t.Fatal(err)
 				}
 
-				v, err := j.Get(ctx, k)
+				v, err := ks.Get(ctx, k)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -154,13 +156,13 @@ func RunTests(
 			t.Run("it returns the value if the key exists", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, newStore)
+				ctx, ks := setup(t, newStore)
 
 				for i := 0; i < 5; i++ {
 					k := []byte(fmt.Sprintf("<key-%d>", i))
 					v := []byte(fmt.Sprintf("<value-%d>", i))
 
-					if err := j.Set(ctx, k, v); err != nil {
+					if err := ks.Set(ctx, k, v); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -169,7 +171,7 @@ func RunTests(
 					k := []byte(fmt.Sprintf("<key-%d>", i))
 					expect := []byte(fmt.Sprintf("<value-%d>", i))
 
-					actual, err := j.Get(ctx, k)
+					actual, err := ks.Get(ctx, k)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -189,9 +191,9 @@ func RunTests(
 			t.Run("it returns false if the key doesn't exist", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, newStore)
+				ctx, ks := setup(t, newStore)
 
-				ok, err := j.Has(ctx, []byte("<key>"))
+				ok, err := ks.Has(ctx, []byte("<key>"))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -203,15 +205,15 @@ func RunTests(
 			t.Run("it returns true if the key exists", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, newStore)
+				ctx, ks := setup(t, newStore)
 
 				k := []byte("<key>")
 
-				if err := j.Set(ctx, k, []byte("<value>")); err != nil {
+				if err := ks.Set(ctx, k, []byte("<value>")); err != nil {
 					t.Fatal(err)
 				}
 
-				ok, err := j.Has(ctx, k)
+				ok, err := ks.Has(ctx, k)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -223,24 +225,89 @@ func RunTests(
 			t.Run("it returns false if the key has been deleted", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, newStore)
+				ctx, ks := setup(t, newStore)
 
 				k := []byte("<key>")
 
-				if err := j.Set(ctx, k, []byte("<value>")); err != nil {
+				if err := ks.Set(ctx, k, []byte("<value>")); err != nil {
 					t.Fatal(err)
 				}
 
-				if err := j.Set(ctx, k, nil); err != nil {
+				if err := ks.Set(ctx, k, nil); err != nil {
 					t.Fatal(err)
 				}
 
-				ok, err := j.Has(ctx, k)
+				ok, err := ks.Has(ctx, k)
 				if err != nil {
 					t.Fatal(err)
 				}
 				if ok {
 					t.Fatal("expected ok to be false")
+				}
+			})
+		})
+
+		t.Run("func RangeAll()", func(t *testing.T) {
+			t.Run("calls the function for each key in the keyspace", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, ks := setup(t, newStore)
+
+				expect := map[string]string{}
+
+				for n := uint64(0); n < 100; n++ {
+					k := fmt.Sprintf("<key-%d>", n)
+					v := fmt.Sprintf("<value-%d>", n)
+					if err := ks.Set(ctx, []byte(k), []byte(v)); err != nil {
+						t.Fatal(err)
+					}
+
+					expect[k] = v
+				}
+
+				actual := map[string]string{}
+
+				if err := ks.RangeAll(
+					ctx,
+					func(ctx context.Context, k, v []byte) (bool, error) {
+						actual[string(k)] = string(v)
+						return true, nil
+					},
+				); err != nil {
+					t.Fatal(err)
+				}
+
+				if diff := cmp.Diff(expect, actual); diff != "" {
+					t.Fatal(diff)
+				}
+			})
+
+			t.Run("it stops iterating if the function returns false", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, ks := setup(t, newStore)
+
+				for n := uint64(0); n < 2; n++ {
+					k := fmt.Sprintf("<key-%d>", n)
+					v := fmt.Sprintf("<value-%d>", n)
+					if err := ks.Set(ctx, []byte(k), []byte(v)); err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				called := false
+				if err := ks.RangeAll(
+					ctx,
+					func(ctx context.Context, k, v []byte) (bool, error) {
+						if called {
+							return false, errors.New("unexpected call")
+						}
+
+						called = true
+						return false, nil
+					},
+				); err != nil {
+					t.Fatal(err)
 				}
 			})
 		})

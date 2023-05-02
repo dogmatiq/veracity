@@ -17,6 +17,15 @@ type Keyspace interface {
 	// If v is empty, the key is deleted.
 	Set(ctx context.Context, k, v []byte) error
 
+	// RangeAll invokes fn for each key in the keyspace.
+	//
+	// The order is undefined. If fn returns false, ranging stops RangeAll()
+	// returns immediately.
+	RangeAll(
+		ctx context.Context,
+		fn func(ctx context.Context, k, v []byte) (bool, error),
+	) error
+
 	// Close closes the keyspace.
 	Close() error
 }

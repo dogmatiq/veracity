@@ -107,6 +107,27 @@ func (h *keyspaceHandle) Set(ctx context.Context, k, v []byte) error {
 	return ctx.Err()
 }
 
+func (h *keyspaceHandle) RangeAll(
+	ctx context.Context,
+	fn func(ctx context.Context, k, v []byte) (bool, error),
+) error {
+	if h.state == nil {
+		panic("keyspace is closed")
+	}
+
+	h.state.RLock()
+	defer h.state.RUnlock()
+
+	for k, v := range h.state.Values {
+		ok, err := fn(ctx, []byte(k), v)
+		if !ok || err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (h *keyspaceHandle) Close() error {
 	if h.state == nil {
 		return errors.New("keyspace is already closed")
