@@ -3,7 +3,7 @@ module github.com/dogmatiq/veracity
 go 1.20
 
 require (
-	github.com/aws/aws-sdk-go v1.44.255
+	github.com/aws/aws-sdk-go v1.44.256
 	github.com/google/go-cmp v0.5.9
 	github.com/google/uuid v1.3.0
 	github.com/onsi/ginkgo/v2 v2.9.2
