@@ -1,0 +1,10 @@
+syntax = "proto3";
+package dogmatiq.protobuf;
+
+option go_package = "github.com/dogmatiq/veracity/internal/protobuf/uuidpb";
+
+// UUID is a size-optimized representation of an RFC 4122 UUID.
+message UUID {
+  uint64 upper = 1;
+  uint64 lower = 2;
+}
