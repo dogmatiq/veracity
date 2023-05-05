@@ -7,6 +7,7 @@ import (
 
 	"github.com/dogmatiq/veracity/persistence/internal/pathkey"
 	"github.com/dogmatiq/veracity/persistence/kv"
+	"golang.org/x/exp/slices"
 )
 
 // KeyValueStore is an implementation of kv.Store that stores keyspaces in
@@ -59,7 +60,7 @@ func (h *keyspaceHandle) Get(ctx context.Context, k []byte) (v []byte, err error
 	h.state.RLock()
 	defer h.state.RUnlock()
 
-	return h.state.Values[string(k)], ctx.Err()
+	return slices.Clone(h.state.Values[string(k)]), ctx.Err()
 }
 
 func (h *keyspaceHandle) Has(ctx context.Context, k []byte) (ok bool, err error) {
@@ -78,6 +79,8 @@ func (h *keyspaceHandle) Set(ctx context.Context, k, v []byte) error {
 	if h.state == nil {
 		panic("keyspace is closed")
 	}
+
+	v = slices.Clone(v)
 
 	h.state.Lock()
 	defer h.state.Unlock()
@@ -119,7 +122,7 @@ func (h *keyspaceHandle) RangeAll(
 	defer h.state.RUnlock()
 
 	for k, v := range h.state.Values {
-		ok, err := fn(ctx, []byte(k), v)
+		ok, err := fn(ctx, []byte(k), slices.Clone(v))
 		if !ok || err != nil {
 			return err
 		}

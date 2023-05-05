@@ -185,6 +185,105 @@ func RunTests(
 					}
 				}
 			})
+
+			t.Run("it does not return its internal byte slice", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, ks := setup(t, newStore)
+
+				k := []byte("<key>")
+
+				if err := ks.Set(ctx, k, []byte("<value>")); err != nil {
+					t.Fatal(err)
+				}
+
+				v, err := ks.Get(ctx, k)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				v[0] = 'X'
+
+				actual, err := ks.Get(ctx, k)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if expect := []byte("<value>"); !bytes.Equal(expect, actual) {
+					t.Fatalf(
+						"unexpected value, want %q, got %q",
+						string(expect),
+						string(actual),
+					)
+				}
+			})
+		})
+
+		t.Run("func Set()", func(t *testing.T) {
+			t.Run("it does not keep a reference to the key slice", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, ks := setup(t, newStore)
+
+				k := []byte("<key>")
+				v := []byte("<value>")
+
+				if err := ks.Set(ctx, k, v); err != nil {
+					t.Fatal(err)
+				}
+
+				k[0] = 'X'
+
+				ok, err := ks.Has(ctx, k)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if ok {
+					t.Fatalf("unexpected key: %q", string(k))
+				}
+
+				actual, err := ks.Get(ctx, []byte("<key>"))
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if expect := []byte("<value>"); !bytes.Equal(expect, actual) {
+					t.Fatalf(
+						"unexpected value, want %q, got %q",
+						string(expect),
+						string(actual),
+					)
+				}
+			})
+
+			t.Run("it does not keep a reference to the value slice", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, ks := setup(t, newStore)
+
+				k := []byte("<key>")
+				v := []byte("<value>")
+
+				if err := ks.Set(ctx, k, v); err != nil {
+					t.Fatal(err)
+				}
+
+				v[0] = 'X'
+
+				actual, err := ks.Get(ctx, k)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if expect := []byte("<value>"); !bytes.Equal(expect, actual) {
+					t.Fatalf(
+						"unexpected value, want %q, got %q",
+						string(expect),
+						string(actual),
+					)
+				}
+			})
 		})
 
 		t.Run("func Has()", func(t *testing.T) {
@@ -308,6 +407,52 @@ func RunTests(
 					},
 				); err != nil {
 					t.Fatal(err)
+				}
+			})
+
+			t.Run("it does not invoke the function with its internal byte slices", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, ks := setup(t, newStore)
+
+				if err := ks.Set(ctx, []byte("<key>"), []byte("<value>")); err != nil {
+					t.Fatal(err)
+				}
+
+				if err := ks.RangeAll(
+					ctx,
+					func(ctx context.Context, k, v []byte) (bool, error) {
+						k[0] = 'X'
+						v[0] = 'Y'
+
+						return true, nil
+					},
+				); err != nil {
+					t.Fatal(err)
+				}
+
+				k := []byte("Xkey>")
+
+				ok, err := ks.Has(ctx, k)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if ok {
+					t.Fatalf("unexpected key: %q", string(k))
+				}
+
+				actual, err := ks.Get(ctx, []byte("<key>"))
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if expect := []byte("<value>"); !bytes.Equal(expect, actual) {
+					t.Fatalf(
+						"unexpected value, want %q, got %q",
+						string(expect),
+						string(actual),
+					)
 				}
 			})
 		})

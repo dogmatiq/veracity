@@ -8,6 +8,7 @@ import (
 
 	"github.com/dogmatiq/veracity/persistence/internal/pathkey"
 	"github.com/dogmatiq/veracity/persistence/journal"
+	"golang.org/x/exp/slices"
 )
 
 // JournalStore is an implementation of journal.Store that stores journals in
@@ -75,7 +76,7 @@ func (h *journalHandle) Get(ctx context.Context, ver uint64) ([]byte, bool, erro
 		return nil, false, nil
 	}
 
-	return h.state.Records[ver-h.state.Begin], true, ctx.Err()
+	return slices.Clone(h.state.Records[ver-h.state.Begin]), true, ctx.Err()
 }
 
 func (h *journalHandle) Range(
@@ -97,7 +98,7 @@ func (h *journalHandle) Range(
 	}
 
 	for _, rec := range records[ver-begin:] {
-		ok, err := fn(ctx, rec)
+		ok, err := fn(ctx, slices.Clone(rec))
 		if !ok || err != nil {
 			return err
 		}
@@ -121,7 +122,7 @@ func (h *journalHandle) RangeAll(
 	h.state.RUnlock()
 
 	for _, rec := range records {
-		ok, err := fn(ctx, ver, rec)
+		ok, err := fn(ctx, ver, slices.Clone(rec))
 		if !ok || err != nil {
 			return err
 		}
@@ -135,6 +136,8 @@ func (h *journalHandle) Append(ctx context.Context, ver uint64, rec []byte) (boo
 	if h.state == nil {
 		panic("journal is closed")
 	}
+
+	rec = slices.Clone(rec)
 
 	h.state.Lock()
 	defer h.state.Unlock()
