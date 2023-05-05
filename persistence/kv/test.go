@@ -415,7 +415,11 @@ func RunTests(
 
 				ctx, ks := setup(t, newStore)
 
-				if err := ks.Set(ctx, []byte("<key>"), []byte("<value>")); err != nil {
+				if err := ks.Set(
+					ctx,
+					[]byte("<key>"),
+					[]byte("<value>"),
+				); err != nil {
 					t.Fatal(err)
 				}
 
@@ -448,6 +452,115 @@ func RunTests(
 				}
 
 				if expect := []byte("<value>"); !bytes.Equal(expect, actual) {
+					t.Fatalf(
+						"unexpected value, want %q, got %q",
+						string(expect),
+						string(actual),
+					)
+				}
+			})
+
+			t.Run("it allows calls to Get() during iteration", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, ks := setup(t, newStore)
+
+				if err := ks.Set(
+					ctx,
+					[]byte("<key>"),
+					[]byte("<value>"),
+				); err != nil {
+					t.Fatal(err)
+				}
+
+				if err := ks.RangeAll(
+					ctx,
+					func(ctx context.Context, k, expect []byte) (bool, error) {
+						actual, err := ks.Get(ctx, k)
+						if err != nil {
+							t.Fatal(err)
+						}
+
+						if !bytes.Equal(expect, actual) {
+							t.Fatalf(
+								"unexpected value, want %q, got %q",
+								string(expect),
+								string(actual),
+							)
+						}
+
+						return false, nil
+					},
+				); err != nil {
+					t.Fatal(err)
+				}
+			})
+
+			t.Run("it allows calls to Has() during iteration", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, ks := setup(t, newStore)
+
+				if err := ks.Set(
+					ctx,
+					[]byte("<key>"),
+					[]byte("<value>"),
+				); err != nil {
+					t.Fatal(err)
+				}
+
+				if err := ks.RangeAll(
+					ctx,
+					func(ctx context.Context, k, _ []byte) (bool, error) {
+						ok, err := ks.Has(ctx, k)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if !ok {
+							t.Fatal("expected key to exist")
+						}
+						return false, nil
+					},
+				); err != nil {
+					t.Fatal(err)
+				}
+			})
+
+			t.Run("it allows calls to Set() during iteration", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, ks := setup(t, newStore)
+
+				k := []byte("<key>")
+
+				if err := ks.Set(
+					ctx,
+					k,
+					[]byte("<value>"),
+				); err != nil {
+					t.Fatal(err)
+				}
+
+				expect := []byte("<updated>")
+
+				if err := ks.RangeAll(
+					ctx,
+					func(ctx context.Context, k, _ []byte) (bool, error) {
+						if err := ks.Set(ctx, k, expect); err != nil {
+							t.Fatal(err)
+						}
+						return false, nil
+					},
+				); err != nil {
+					t.Fatal(err)
+				}
+
+				actual, err := ks.Get(ctx, k)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if !bytes.Equal(expect, actual) {
 					t.Fatalf(
 						"unexpected value, want %q, got %q",
 						string(expect),

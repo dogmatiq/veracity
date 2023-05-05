@@ -7,6 +7,7 @@ import (
 
 	"github.com/dogmatiq/veracity/persistence/internal/pathkey"
 	"github.com/dogmatiq/veracity/persistence/kv"
+	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )
 
@@ -119,9 +120,10 @@ func (h *keyspaceHandle) RangeAll(
 	}
 
 	h.state.RLock()
-	defer h.state.RUnlock()
+	values := maps.Clone(h.state.Values)
+	h.state.RUnlock()
 
-	for k, v := range h.state.Values {
+	for k, v := range values {
 		ok, err := fn(ctx, []byte(k), slices.Clone(v))
 		if !ok || err != nil {
 			return err
