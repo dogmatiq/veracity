@@ -12,3 +12,24 @@ scalability and "shardability" of data.
 [![Code Coverage](https://img.shields.io/codecov/c/github/dogmatiq/veracity/main.svg?style=for-the-badge)](https://codecov.io/github/dogmatiq/veracity)
 
 </div>
+
+- interop api
+  - discoverspec - serves list of running applications
+  - eventstreamspec - serves events in real-time
+    - update to support partitioning / multiple streams per app
+    - mesh router - routes API requests to appropriate node
+- cluster
+  - registry - queries which nodes are present
+  - sharding - allocates "work" to specific nodes (rendezvous hashing)
+    - aggregate instances
+    - process instances
+    - projection "consumers" (one per event stream per projection)
+  - cluster api - gRPC API used to communicate between nodes in the same cluster
+- persistence
+  - postgres - implement journal and kv store
+  - dynamodb - kv store
+- command executor
+- aggregates
+- processes
+- integrations
+- projections
