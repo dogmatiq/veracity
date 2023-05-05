@@ -173,6 +173,46 @@ func RunTests(
 					}
 				}
 			})
+
+			t.Run("it does not return its internal byte slice", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, j := setup(t, newStore)
+
+				ok, err := j.Append(ctx, 0, []byte("<record>"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !ok {
+					t.Fatal("unexpected optimistic concurrency conflict")
+				}
+
+				rec, ok, err := j.Get(ctx, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !ok {
+					t.Fatal("expected record to exist")
+				}
+
+				rec[0] = 'X'
+
+				actual, ok, err := j.Get(ctx, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !ok {
+					t.Fatal("expected record to exist")
+				}
+
+				if expect := []byte("<record>"); !bytes.Equal(expect, actual) {
+					t.Fatalf(
+						"unexpected record, want %q, got %q",
+						string(expect),
+						string(actual),
+					)
+				}
+			})
 		})
 
 		t.Run("func Range()", func(t *testing.T) {
@@ -291,6 +331,48 @@ func RunTests(
 				expect := "cannot range over truncated records"
 				if err.Error() != expect {
 					t.Fatalf("unexpected error: want %s, got %s", expect, err.Error())
+				}
+			})
+
+			t.Run("it does not invoke the function with its internal byte slice", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, j := setup(t, newStore)
+
+				ok, err := j.Append(ctx, 0, []byte("<record>"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !ok {
+					t.Fatal("unexpected optimistic concurrency conflict")
+				}
+
+				if err := j.Range(
+					ctx,
+					0,
+					func(ctx context.Context, rec []byte) (bool, error) {
+						rec[0] = 'X'
+
+						return true, nil
+					},
+				); err != nil {
+					t.Fatal(err)
+				}
+
+				actual, ok, err := j.Get(ctx, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !ok {
+					t.Fatal("expected record to exist")
+				}
+
+				if expect := []byte("<record>"); !bytes.Equal(expect, actual) {
+					t.Fatalf(
+						"unexpected record, want %q, got %q",
+						string(expect),
+						string(actual),
+					)
 				}
 			})
 		})
@@ -417,6 +499,47 @@ func RunTests(
 					t.Fatal(err)
 				}
 			})
+
+			t.Run("it does not invoke the function with its internal byte slice", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, j := setup(t, newStore)
+
+				ok, err := j.Append(ctx, 0, []byte("<record>"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !ok {
+					t.Fatal("unexpected optimistic concurrency conflict")
+				}
+
+				if err := j.RangeAll(
+					ctx,
+					func(ctx context.Context, _ uint64, rec []byte) (bool, error) {
+						rec[0] = 'X'
+
+						return true, nil
+					},
+				); err != nil {
+					t.Fatal(err)
+				}
+
+				actual, ok, err := j.Get(ctx, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !ok {
+					t.Fatal("expected record to exist")
+				}
+
+				if expect := []byte("<record>"); !bytes.Equal(expect, actual) {
+					t.Fatalf(
+						"unexpected record, want %q, got %q",
+						string(expect),
+						string(actual),
+					)
+				}
+			})
 		})
 
 		t.Run("func Append()", func(t *testing.T) {
@@ -473,6 +596,40 @@ func RunTests(
 				}
 
 				if !bytes.Equal(expect, actual) {
+					t.Fatalf(
+						"unexpected record, want %q, got %q",
+						string(expect),
+						string(actual),
+					)
+				}
+			})
+
+			t.Run("it does not keep a reference to the record slice", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, j := setup(t, newStore)
+
+				rec := []byte("<record>")
+
+				ok, err := j.Append(ctx, 0, rec)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !ok {
+					t.Fatal("unexpected optimistic concurrency conflict")
+				}
+
+				rec[0] = 'X'
+
+				actual, ok, err := j.Get(ctx, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !ok {
+					t.Fatal("expected record to exist")
+				}
+
+				if expect := []byte("<record>"); !bytes.Equal(expect, actual) {
 					t.Fatalf(
 						"unexpected record, want %q, got %q",
 						string(expect),
