@@ -52,10 +52,7 @@ func (r *Registry) Register(ctx context.Context, n Node) error {
 		ctx,
 		r.Keyspace,
 		n.ID[:],
-		&registrypb.Node{
-			Id:        uuidpb.FromNative(n.ID),
-			ExpiresAt: timestamppb.New(expiresAt),
-		},
+		marshalNode(n, expiresAt),
 	); err != nil {
 		return fmt.Errorf("unable to register node: %w", err)
 	}
@@ -221,9 +218,7 @@ func (r *Registry) members(ctx context.Context) (map[uuid.UUID]Node, error) {
 			}
 
 			id := n.GetId().ToNative()
-			members[id] = Node{
-				ID: id,
-			}
+			members[id] = unmarshalNode(n)
 
 			return true, nil
 		},
@@ -264,4 +259,21 @@ func membershipDiff(before, after map[uuid.UUID]Node) MembershipChange {
 	}
 
 	return change
+}
+
+// marshalNode converts a Node to its protocol buffer representation.
+func marshalNode(n Node, expiresAt time.Time) *registrypb.Node {
+	return &registrypb.Node{
+		Id:        uuidpb.FromNative(n.ID),
+		ExpiresAt: timestamppb.New(expiresAt),
+		Addresses: n.Addresses,
+	}
+}
+
+// unmarshalNode converts a Node from its protocol buffer representation.
+func unmarshalNode(n *registrypb.Node) Node {
+	return Node{
+		ID:        n.GetId().ToNative(),
+		Addresses: n.GetAddresses(),
+	}
 }

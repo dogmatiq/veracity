@@ -1,5 +1,5 @@
 syntax = "proto3";
-package veracity.cluster.v1;
+package veracity.cluster.registry.v1;
 
 import "google/protobuf/timestamp.proto";
 import "github.com/dogmatiq/veracity/internal/protobuf/uuidpb/uuid.proto";
@@ -9,4 +9,5 @@ option go_package = "github.com/dogmatiq/veracity/internal/cluster/internal/regi
 message Node {
   dogmatiq.protobuf.UUID id = 1;
   google.protobuf.Timestamp expires_at = 2;
+  repeated string addresses = 3;
 }

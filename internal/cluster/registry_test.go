@@ -20,6 +20,7 @@ var _ = Describe("type Registry", func() {
 		cancel   context.CancelFunc
 		keyspace kv.Keyspace
 		registry *Registry
+		node     Node
 	)
 
 	watch := func(notify chan<- MembershipChange) func() {
@@ -63,14 +64,18 @@ var _ = Describe("type Registry", func() {
 				}.NewTextHandler(GinkgoWriter),
 			),
 		}
+
+		node = Node{
+			ID: uuid.New(),
+			Addresses: []string{
+				"10.0.0.1:50555",
+				"129.168.0.1:50555",
+			},
+		}
 	})
 
 	Describe("func Watch()", func() {
 		It("notifies about nodes that are registered before watching starts", func() {
-			node := Node{
-				ID: uuid.New(),
-			}
-
 			err := registry.Register(ctx, node)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -92,10 +97,6 @@ var _ = Describe("type Registry", func() {
 		})
 
 		It("does not notify about nodes that are deregistered before watching starts", func() {
-			node := Node{
-				ID: uuid.New(),
-			}
-
 			err := registry.Register(ctx, node)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -117,10 +118,6 @@ var _ = Describe("type Registry", func() {
 		})
 
 		It("notifies about nodes that are registered after watching starts", func() {
-			node := Node{
-				ID: uuid.New(),
-			}
-
 			go func() {
 				// Let the first poll happen before we register the node.
 				time.Sleep(registry.PollInterval)
@@ -148,10 +145,6 @@ var _ = Describe("type Registry", func() {
 		})
 
 		It("notifies when a node is deregistered", func() {
-			node := Node{
-				ID: uuid.New(),
-			}
-
 			err := registry.Register(ctx, node)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -181,10 +174,6 @@ var _ = Describe("type Registry", func() {
 		})
 
 		It("notifies when a node expires", func() {
-			node := Node{
-				ID: uuid.New(),
-			}
-
 			err := registry.Register(ctx, node)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -213,10 +202,6 @@ var _ = Describe("type Registry", func() {
 		})
 
 		It("does not notify when a node maintains its heartbeat correctly", func() {
-			node := Node{
-				ID: uuid.New(),
-			}
-
 			err := registry.Register(ctx, node)
 			Expect(err).ShouldNot(HaveOccurred())
 
