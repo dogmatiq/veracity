@@ -31,6 +31,17 @@ func (x *UUID) ToNative() uuid.UUID {
 	return id
 }
 
+// ToBytes returns the UUID as a byte slice.
+func (x *UUID) ToBytes() []byte {
+	id := x.ToNative()
+	return id[:]
+}
+
+// ToString returns the UUID as an RFC 4122 string.
+func (x *UUID) ToString() string {
+	return x.ToNative().String()
+}
+
 // Format implements the fmt.Formatter interface, allowing UUIDs to be formatted
 // with functions from the fmt package.
 func (x *UUID) Format(f fmt.State, verb rune) {

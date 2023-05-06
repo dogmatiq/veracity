@@ -126,7 +126,7 @@ func (r *Registry) Heartbeat(ctx context.Context, id uuid.UUID) error {
 	r.Logger.DebugCtx(
 		ctx,
 		"member node expiry extended",
-		slog.String("node_id", n.GetId().ToNative().String()),
+		slog.String("node_id", n.GetId().ToString()),
 		slog.Duration("heartbeat_interval", interval),
 		slog.Time("expires_at", expiresAt),
 	)
@@ -239,8 +239,11 @@ func (r *Registry) deleteIfExpired(
 		return false, nil
 	}
 
-	id := n.GetId().ToNative()
-	return true, r.Keyspace.Set(ctx, id[:], nil)
+	return true, r.Keyspace.Set(
+		ctx,
+		n.GetId().ToBytes(),
+		nil,
+	)
 }
 
 // membershipDiff returns the changes to membership since the last notification

@@ -19,6 +19,20 @@ var _ = Describe("type UUID", func() {
 		})
 	})
 
+	Describe("func ToString()", func() {
+		expect := uuid.New()
+		pb := FromNative(expect)
+		actual := pb.ToString()
+		Expect(actual).To(Equal(expect.String()))
+	})
+
+	Describe("func ToBytes()", func() {
+		expect := uuid.New()
+		pb := FromNative(expect)
+		actual := pb.ToBytes()
+		Expect(actual).To(Equal(expect[:]))
+	})
+
 	Describe("func Format()", func() {
 		It("provides a useful string representation", func() {
 			pb := New()
