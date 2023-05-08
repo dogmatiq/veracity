@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/dogmatiq/veracity/persistence/driver/aws/internal/awsx"
 	"github.com/dogmatiq/veracity/persistence/internal/pathkey"
 	"github.com/dogmatiq/veracity/persistence/journal"
@@ -17,8 +17,8 @@ import (
 // JournalStore is an implementation of journal.Store that contains journals
 // that persist records in a DynamoDB table.
 type JournalStore struct {
-	// DB is the DynamoDB client to use.
-	DB *dynamodb.DynamoDB
+	// Client is the DynamoDB client to use.
+	Client *dynamodb.Client
 
 	// Table is the table name used for storage of journal records.
 	Table string
@@ -28,28 +28,28 @@ type JournalStore struct {
 	//
 	// It may modify the API input in-place. It returns options that will be
 	// applied to the request.
-	DecorateGetItem func(*dynamodb.GetItemInput) []request.Option
+	DecorateGetItem func(*dynamodb.GetItemInput) []func(*dynamodb.Options)
 
 	// DecorateQuery is an optional function that is called before each DynamoDB
 	// "Query" request.
 	//
 	// It may modify the API input in-place. It returns options that will be
 	// applied to the request.
-	DecorateQuery func(*dynamodb.QueryInput) []request.Option
+	DecorateQuery func(*dynamodb.QueryInput) []func(*dynamodb.Options)
 
 	// DecoratePutItem is an optional function that is called before each
 	// DynamoDB "PutItem" request.
 	//
 	// It may modify the API input in-place. It returns options that will be
 	// applied to the request.
-	DecoratePutItem func(*dynamodb.PutItemInput) []request.Option
+	DecoratePutItem func(*dynamodb.PutItemInput) []func(*dynamodb.Options)
 
 	// DecorateDeleteItem is an optional function that is called before each
 	// DynamoDB "DeleteItem" request.
 	//
 	// It may modify the API input in-place. It returns options that will be
 	// applied to the request.
-	DecorateDeleteItem func(*dynamodb.DeleteItemInput) []request.Option
+	DecorateDeleteItem func(*dynamodb.DeleteItemInput) []func(*dynamodb.Options)
 }
 
 const (
@@ -68,38 +68,40 @@ func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journa
 	key := pathkey.New(path)
 
 	j := &journalHandle{
-		DB:                 s.DB,
+		Client:             s.Client,
 		DecorateGetItem:    s.DecorateGetItem,
 		DecorateQuery:      s.DecorateQuery,
 		DecoratePutItem:    s.DecoratePutItem,
 		DecorateDeleteItem: s.DecorateDeleteItem,
 
-		Key: dynamodb.AttributeValue{S: &key},
+		Key:     &types.AttributeValueMemberS{Value: key},
+		Version: &types.AttributeValueMemberN{},
+		Record:  &types.AttributeValueMemberB{},
 	}
 
 	j.GetRequest = dynamodb.GetItemInput{
 		TableName: aws.String(s.Table),
-		Key: map[string]*dynamodb.AttributeValue{
-			journalKeyAttr:     &j.Key,
-			journalVersionAttr: &j.Version,
+		Key: map[string]types.AttributeValue{
+			journalKeyAttr:     j.Key,
+			journalVersionAttr: j.Version,
 		},
 		ProjectionExpression: aws.String(`#R`),
-		ExpressionAttributeNames: map[string]*string{
-			"#R": aws.String(journalRecordAttr),
+		ExpressionAttributeNames: map[string]string{
+			"#R": journalRecordAttr,
 		},
 	}
 
 	j.QueryRequest = dynamodb.QueryInput{
 		TableName:              aws.String(s.Table),
 		KeyConditionExpression: aws.String(`#K = :K AND #V >= :V`),
-		ExpressionAttributeNames: map[string]*string{
-			"#K": aws.String(journalKeyAttr),
-			"#V": aws.String(journalVersionAttr),
-			"#R": aws.String(journalRecordAttr),
+		ExpressionAttributeNames: map[string]string{
+			"#K": journalKeyAttr,
+			"#V": journalVersionAttr,
+			"#R": journalRecordAttr,
 		},
-		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":K": &j.Key,
-			":V": &j.Version,
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":K": j.Key,
+			":V": j.Version,
 		},
 		ProjectionExpression: aws.String("#V, #R"),
 	}
@@ -107,21 +109,21 @@ func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journa
 	j.PutRequest = dynamodb.PutItemInput{
 		TableName:           aws.String(s.Table),
 		ConditionExpression: aws.String(`attribute_not_exists(#K)`),
-		ExpressionAttributeNames: map[string]*string{
-			"#K": aws.String(journalKeyAttr),
+		ExpressionAttributeNames: map[string]string{
+			"#K": journalKeyAttr,
 		},
-		Item: map[string]*dynamodb.AttributeValue{
-			journalKeyAttr:     &j.Key,
-			journalVersionAttr: &j.Version,
-			journalRecordAttr:  &j.Record,
+		Item: map[string]types.AttributeValue{
+			journalKeyAttr:     j.Key,
+			journalVersionAttr: j.Version,
+			journalRecordAttr:  j.Record,
 		},
 	}
 
 	j.DeleteRequest = dynamodb.DeleteItemInput{
 		TableName: aws.String(s.Table),
-		Key: map[string]*dynamodb.AttributeValue{
-			journalKeyAttr:     &j.Key,
-			journalVersionAttr: &j.Version,
+		Key: map[string]types.AttributeValue{
+			journalKeyAttr:     j.Key,
+			journalVersionAttr: j.Version,
 		},
 	}
 
@@ -131,15 +133,15 @@ func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journa
 // journalHandle is an implementation of journal.Journal that stores records in
 // a DynamoDB table.
 type journalHandle struct {
-	DB                 *dynamodb.DynamoDB
-	DecorateGetItem    func(*dynamodb.GetItemInput) []request.Option
-	DecorateQuery      func(*dynamodb.QueryInput) []request.Option
-	DecoratePutItem    func(*dynamodb.PutItemInput) []request.Option
-	DecorateDeleteItem func(*dynamodb.DeleteItemInput) []request.Option
+	Client             *dynamodb.Client
+	DecorateGetItem    func(*dynamodb.GetItemInput) []func(*dynamodb.Options)
+	DecorateQuery      func(*dynamodb.QueryInput) []func(*dynamodb.Options)
+	DecoratePutItem    func(*dynamodb.PutItemInput) []func(*dynamodb.Options)
+	DecorateDeleteItem func(*dynamodb.DeleteItemInput) []func(*dynamodb.Options)
 
-	Key     dynamodb.AttributeValue
-	Version dynamodb.AttributeValue
-	Record  dynamodb.AttributeValue
+	Key     *types.AttributeValueMemberS
+	Version *types.AttributeValueMemberN
+	Record  *types.AttributeValueMemberB
 
 	GetRequest    dynamodb.GetItemInput
 	QueryRequest  dynamodb.QueryInput
@@ -148,11 +150,11 @@ type journalHandle struct {
 }
 
 func (h *journalHandle) Get(ctx context.Context, ver uint64) ([]byte, bool, error) {
-	h.Version.N = aws.String(strconv.FormatUint(ver, 10))
+	h.Version.Value = strconv.FormatUint(ver, 10)
 
 	out, err := awsx.Do(
 		ctx,
-		h.DB.GetItemWithContext,
+		h.Client.GetItem,
 		h.DecorateGetItem,
 		&h.GetRequest,
 	)
@@ -160,7 +162,9 @@ func (h *journalHandle) Get(ctx context.Context, ver uint64) ([]byte, bool, erro
 		return nil, false, err
 	}
 
-	return out.Item[journalRecordAttr].B, true, nil
+	b := out.Item[journalRecordAttr].(*types.AttributeValueMemberB)
+
+	return b.Value, true, nil
 }
 
 func (h *journalHandle) Range(
@@ -203,14 +207,14 @@ func (h *journalHandle) rangeQuery(
 	fn func(context.Context, uint64, []byte) (bool, error),
 ) error {
 	h.QueryRequest.ExclusiveStartKey = nil
-	h.Version.N = aws.String(strconv.FormatUint(begin, 10))
+	h.Version.Value = strconv.FormatUint(begin, 10)
 
 	var expectVer uint64
 
 	for {
 		out, err := awsx.Do(
 			ctx,
-			h.DB.QueryWithContext,
+			h.Client.Query,
 			h.DecorateQuery,
 			&h.QueryRequest,
 		)
@@ -224,7 +228,7 @@ func (h *journalHandle) rangeQuery(
 				return errors.New("journal is corrupt: item is missing version attribute")
 			}
 
-			ver, err := strconv.ParseUint(aws.StringValue(attr.N), 10, 64)
+			ver, err := strconv.ParseUint(attr.(*types.AttributeValueMemberN).Value, 10, 64)
 			if err != nil {
 				return err
 			}
@@ -240,7 +244,7 @@ func (h *journalHandle) rangeQuery(
 				return errors.New("journal is corrupt: item is missing record attribute")
 			}
 
-			ok, err = fn(ctx, ver, attr.B)
+			ok, err = fn(ctx, ver, attr.(*types.AttributeValueMemberB).Value)
 			if !ok || err != nil {
 				return err
 			}
@@ -255,17 +259,17 @@ func (h *journalHandle) rangeQuery(
 }
 
 func (h *journalHandle) Append(ctx context.Context, ver uint64, rec []byte) (bool, error) {
-	h.Version.N = aws.String(strconv.FormatUint(ver, 10))
-	h.Record.B = rec
+	h.Version.Value = strconv.FormatUint(ver, 10)
+	h.Record.Value = rec
 
 	_, err := awsx.Do(
 		ctx,
-		h.DB.PutItemWithContext,
+		h.Client.PutItem,
 		h.DecoratePutItem,
 		&h.PutRequest,
 	)
 
-	if awsx.IsErrorCode(err, dynamodb.ErrCodeConditionalCheckFailedException) {
+	if errors.As(err, new(*types.ConditionalCheckFailedException)) {
 		return false, nil
 	}
 
@@ -280,11 +284,11 @@ func (h *journalHandle) Truncate(ctx context.Context, ver uint64) error {
 				return false, nil
 			}
 
-			h.Version.N = aws.String(strconv.FormatUint(v, 10))
+			h.Version.Value = strconv.FormatUint(v, 10)
 
 			_, err := awsx.Do(
 				ctx,
-				h.DB.DeleteItemWithContext,
+				h.Client.DeleteItem,
 				h.DecorateDeleteItem,
 				&h.DeleteRequest,
 			)
@@ -300,47 +304,48 @@ func (h *journalHandle) Close() error {
 // CreateJournalTable creates a DynamoDB for storing journal records.
 func CreateJournalTable(
 	ctx context.Context,
-	db *dynamodb.DynamoDB,
+	client *dynamodb.Client,
 	table string,
-	decorators ...func(*dynamodb.CreateTableInput) []request.Option,
+	decorators ...func(*dynamodb.CreateTableInput) []func(*dynamodb.Options),
 ) error {
 	_, err := awsx.Do(
 		ctx,
-		db.CreateTableWithContext,
-		func(in *dynamodb.CreateTableInput) []request.Option {
-			var options []request.Option
+		client.CreateTable,
+		func(in *dynamodb.CreateTableInput) []func(*dynamodb.Options) {
+			var options []func(*dynamodb.Options)
 			for _, dec := range decorators {
 				options = append(options, dec(in)...)
 			}
+
 			return options
 		},
 		&dynamodb.CreateTableInput{
 			TableName: aws.String(table),
-			AttributeDefinitions: []*dynamodb.AttributeDefinition{
+			AttributeDefinitions: []types.AttributeDefinition{
 				{
 					AttributeName: aws.String(journalKeyAttr),
-					AttributeType: aws.String("S"),
+					AttributeType: types.ScalarAttributeTypeS,
 				},
 				{
 					AttributeName: aws.String(journalVersionAttr),
-					AttributeType: aws.String("N"),
+					AttributeType: types.ScalarAttributeTypeN,
 				},
 			},
-			KeySchema: []*dynamodb.KeySchemaElement{
+			KeySchema: []types.KeySchemaElement{
 				{
 					AttributeName: aws.String(journalKeyAttr),
-					KeyType:       aws.String("HASH"),
+					KeyType:       types.KeyTypeHash,
 				},
 				{
 					AttributeName: aws.String(journalVersionAttr),
-					KeyType:       aws.String("RANGE"),
+					KeyType:       types.KeyTypeRange,
 				},
 			},
-			BillingMode: aws.String("PAY_PER_REQUEST"),
+			BillingMode: types.BillingModePayPerRequest,
 		},
 	)
 
-	if awsx.IsErrorCode(err, dynamodb.ErrCodeResourceInUseException) {
+	if errors.As(err, new(*types.ResourceInUseException)) {
 		return nil
 	}
 
