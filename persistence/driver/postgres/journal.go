@@ -10,7 +10,7 @@ import (
 )
 
 // JournalStore is an implementation of journal.Store that contains journals
-// that persist records in a DynamoDB table.
+// that persist records in a PostgresSQL table.
 type JournalStore struct {
 	// DB is the PostgreSQL database connection.
 	DB *sql.DB
