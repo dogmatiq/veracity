@@ -60,7 +60,7 @@ func (j *journ) Get(ctx context.Context, ver uint64) ([]byte, bool, error) {
 func (j *journ) Range(
 	ctx context.Context,
 	ver uint64,
-	fn func(context.Context, []byte) (bool, error),
+	fn func(context.Context, uint64, []byte) (bool, error),
 ) error {
 	rows, err := j.DB.QueryContext(
 		ctx,
@@ -93,7 +93,7 @@ func (j *journ) Range(
 		}
 		expectedVersion++
 
-		ok, err := fn(ctx, rec)
+		ok, err := fn(ctx, v, rec)
 		if !ok || err != nil {
 			return err
 		}

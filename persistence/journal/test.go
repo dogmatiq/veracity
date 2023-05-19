@@ -243,7 +243,7 @@ func RunTests(
 				if err := j.Range(
 					ctx,
 					expectVer,
-					func(ctx context.Context, rec []byte) (bool, error) {
+					func(ctx context.Context, ver uint64, rec []byte) (bool, error) {
 						actual = append(actual, rec)
 						return true, nil
 					},
@@ -275,7 +275,7 @@ func RunTests(
 				if err := j.Range(
 					ctx,
 					0,
-					func(ctx context.Context, rec []byte) (bool, error) {
+					func(ctx context.Context, ver uint64, rec []byte) (bool, error) {
 						if called {
 							return false, errors.New("unexpected call")
 						}
@@ -320,7 +320,7 @@ func RunTests(
 				err = j.Range(
 					ctx,
 					1,
-					func(ctx context.Context, rec []byte) (bool, error) {
+					func(ctx context.Context, ver uint64, rec []byte) (bool, error) {
 						panic("unexpected call")
 					},
 				)
@@ -350,7 +350,7 @@ func RunTests(
 				if err := j.Range(
 					ctx,
 					0,
-					func(ctx context.Context, rec []byte) (bool, error) {
+					func(ctx context.Context, ver uint64, rec []byte) (bool, error) {
 						rec[0] = 'X'
 
 						return true, nil
