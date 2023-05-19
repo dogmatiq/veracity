@@ -25,8 +25,8 @@ func CreateKVStoreSchema(
 		ctx,
 		`CREATE TABLE IF NOT EXISTS veracity.kvstore (
 			keyspace TEXT NOT NULL,
-			key   BYTEA NOT NULL,
-			value BYTEA NOT NULL,
+			key      BYTEA NOT NULL,
+			value    BYTEA NOT NULL,
 
 			PRIMARY KEY (keyspace, key)
 		)`,
