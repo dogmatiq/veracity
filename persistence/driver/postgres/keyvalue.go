@@ -9,7 +9,7 @@ import (
 )
 
 // KeyValueStore is an implementation of kv.Store that stores keyspaces in
-// PostgreSQL DB.
+// a PostgreSQL database.
 type KeyValueStore struct {
 	DB *sql.DB
 }
@@ -22,28 +22,26 @@ type KeyValueStore struct {
 // character from the Letter, Mark, Number, Punctuation or Symbol
 // categories.
 func (s *KeyValueStore) Open(ctx context.Context, path ...string) (kv.Keyspace, error) {
-	name := pathkey.New(path)
-
-	return &keyspaceHandle{
-		Name: name,
+	return &keyspace{
+		Path: pathkey.New(path),
 		DB:   s.DB,
 	}, nil
 }
 
-type keyspaceHandle struct {
-	Name string
+type keyspace struct {
+	Path string
 	DB   *sql.DB
 }
 
-func (h *keyspaceHandle) Get(ctx context.Context, k []byte) (v []byte, err error) {
-	row := h.DB.QueryRowContext(
+func (ks *keyspace) Get(ctx context.Context, k []byte) (v []byte, err error) {
+	row := ks.DB.QueryRowContext(
 		ctx,
 		`SELECT
 			value
-		FROM veracity.kvstore
-		WHERE keyspace = $1
+		FROM veracity.keyspace
+		WHERE path = $1
 		AND key = $2`,
-		h.Name,
+		ks.Path,
 		k,
 	)
 
@@ -56,15 +54,15 @@ func (h *keyspaceHandle) Get(ctx context.Context, k []byte) (v []byte, err error
 	return value, err
 }
 
-func (h *keyspaceHandle) Has(ctx context.Context, k []byte) (ok bool, err error) {
-	row := h.DB.QueryRowContext(
+func (ks *keyspace) Has(ctx context.Context, k []byte) (ok bool, err error) {
+	row := ks.DB.QueryRowContext(
 		ctx,
 		`SELECT
 			1
-		FROM veracity.kvstore
-		WHERE keyspace = $1
+		FROM veracity.keyspace
+		WHERE path = $1
 		AND key = $2`,
-		h.Name,
+		ks.Path,
 		k,
 	)
 
@@ -77,32 +75,32 @@ func (h *keyspaceHandle) Has(ctx context.Context, k []byte) (ok bool, err error)
 	return true, err
 }
 
-func (h *keyspaceHandle) Set(ctx context.Context, k, v []byte) error {
+func (ks *keyspace) Set(ctx context.Context, k, v []byte) error {
 	if len(v) == 0 {
-		_, err := h.DB.ExecContext(
+		_, err := ks.DB.ExecContext(
 			ctx,
-			`DELETE FROM veracity.kvstore
-			WHERE keyspace = $1
+			`DELETE FROM veracity.keyspace
+			WHERE path = $1
 			AND key = $2`,
-			h.Name,
+			ks.Path,
 			k,
 		)
 
 		return err
 	}
 
-	_, err := h.DB.ExecContext(
+	_, err := ks.DB.ExecContext(
 		ctx,
-		`INSERT INTO veracity.kvstore AS o (
-			keyspace,
+		`INSERT INTO veracity.keyspace AS o (
+			path,
 			key,
 			value
 		) VALUES (
 			$1, $2, $3
-		) ON CONFLICT (keyspace, key) DO UPDATE SET
+		) ON CONFLICT (path, key) DO UPDATE SET
 			value = $3
 		`,
-		h.Name,
+		ks.Path,
 		k,
 		v,
 	)
@@ -110,18 +108,18 @@ func (h *keyspaceHandle) Set(ctx context.Context, k, v []byte) error {
 	return err
 }
 
-func (h *keyspaceHandle) RangeAll(
+func (ks *keyspace) RangeAll(
 	ctx context.Context,
 	fn func(ctx context.Context, k, v []byte) (bool, error),
 ) error {
-	rows, err := h.DB.QueryContext(
+	rows, err := ks.DB.QueryContext(
 		ctx,
 		`SELECT
 			key,
 			value
-		FROM veracity.kvstore
-		WHERE keyspace = $1`,
-		h.Name,
+		FROM veracity.keyspace
+		WHERE path = $1`,
+		ks.Path,
 	)
 	if err != nil {
 		return err
@@ -146,7 +144,7 @@ func (h *keyspaceHandle) RangeAll(
 	return rows.Err()
 }
 
-func (h *keyspaceHandle) Close() error {
+func (ks *keyspace) Close() error {
 	return nil
 }
 
@@ -168,12 +166,12 @@ func CreateKVStoreSchema(
 
 	if _, err := db.ExecContext(
 		ctx,
-		`CREATE TABLE IF NOT EXISTS veracity.kvstore (
-			keyspace TEXT NOT NULL,
-			key      BYTEA NOT NULL,
-			value    BYTEA NOT NULL,
+		`CREATE TABLE IF NOT EXISTS veracity.keyspace (
+			path  TEXT NOT NULL,
+			key   BYTEA NOT NULL,
+			value BYTEA NOT NULL,
 
-			PRIMARY KEY (keyspace, key)
+			PRIMARY KEY (path, key)
 		)`,
 	); err != nil {
 		return err
