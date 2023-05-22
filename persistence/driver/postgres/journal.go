@@ -23,28 +23,28 @@ type JournalStore struct {
 // characters, excluding whitespace. A printable character is any character from
 // the Letter, Mark, Number, Punctuation or Symbol categories.
 func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journal, error) {
-	return &journalHandle{
-		Key: pathkey.New(path),
-		DB:  s.DB,
+	return &journ{
+		Path: pathkey.New(path),
+		DB:   s.DB,
 	}, nil
 }
 
-// journalHandle is an implementation of journal.Journal that stores records in
+// journ is an implementation of journal.Journal that stores records in
 // a DynamoDB table.
-type journalHandle struct {
-	Key string
-	DB  *sql.DB
+type journ struct {
+	Path string
+	DB   *sql.DB
 }
 
-func (h *journalHandle) Get(ctx context.Context, ver uint64) ([]byte, bool, error) {
-	row := h.DB.QueryRowContext(
+func (j *journ) Get(ctx context.Context, ver uint64) ([]byte, bool, error) {
+	row := j.DB.QueryRowContext(
 		ctx,
 		`SELECT
 			record
 		FROM veracity.journal
-		WHERE key = $1
+		WHERE path = $1
 		AND version = $2`,
-		h.Key,
+		j.Path,
 		ver,
 	)
 
@@ -57,21 +57,21 @@ func (h *journalHandle) Get(ctx context.Context, ver uint64) ([]byte, bool, erro
 	return rec, len(rec) > 0, err
 }
 
-func (h *journalHandle) Range(
+func (j *journ) Range(
 	ctx context.Context,
 	ver uint64,
 	fn func(context.Context, []byte) (bool, error),
 ) error {
-	rows, err := h.DB.QueryContext(
+	rows, err := j.DB.QueryContext(
 		ctx,
 		`SELECT
 			version,
 			record
 		FROM veracity.journal
-		WHERE key = $1
+		WHERE path = $1
 		AND version >= $2
 		ORDER BY version`,
-		h.Key,
+		j.Path,
 		ver,
 	)
 	if err != nil {
@@ -102,19 +102,19 @@ func (h *journalHandle) Range(
 	return rows.Err()
 }
 
-func (h *journalHandle) RangeAll(
+func (j *journ) RangeAll(
 	ctx context.Context,
 	fn func(context.Context, uint64, []byte) (bool, error),
 ) error {
-	rows, err := h.DB.QueryContext(
+	rows, err := j.DB.QueryContext(
 		ctx,
 		`SELECT
 		 	version,
 			record
 		FROM veracity.journal
-		WHERE key = $1
+		WHERE path = $1
 		ORDER BY version`,
-		h.Key,
+		j.Path,
 	)
 	if err != nil {
 		return err
@@ -151,17 +151,17 @@ func (h *journalHandle) RangeAll(
 	return rows.Err()
 }
 
-func (h *journalHandle) Append(ctx context.Context, ver uint64, rec []byte) (bool, error) {
-	res, err := h.DB.ExecContext(
+func (j *journ) Append(ctx context.Context, ver uint64, rec []byte) (bool, error) {
+	res, err := j.DB.ExecContext(
 		ctx,
 		`INSERT INTO veracity.journal (
-			key,
+			path,
 			version,
 			record
 		) VALUES (
 			$1, $2, $3
-		) ON CONFLICT (key, version) DO NOTHING`,
-		h.Key,
+		) ON CONFLICT (path, version) DO NOTHING`,
+		j.Path,
 		ver,
 		rec,
 	)
@@ -173,25 +173,25 @@ func (h *journalHandle) Append(ctx context.Context, ver uint64, rec []byte) (boo
 	return ra == 1, err
 }
 
-func (h *journalHandle) Truncate(ctx context.Context, ver uint64) error {
-	_, err := h.DB.ExecContext(
+func (j *journ) Truncate(ctx context.Context, ver uint64) error {
+	_, err := j.DB.ExecContext(
 		ctx,
 		`DELETE FROM veracity.journal
-		WHERE key = $1
+		WHERE path = $1
 		AND version < $2`,
-		h.Key,
+		j.Path,
 		ver,
 	)
 
 	return err
 }
 
-func (h *journalHandle) Close() error {
+func (j *journ) Close() error {
 	return nil
 }
 
-// CreateSchema creates a PostgreSQL schema for storing journal records.
-func CreateSchema(
+// CreateJournalSchema creates a PostgreSQL schema for storing journal records.
+func CreateJournalSchema(
 	ctx context.Context,
 	db *sql.DB,
 ) error {
@@ -208,11 +208,11 @@ func CreateSchema(
 	if _, err := db.ExecContext(
 		ctx,
 		`CREATE TABLE IF NOT EXISTS veracity.journal (
-			key     TEXT NOT NULL,
+			path    TEXT NOT NULL,
 			version BIGINT NOT NULL,
 			record  BYTEA NOT NULL,
 
-			PRIMARY KEY (key, version)
+			PRIMARY KEY (path, version)
 		)`,
 	); err != nil {
 		return err

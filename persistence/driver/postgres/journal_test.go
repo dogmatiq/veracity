@@ -21,7 +21,7 @@ func TestJournal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := CreateSchema(ctx, db); err != nil {
+	if err := CreateJournalSchema(ctx, db); err != nil {
 		t.Fatal(err)
 	}
 
