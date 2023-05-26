@@ -8,6 +8,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.13.24
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.19.7
 	github.com/cespare/xxhash/v2 v2.2.0
+	github.com/dogmatiq/configkit v0.12.1
+	github.com/dogmatiq/dogma v0.12.0
 	github.com/dogmatiq/sqltest v0.3.0
 	github.com/google/go-cmp v0.5.9
 	github.com/google/uuid v1.3.0
@@ -30,6 +32,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.14.10 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.19.0 // indirect
 	github.com/aws/smithy-go v1.13.5 // indirect
+	github.com/dogmatiq/iago v0.4.0 // indirect
 	github.com/go-sql-driver/mysql v1.5.0 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
 	github.com/jackc/pgconn v1.8.0 // indirect
