@@ -7,7 +7,7 @@ import (
 	"github.com/dogmatiq/veracity/persistence/kv"
 )
 
-func TestKV(t *testing.T) {
+func TestKeyValueStore(t *testing.T) {
 	kv.RunTests(
 		t,
 		func(t *testing.T) kv.Store {

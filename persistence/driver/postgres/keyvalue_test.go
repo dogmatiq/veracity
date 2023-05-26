@@ -9,7 +9,7 @@ import (
 	"github.com/dogmatiq/veracity/persistence/kv"
 )
 
-func TestKV(t *testing.T) {
+func TestKeyValueStore(t *testing.T) {
 	ctx := context.Background()
 
 	database, err := sqltest.NewDatabase(ctx, sqltest.PGXDriver, sqltest.PostgreSQL)
@@ -22,7 +22,7 @@ func TestKV(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := CreateKVStoreSchema(ctx, db); err != nil {
+	if err := CreateKeyValueStoreSchema(ctx, db); err != nil {
 		t.Fatal(err)
 	}
 

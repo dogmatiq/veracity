@@ -148,9 +148,9 @@ func (ks *keyspace) Close() error {
 	return nil
 }
 
-// CreateKVStoreSchema creates a PostgreSQL schema for storing key-value store
-// records.
-func CreateKVStoreSchema(
+// CreateKeyValueStoreSchema creates the PostgreSQL schema elements required by
+// [KeyValueStore].
+func CreateKeyValueStoreSchema(
 	ctx context.Context,
 	db *sql.DB,
 ) error {

@@ -190,8 +190,9 @@ func (j *journ) Close() error {
 	return nil
 }
 
-// CreateJournalSchema creates a PostgreSQL schema for storing journal records.
-func CreateJournalSchema(
+// CreateJournalStoreSchema creates the PostgreSQL schema elements required by
+// [JournalStore].
+func CreateJournalStoreSchema(
 	ctx context.Context,
 	db *sql.DB,
 ) error {

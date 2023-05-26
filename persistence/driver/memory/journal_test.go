@@ -7,7 +7,7 @@ import (
 	"github.com/dogmatiq/veracity/persistence/journal"
 )
 
-func TestJournal(t *testing.T) {
+func TestJournalStore(t *testing.T) {
 	journal.RunTests(
 		t,
 		func(t *testing.T) journal.Store {
