@@ -170,7 +170,7 @@ func (j *journ) Get(ctx context.Context, ver uint64) ([]byte, bool, error) {
 func (j *journ) Range(
 	ctx context.Context,
 	ver uint64,
-	fn func(context.Context, []byte) (bool, error),
+	fn func(context.Context, uint64, []byte) (bool, error),
 ) error {
 	checkVersion := true
 
@@ -189,7 +189,7 @@ func (j *journ) Range(
 				checkVersion = false
 			}
 
-			return fn(ctx, rec)
+			return fn(ctx, v, rec)
 		},
 	)
 }

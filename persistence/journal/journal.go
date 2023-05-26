@@ -18,7 +18,7 @@ type Journal interface {
 	Range(
 		ctx context.Context,
 		ver uint64,
-		fn func(ctx context.Context, rec []byte) (bool, error),
+		fn func(ctx context.Context, ver uint64, rec []byte) (bool, error),
 	) error
 
 	// RangeAll invokes fn for each record in the journal, in order.

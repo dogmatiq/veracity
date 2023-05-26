@@ -82,7 +82,7 @@ func (h *journalHandle) Get(ctx context.Context, ver uint64) ([]byte, bool, erro
 func (h *journalHandle) Range(
 	ctx context.Context,
 	ver uint64,
-	fn func(context.Context, []byte) (bool, error),
+	fn func(context.Context, uint64, []byte) (bool, error),
 ) error {
 	if h.state == nil {
 		panic("journal is closed")
@@ -97,8 +97,10 @@ func (h *journalHandle) Range(
 		return fmt.Errorf("cannot range over truncated records")
 	}
 
-	for _, rec := range records[ver-begin:] {
-		ok, err := fn(ctx, slices.Clone(rec))
+	start := ver - begin
+	for i, rec := range records[start:] {
+		v := start + uint64(i)
+		ok, err := fn(ctx, v, slices.Clone(rec))
 		if !ok || err != nil {
 			return err
 		}
