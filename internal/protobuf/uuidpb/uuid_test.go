@@ -17,7 +17,7 @@ func TestUUID_ToNative(t *testing.T) {
 	actual := pb.ToNative()
 
 	if expect != actual {
-		t.Fatalf("got %s, want %s", actual, expect)
+		t.Fatalf("got %q, want %q", actual, expect)
 	}
 }
 
@@ -28,8 +28,8 @@ func TestUUID_ToString(t *testing.T) {
 	pb := FromNative(expect)
 	actual := pb.ToString()
 
-	if expect.String() != actual {
-		t.Fatalf("got %s, want %s", actual, expect)
+	if actual != expect.String() {
+		t.Fatalf("got %q, want %q", actual, expect)
 	}
 }
 
@@ -52,7 +52,7 @@ func TestUUID_Format(t *testing.T) {
 	expect := pb.ToNative().String()
 	actual := fmt.Sprintf("%s", pb)
 
-	if expect != actual {
-		t.Fatalf("got %#v, want %#v", actual, expect)
+	if actual != expect {
+		t.Fatalf("got %q, want %q", actual, expect)
 	}
 }

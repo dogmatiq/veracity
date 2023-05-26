@@ -1,83 +1,100 @@
 package cluster_test
 
 import (
-	"strconv"
+	"fmt"
+	"testing"
 	"time"
 
-	"github.com/dogmatiq/veracity/internal/cluster"
+	. "github.com/dogmatiq/veracity/internal/cluster"
 	"github.com/google/uuid"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("type Partitioner", func() {
-	var partitioner *cluster.Partitioner
+func TestPartitioner(t *testing.T) {
+	t.Parallel()
 
-	BeforeEach(func() {
-		partitioner = &cluster.Partitioner{}
-	})
+	t.Run("when there are no nodes", func(t *testing.T) {
+		t.Parallel()
 
-	When("there are no nodes", func() {
-		It("panics", func() {
-			Expect(func() {
-				partitioner.Route("<workload>")
-			}).To(PanicWith("partitioner has no nodes"))
+		t.Run("it panics", func(t *testing.T) {
+			t.Parallel()
+
+			defer func() {
+				actual := fmt.Sprint(recover())
+				expect := "partitioner has no nodes"
+
+				if actual != expect {
+					t.Errorf("got %q, want %q", actual, expect)
+				}
+			}()
+
+			p := &Partitioner{}
+			p.Route("<workload>")
 		})
 	})
 
-	When("there are nodes", func() {
-		var nodes map[uuid.UUID]struct{}
+	t.Run("when there are nodes", func(t *testing.T) {
+		t.Parallel()
 
-		BeforeEach(func() {
-			nodes = map[uuid.UUID]struct{}{}
+		t.Run("it distributes workloads across all nodes", func(t *testing.T) {
+			t.Parallel()
+
+			p := &Partitioner{}
+			remaining := map[uuid.UUID]struct{}{}
 
 			for i := 0; i < 10; i++ {
 				id := uuid.New()
-				partitioner.AddNode(id)
-				nodes[id] = struct{}{}
+				p.AddNode(id)
+				remaining[id] = struct{}{}
 			}
-		})
 
-		It("distributes workloads across all nodes", func() {
 			start := time.Now()
 			timeout := 5 * time.Second
 
-			i := 0
-
-			// Loop as many times is possible with a different workload until
-			// each node is returned at least once.
-			for {
+			for len(remaining) != 0 {
 				if time.Since(start) > timeout {
-					Expect(nodes).To(
-						BeEmpty(),
-						"timed-out waiting for workloads to be distributed",
-					)
+					t.Fatal("timed-out waiting for workloads to be distributed")
 				}
 
-				id := partitioner.Route(strconv.Itoa(i))
-				i++
+				workload := uuid.NewString()
+				id := p.Route(workload)
 
-				delete(nodes, id)
-
-				if len(nodes) == 0 {
-					break
-				}
+				delete(remaining, id)
 			}
 		})
 
-		It("consistently routes to a specific workload to the same node", func() {
-			id := partitioner.Route("<workload>")
+		t.Run("it consistently routes to a specific workload to the same node", func(t *testing.T) {
+			t.Parallel()
+
+			p := &Partitioner{}
 			for i := 0; i < 10; i++ {
-				Expect(partitioner.Route("<workload>")).To(Equal(id))
+				p.AddNode(uuid.New())
+			}
+
+			expect := p.Route("<workload>")
+
+			for i := 0; i < 10; i++ {
+				actual := p.Route("<workload>")
+				if actual != expect {
+					t.Fatalf("got %q, want %q", actual, expect)
+				}
 			}
 		})
 
-		It("does not route to nodes that have been removed", func() {
-			removed := partitioner.Route("<workload>")
-			partitioner.RemoveNode(removed)
+		t.Run("it does not route to nodes that have been removed", func(t *testing.T) {
+			t.Parallel()
 
-			id := partitioner.Route("<workload>")
-			Expect(id).NotTo(Equal(removed))
+			p := &Partitioner{}
+			for i := 0; i < 10; i++ {
+				p.AddNode(uuid.New())
+			}
+
+			removed := p.Route("<workload>")
+			p.RemoveNode(removed)
+
+			id := p.Route("<workload>")
+			if id == removed {
+				t.Fatalf("got %q, expected a different node", id)
+			}
 		})
 	})
-})
+}
