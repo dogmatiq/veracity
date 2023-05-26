@@ -3,54 +3,36 @@ package cluster_test
 import (
 	"context"
 	"errors"
+	"testing"
 	"time"
 
 	. "github.com/dogmatiq/veracity/internal/cluster"
+	"github.com/dogmatiq/veracity/internal/tlog"
 	"github.com/dogmatiq/veracity/persistence/driver/memory"
-	"github.com/dogmatiq/veracity/persistence/kv"
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	"golang.org/x/exp/slog"
 )
 
-var _ = Describe("type Registry", func() {
-	var (
-		ctx      context.Context
-		cancel   context.CancelFunc
-		keyspace kv.Keyspace
-		registry *Registry
-		node     Node
-	)
+func TestRegistry(t *testing.T) {
+	t.Parallel()
 
-	watch := func(notify chan<- MembershipChange) func() {
-		ctx, cancel := context.WithCancel(ctx)
-		result := make(chan error, 1)
-
-		go func() {
-			err := registry.Watch(ctx, notify)
-			result <- err
-		}()
-
-		return func() {
-			cancel()
-			err := <-result
-			Expect(errors.Is(err, context.Canceled)).To(BeTrue())
-		}
-	}
-
-	BeforeEach(func() {
-		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-		DeferCleanup(cancel)
+	setup := func(t *testing.T) (
+		context.Context,
+		context.CancelFunc,
+		*Registry,
+	) {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 
 		store := &memory.KeyValueStore{}
+		keyspace, err := store.Open(context.Background(), "registry")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			keyspace.Close()
+		})
 
-		var err error
-		keyspace, err = store.Open(context.Background(), "registry")
-		Expect(err).ShouldNot(HaveOccurred())
-		DeferCleanup(keyspace.Close)
-
-		registry = &Registry{
+		return ctx, cancel, &Registry{
 			Keyspace: keyspace,
 
 			// Note that we use a heartbeat interval that's larger than the poll
@@ -58,187 +40,249 @@ var _ = Describe("type Registry", func() {
 			PollInterval:      10 * time.Millisecond,
 			HeartbeatInterval: 50 * time.Millisecond,
 
-			Logger: slog.New(
-				slog.HandlerOptions{
-					Level: slog.LevelDebug,
-				}.NewTextHandler(GinkgoWriter),
-			),
+			Logger: tlog.New(t),
+		}
+	}
+
+	watch := func(
+		ctx context.Context,
+		reg *Registry,
+		notify chan<- MembershipChange,
+	) func() {
+		ctx, cancel := context.WithCancel(ctx)
+
+		result := make(chan error, 1)
+		go func() {
+			result <- reg.Watch(ctx, notify)
+		}()
+
+		return func() {
+			cancel()
+			err := <-result
+
+			if !errors.Is(err, context.Canceled) {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	node := Node{
+		ID: uuid.New(),
+		Addresses: []string{
+			"10.0.0.1:50555",
+			"129.168.0.1:50555",
+		},
+	}
+
+	t.Run("it notifies about nodes that are registered before watching starts", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cancel, reg := setup(t)
+		defer cancel()
+
+		if err := reg.Register(ctx, node); err != nil {
+			t.Fatal(err)
 		}
 
-		node = Node{
-			ID: uuid.New(),
-			Addresses: []string{
-				"10.0.0.1:50555",
-				"129.168.0.1:50555",
-			},
+		notify := make(chan MembershipChange)
+		stop := watch(ctx, reg, notify)
+		defer stop()
+
+		expect := MembershipChange{
+			Joins: []Node{node},
+		}
+
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case actual := <-notify:
+			cancel()
+			if diff := cmp.Diff(actual, expect); diff != "" {
+				t.Fatal(diff)
+			}
 		}
 	})
 
-	Describe("func Watch()", func() {
-		It("notifies about nodes that are registered before watching starts", func() {
-			err := registry.Register(ctx, node)
-			Expect(err).ShouldNot(HaveOccurred())
+	t.Run("it does not notify about nodes that are deregistered before watching starts", func(t *testing.T) {
+		t.Parallel()
 
-			notify := make(chan MembershipChange)
-			stop := watch(notify)
-			DeferCleanup(stop)
+		ctx, cancel, reg := setup(t)
+		defer cancel()
 
-			select {
-			case <-ctx.Done():
-				Expect(ctx.Err()).ShouldNot(HaveOccurred())
-			case change := <-notify:
-				cancel()
-				Expect(change).To(Equal(
-					MembershipChange{
-						Joins: []Node{node},
-					},
-				))
+		if err := reg.Register(ctx, node); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := reg.Deregister(ctx, node.ID); err != nil {
+			t.Fatal(err)
+		}
+
+		notify := make(chan MembershipChange)
+		stop := watch(ctx, reg, notify)
+		defer stop()
+
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-time.After(reg.HeartbeatInterval):
+			cancel()
+		case <-notify:
+			t.Fatal("unexpected notification")
+		}
+	})
+
+	t.Run("it notifies about nodes that are registered after watching starts", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cancel, reg := setup(t)
+		defer cancel()
+
+		go func() {
+			// Let the first poll happen before we register the node.
+			time.Sleep(reg.PollInterval)
+
+			if err := reg.Register(ctx, node); err != nil {
+				panic(err)
 			}
-		})
+		}()
 
-		It("does not notify about nodes that are deregistered before watching starts", func() {
-			err := registry.Register(ctx, node)
-			Expect(err).ShouldNot(HaveOccurred())
+		notify := make(chan MembershipChange)
+		stop := watch(ctx, reg, notify)
+		defer stop()
 
-			err = registry.Deregister(ctx, node.ID)
-			Expect(err).ShouldNot(HaveOccurred())
+		expect := MembershipChange{
+			Joins: []Node{node},
+		}
 
-			notify := make(chan MembershipChange)
-			stop := watch(notify)
-			DeferCleanup(stop)
-
-			select {
-			case <-ctx.Done():
-				Expect(ctx.Err()).ShouldNot(HaveOccurred())
-			case <-time.After(registry.HeartbeatInterval):
-				cancel()
-			case <-notify:
-				Fail("unexpected notification")
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case actual := <-notify:
+			cancel()
+			if diff := cmp.Diff(actual, expect); diff != "" {
+				t.Fatal(diff)
 			}
-		})
+		}
+	})
 
-		It("notifies about nodes that are registered after watching starts", func() {
-			go func() {
-				// Let the first poll happen before we register the node.
-				time.Sleep(registry.PollInterval)
+	t.Run("it notifies when a node is deregistered", func(t *testing.T) {
+		t.Parallel()
 
-				defer GinkgoRecover()
-				err := registry.Register(ctx, node)
-				Expect(err).ShouldNot(HaveOccurred())
-			}()
+		ctx, cancel, reg := setup(t)
+		defer cancel()
 
-			notify := make(chan MembershipChange)
-			stop := watch(notify)
-			DeferCleanup(stop)
+		if err := reg.Register(ctx, node); err != nil {
+			t.Fatal(err)
+		}
 
-			select {
-			case <-ctx.Done():
-				Expect(ctx.Err()).ShouldNot(HaveOccurred())
-			case change := <-notify:
-				cancel()
-				Expect(change).To(Equal(
-					MembershipChange{
-						Joins: []Node{node},
-					},
-				))
+		notify := make(chan MembershipChange)
+		stop := watch(ctx, reg, notify)
+		defer stop()
+
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-notify:
+			if err := reg.Deregister(ctx, node.ID); err != nil {
+				t.Fatal(err)
 			}
-		})
+		}
 
-		It("notifies when a node is deregistered", func() {
-			err := registry.Register(ctx, node)
-			Expect(err).ShouldNot(HaveOccurred())
+		expect := MembershipChange{
+			Leaves: []Node{node},
+		}
 
-			notify := make(chan MembershipChange)
-			stop := watch(notify)
-			DeferCleanup(stop)
-
-			select {
-			case <-ctx.Done():
-				Expect(ctx.Err()).ShouldNot(HaveOccurred())
-			case <-notify:
-				err := registry.Deregister(ctx, node.ID)
-				Expect(err).ShouldNot(HaveOccurred())
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case actual := <-notify:
+			cancel()
+			if diff := cmp.Diff(actual, expect); diff != "" {
+				t.Fatal(diff)
 			}
+		}
+	})
 
-			select {
-			case <-ctx.Done():
-				Expect(ctx.Err()).ShouldNot(HaveOccurred())
-			case change := <-notify:
-				cancel()
-				Expect(change).To(Equal(
-					MembershipChange{
-						Leaves: []Node{node},
-					},
-				))
+	t.Run("it notifies when a node expires", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cancel, reg := setup(t)
+		defer cancel()
+
+		if err := reg.Register(ctx, node); err != nil {
+			t.Fatal(err)
+		}
+
+		notify := make(chan MembershipChange)
+		stop := watch(ctx, reg, notify)
+		defer stop()
+
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-notify:
+			// join
+		}
+
+		expect := MembershipChange{
+			Leaves: []Node{node},
+		}
+
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case actual := <-notify:
+			cancel()
+			if diff := cmp.Diff(actual, expect); diff != "" {
+				t.Fatal(diff)
 			}
-		})
+		}
+	})
 
-		It("notifies when a node expires", func() {
-			err := registry.Register(ctx, node)
-			Expect(err).ShouldNot(HaveOccurred())
+	t.Run("it does not notify when a node maintains its heartbeat correctly", func(t *testing.T) {
+		t.Parallel()
 
-			notify := make(chan MembershipChange)
-			stop := watch(notify)
-			DeferCleanup(stop)
+		ctx, cancel, reg := setup(t)
+		defer cancel()
 
-			select {
-			case <-ctx.Done():
-				Expect(ctx.Err()).ShouldNot(HaveOccurred())
-			case <-notify:
-				// join
-			}
+		if err := reg.Register(ctx, node); err != nil {
+			t.Fatal(err)
+		}
 
-			select {
-			case <-ctx.Done():
-				Expect(ctx.Err()).ShouldNot(HaveOccurred())
-			case change := <-notify:
-				cancel()
-				Expect(change).To(Equal(
-					MembershipChange{
-						Leaves: []Node{node},
-					},
-				))
-			}
-		})
+		result := make(chan error, 1)
+		go func() {
+			for {
+				time.Sleep(reg.HeartbeatInterval)
 
-		It("does not notify when a node maintains its heartbeat correctly", func() {
-			err := registry.Register(ctx, node)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			result := make(chan error, 1)
-			go func() {
-				for {
-					time.Sleep(registry.HeartbeatInterval)
-
-					err := registry.Heartbeat(ctx, node.ID)
-					if err != nil {
-						result <- err
-						return
-					}
+				if err := reg.Heartbeat(ctx, node.ID); err != nil {
+					result <- err
+					return
 				}
-			}()
-
-			notify := make(chan MembershipChange)
-			stop := watch(notify)
-			DeferCleanup(stop)
-
-			select {
-			case <-ctx.Done():
-				Expect(ctx.Err()).ShouldNot(HaveOccurred())
-			case <-notify:
-				// join
 			}
+		}()
 
-			select {
-			case <-ctx.Done():
-				Expect(ctx.Err()).ShouldNot(HaveOccurred())
-			case <-time.After(registry.HeartbeatInterval * 5):
-				cancel()
-				err := <-result
-				Expect(errors.Is(err, context.Canceled)).To(BeTrue())
-			case <-notify:
-				Fail("unexpected notification")
+		notify := make(chan MembershipChange)
+		stop := watch(ctx, reg, notify)
+		defer stop()
+
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-notify:
+			// join
+		}
+
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-time.After(reg.HeartbeatInterval * 5):
+			cancel()
+			err := <-result
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("got %s, want %s", err, context.Canceled)
 			}
-		})
+		case <-notify:
+			t.Fatal("unexpected notification")
+		}
 	})
-})
+}
