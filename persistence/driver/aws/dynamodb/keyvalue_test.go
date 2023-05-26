@@ -6,16 +6,16 @@ import (
 	"time"
 
 	. "github.com/dogmatiq/veracity/persistence/driver/aws/dynamodb"
-	"github.com/dogmatiq/veracity/persistence/journal"
+	"github.com/dogmatiq/veracity/persistence/kv"
 )
 
-func TestJournalStore(t *testing.T) {
+func TestKeyValueStore(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 
 	client := newClient(t)
-	table := "journal"
+	table := "kvstore"
 
-	if err := CreateJournalStoreTable(ctx, client, table); err != nil {
+	if err := CreateKeyValueStoreTable(ctx, client, table); err != nil {
 		t.Fatal(err)
 	}
 
@@ -27,10 +27,10 @@ func TestJournalStore(t *testing.T) {
 		cancel()
 	})
 
-	journal.RunTests(
+	kv.RunTests(
 		t,
-		func(t *testing.T) journal.Store {
-			return &JournalStore{
+		func(t *testing.T) kv.Store {
+			return &KeyValueStore{
 				Client: client,
 				Table:  table,
 			}

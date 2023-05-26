@@ -9,7 +9,7 @@ import (
 	"github.com/dogmatiq/veracity/persistence/journal"
 )
 
-func TestJournal(t *testing.T) {
+func TestJournalStore(t *testing.T) {
 	ctx := context.Background()
 	database, err := sqltest.NewDatabase(ctx, sqltest.PGXDriver, sqltest.PostgreSQL)
 	if err != nil {
@@ -21,7 +21,7 @@ func TestJournal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := CreateJournalSchema(ctx, db); err != nil {
+	if err := CreateJournalStoreSchema(ctx, db); err != nil {
 		t.Fatal(err)
 	}
 

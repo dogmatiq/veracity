@@ -14,8 +14,8 @@ import (
 	"github.com/dogmatiq/veracity/persistence/journal"
 )
 
-// JournalStore is an implementation of journal.Store that contains journals
-// that persist records in a DynamoDB table.
+// JournalStore is an implementation of [journal.Store] that persists journals
+// in a DynamoDB table.
 type JournalStore struct {
 	// Client is the DynamoDB client to use.
 	Client *dynamodb.Client
@@ -94,6 +94,7 @@ func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journa
 	j.queryRequest = dynamodb.QueryInput{
 		TableName:              aws.String(s.Table),
 		KeyConditionExpression: aws.String(`#P = :P AND #V >= :V`),
+		ProjectionExpression:   aws.String("#V, #R"),
 		ExpressionAttributeNames: map[string]string{
 			"#P": journalPathAttr,
 			"#V": journalVersionAttr,
@@ -103,7 +104,6 @@ func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journa
 			":P": j.path,
 			":V": j.version,
 		},
-		ProjectionExpression: aws.String("#V, #R"),
 	}
 
 	j.putRequest = dynamodb.PutItemInput{
@@ -301,8 +301,8 @@ func (j *journ) Close() error {
 	return nil
 }
 
-// CreateJournalTable creates a DynamoDB for storing journal records.
-func CreateJournalTable(
+// CreateJournalStoreTable creates a DynamoDB table for use with [JournalStore].
+func CreateJournalStoreTable(
 	ctx context.Context,
 	client *dynamodb.Client,
 	table string,
