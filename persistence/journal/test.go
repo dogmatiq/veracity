@@ -244,7 +244,13 @@ func RunTests(
 					ctx,
 					expectVer,
 					func(ctx context.Context, ver uint64, rec []byte) (bool, error) {
+						if ver != expectVer {
+							t.Fatalf("unexpected version: want %d, got %d", expectVer, ver)
+						}
+
 						actual = append(actual, rec)
+						expectVer++
+
 						return true, nil
 					},
 				); err != nil {

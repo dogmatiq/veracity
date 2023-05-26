@@ -97,8 +97,9 @@ func (h *journalHandle) Range(
 		return fmt.Errorf("cannot range over truncated records")
 	}
 
-	for i, rec := range records[ver-begin:] {
-		v := ver - begin + uint64(i)
+	start := ver - begin
+	for i, rec := range records[start:] {
+		v := start + uint64(i)
 		ok, err := fn(ctx, v, slices.Clone(rec))
 		if !ok || err != nil {
 			return err
