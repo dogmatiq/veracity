@@ -18,7 +18,11 @@ func RunTests(
 	newStore func(t *testing.T) Store,
 ) {
 	t.Run("type Store", func(t *testing.T) {
+		t.Parallel()
+
 		t.Run("func Open()", func(t *testing.T) {
+			t.Parallel()
+
 			t.Run("does not perform naive path concatenation", func(t *testing.T) {
 				store := newStore(t)
 
@@ -114,7 +118,11 @@ func RunTests(
 	})
 
 	t.Run("type Keyspace", func(t *testing.T) {
+		t.Parallel()
+
 		t.Run("func Get()", func(t *testing.T) {
+			t.Parallel()
+
 			t.Run("it returns an empty value if the key doesn't exist", func(t *testing.T) {
 				t.Parallel()
 
@@ -220,6 +228,8 @@ func RunTests(
 		})
 
 		t.Run("func Set()", func(t *testing.T) {
+			t.Parallel()
+
 			t.Run("it does not keep a reference to the key slice", func(t *testing.T) {
 				t.Parallel()
 
@@ -287,6 +297,8 @@ func RunTests(
 		})
 
 		t.Run("func Has()", func(t *testing.T) {
+			t.Parallel()
+
 			t.Run("it returns false if the key doesn't exist", func(t *testing.T) {
 				t.Parallel()
 
@@ -347,6 +359,8 @@ func RunTests(
 		})
 
 		t.Run("func RangeAll()", func(t *testing.T) {
+			t.Parallel()
+
 			t.Run("calls the function for each key in the keyspace", func(t *testing.T) {
 				t.Parallel()
 

@@ -18,7 +18,11 @@ func RunTests(
 	newStore func(t *testing.T) Store,
 ) {
 	t.Run("type Store", func(t *testing.T) {
+		t.Parallel()
+
 		t.Run("func Open()", func(t *testing.T) {
+			t.Parallel()
+
 			t.Run("does not perform naive path concatenation", func(t *testing.T) {
 				store := newStore(t)
 
@@ -115,7 +119,11 @@ func RunTests(
 	})
 
 	t.Run("type Journal", func(t *testing.T) {
+		t.Parallel()
+
 		t.Run("func Get()", func(t *testing.T) {
+			t.Parallel()
+
 			t.Run("it returns false if the version doesn't exist", func(t *testing.T) {
 				t.Parallel()
 
@@ -216,6 +224,8 @@ func RunTests(
 		})
 
 		t.Run("func Range()", func(t *testing.T) {
+			t.Parallel()
+
 			t.Run("calls the function for each record in the journal", func(t *testing.T) {
 				t.Parallel()
 
@@ -384,6 +394,8 @@ func RunTests(
 		})
 
 		t.Run("func RangeAll()", func(t *testing.T) {
+			t.Parallel()
+
 			t.Run("calls the function for each record in the journal", func(t *testing.T) {
 				t.Parallel()
 
@@ -549,6 +561,8 @@ func RunTests(
 		})
 
 		t.Run("func Append()", func(t *testing.T) {
+			t.Parallel()
+
 			t.Run("it returns true if the version doesn't exist", func(t *testing.T) {
 				t.Parallel()
 
