@@ -60,7 +60,7 @@ func (j *journ) Get(ctx context.Context, ver uint64) ([]byte, bool, error) {
 func (j *journ) Range(
 	ctx context.Context,
 	ver uint64,
-	fn func(context.Context, uint64, []byte) (bool, error),
+	fn journal.RangeFunc,
 ) error {
 	rows, err := j.DB.QueryContext(
 		ctx,
@@ -104,7 +104,7 @@ func (j *journ) Range(
 
 func (j *journ) RangeAll(
 	ctx context.Context,
-	fn func(context.Context, uint64, []byte) (bool, error),
+	fn journal.RangeFunc,
 ) error {
 	rows, err := j.DB.QueryContext(
 		ctx,

@@ -4,6 +4,12 @@ import (
 	"context"
 )
 
+// A RangeFunc is a function used to range over the records in a [Journal].
+//
+// If err is non-nil, ranging stops and err is propagated up the stack.
+// Otherwise, if ok is false, ranging stops without any error being propagated.
+type RangeFunc func(ctx context.Context, ver uint64, rec []byte) (ok bool, err error)
+
 // A Journal is an append-only log of binary records.
 type Journal interface {
 	// Get returns the record written to produce the given version of the
@@ -15,17 +21,10 @@ type Journal interface {
 
 	// Range invokes fn for each record in the journal, beginning at the given
 	// version, in order.
-	Range(
-		ctx context.Context,
-		ver uint64,
-		fn func(ctx context.Context, ver uint64, rec []byte) (bool, error),
-	) error
+	Range(ctx context.Context, ver uint64, fn RangeFunc) error
 
 	// RangeAll invokes fn for each record in the journal, in order.
-	RangeAll(
-		ctx context.Context,
-		fn func(ctx context.Context, ver uint64, rec []byte) (bool, error),
-	) error
+	RangeAll(ctx context.Context, fn RangeFunc) error
 
 	// Append adds a record to the journal.
 	//

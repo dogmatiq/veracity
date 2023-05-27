@@ -82,7 +82,7 @@ func (h *journalHandle) Get(ctx context.Context, ver uint64) ([]byte, bool, erro
 func (h *journalHandle) Range(
 	ctx context.Context,
 	ver uint64,
-	fn func(context.Context, uint64, []byte) (bool, error),
+	fn journal.RangeFunc,
 ) error {
 	if h.state == nil {
 		panic("journal is closed")
@@ -112,7 +112,7 @@ func (h *journalHandle) Range(
 
 func (h *journalHandle) RangeAll(
 	ctx context.Context,
-	fn func(context.Context, uint64, []byte) (bool, error),
+	fn journal.RangeFunc,
 ) error {
 	if h.state == nil {
 		panic("journal is closed")

@@ -110,7 +110,7 @@ func (ks *keyspace) Set(ctx context.Context, k, v []byte) error {
 
 func (ks *keyspace) RangeAll(
 	ctx context.Context,
-	fn func(ctx context.Context, k, v []byte) (bool, error),
+	fn kv.RangeFunc,
 ) error {
 	rows, err := ks.DB.QueryContext(
 		ctx,

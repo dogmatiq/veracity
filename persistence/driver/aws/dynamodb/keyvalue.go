@@ -222,7 +222,7 @@ func (ks *keyspace) delete(ctx context.Context, k []byte) error {
 
 func (ks *keyspace) RangeAll(
 	ctx context.Context,
-	fn func(ctx context.Context, k, v []byte) (bool, error),
+	fn kv.RangeFunc,
 ) error {
 	ks.queryRequest.ExclusiveStartKey = nil
 

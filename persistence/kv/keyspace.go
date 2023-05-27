@@ -2,6 +2,13 @@ package kv
 
 import "context"
 
+// A RangeFunc is a function used to range over the key/value pairs in a
+// [Keyspace].
+//
+// If err is non-nil, ranging stops and err is propagated up the stack.
+// Otherwise, if ok is false, ranging stops without any error being propagated.
+type RangeFunc func(ctx context.Context, k, v []byte) (ok bool, err error)
+
 // A Keyspace is an isolated collection of key/value pairs.
 type Keyspace interface {
 	// Get returns the value associated with k.
@@ -17,14 +24,8 @@ type Keyspace interface {
 	// If v is empty, the key is deleted.
 	Set(ctx context.Context, k, v []byte) error
 
-	// RangeAll invokes fn for each key in the keyspace.
-	//
-	// The order is undefined. If fn returns false, ranging stops RangeAll()
-	// returns immediately.
-	RangeAll(
-		ctx context.Context,
-		fn func(ctx context.Context, k, v []byte) (bool, error),
-	) error
+	// RangeAll invokes fn for each key in the keyspace in an undefined order.
+	RangeAll(ctx context.Context, fn RangeFunc) error
 
 	// Close closes the keyspace.
 	Close() error
