@@ -1,16 +1,16 @@
-package pathkey
+package persistencepath
 
 import "strings"
 
-// New returns a string key derived from a path.
-func New(path []string) string {
-	if len(path) == 0 {
+// Join returns returns a path from the given elements.
+func Join(elements []string) string {
+	if len(elements) == 0 {
 		panic("path must not be empty")
 	}
 
 	var w strings.Builder
 
-	for _, elem := range path {
+	for _, elem := range elements {
 		if len(elem) == 0 {
 			panic("path element must not be empty")
 		}

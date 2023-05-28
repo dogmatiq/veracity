@@ -5,26 +5,20 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/dogmatiq/veracity/persistence/internal/pathkey"
 	"github.com/dogmatiq/veracity/persistence/journal"
 )
 
-// JournalStore is an implementation of journal.Store that contains journals
+// JournalStore is an implementation of [journal.Store] that contains journals
 // that persist records in a PostgresSQL table.
 type JournalStore struct {
 	// DB is the PostgreSQL database connection.
 	DB *sql.DB
 }
 
-// Open returns the journal at the given path.
-//
-// The path uniquely identifies the journal. It must not be empty. Each element
-// must be a non-empty UTF-8 string consisting solely of printable Unicode
-// characters, excluding whitespace. A printable character is any character from
-// the Letter, Mark, Number, Punctuation or Symbol categories.
-func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journal, error) {
+// Open returns the journal with the given name.
+func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, error) {
 	return &journ{
-		Path: pathkey.New(path),
+		Name: name,
 		DB:   s.DB,
 	}, nil
 }
@@ -32,7 +26,7 @@ func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journa
 // journ is an implementation of journal.Journal that stores records in
 // a DynamoDB table.
 type journ struct {
-	Path string
+	Name string
 	DB   *sql.DB
 }
 
@@ -42,9 +36,9 @@ func (j *journ) Get(ctx context.Context, ver uint64) ([]byte, bool, error) {
 		`SELECT
 			record
 		FROM veracity.journal
-		WHERE path = $1
+		WHERE name = $1
 		AND version = $2`,
-		j.Path,
+		j.Name,
 		ver,
 	)
 
@@ -68,10 +62,10 @@ func (j *journ) Range(
 			version,
 			record
 		FROM veracity.journal
-		WHERE path = $1
+		WHERE name = $1
 		AND version >= $2
 		ORDER BY version`,
-		j.Path,
+		j.Name,
 		ver,
 	)
 	if err != nil {
@@ -112,9 +106,9 @@ func (j *journ) RangeAll(
 		 	version,
 			record
 		FROM veracity.journal
-		WHERE path = $1
+		WHERE name = $1
 		ORDER BY version`,
-		j.Path,
+		j.Name,
 	)
 	if err != nil {
 		return err
@@ -155,13 +149,13 @@ func (j *journ) Append(ctx context.Context, ver uint64, rec []byte) (bool, error
 	res, err := j.DB.ExecContext(
 		ctx,
 		`INSERT INTO veracity.journal (
-			path,
+			name,
 			version,
 			record
 		) VALUES (
 			$1, $2, $3
-		) ON CONFLICT (path, version) DO NOTHING`,
-		j.Path,
+		) ON CONFLICT (name, version) DO NOTHING`,
+		j.Name,
 		ver,
 		rec,
 	)
@@ -177,9 +171,9 @@ func (j *journ) Truncate(ctx context.Context, ver uint64) error {
 	_, err := j.DB.ExecContext(
 		ctx,
 		`DELETE FROM veracity.journal
-		WHERE path = $1
+		WHERE name = $1
 		AND version < $2`,
-		j.Path,
+		j.Name,
 		ver,
 	)
 
@@ -209,11 +203,11 @@ func CreateJournalStoreSchema(
 	if _, err := db.ExecContext(
 		ctx,
 		`CREATE TABLE IF NOT EXISTS veracity.journal (
-			path    TEXT NOT NULL,
+			name    TEXT NOT NULL,
 			version BIGINT NOT NULL,
 			record  BYTEA NOT NULL,
 
-			PRIMARY KEY (path, version)
+			PRIMARY KEY (name, version)
 		)`,
 	); err != nil {
 		return err

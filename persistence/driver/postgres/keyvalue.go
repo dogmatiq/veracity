@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/dogmatiq/veracity/persistence/internal/pathkey"
+	"github.com/dogmatiq/veracity/internal/persistencepath"
 	"github.com/dogmatiq/veracity/persistence/kv"
 )
 
@@ -23,7 +23,7 @@ type KeyValueStore struct {
 // categories.
 func (s *KeyValueStore) Open(ctx context.Context, path ...string) (kv.Keyspace, error) {
 	return &keyspace{
-		Path: pathkey.New(path),
+		Path: persistencepath.Join(path),
 		DB:   s.DB,
 	}, nil
 }

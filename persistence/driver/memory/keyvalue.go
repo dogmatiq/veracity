@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/dogmatiq/veracity/persistence/internal/pathkey"
+	"github.com/dogmatiq/veracity/internal/persistencepath"
 	"github.com/dogmatiq/veracity/persistence/kv"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -25,7 +25,7 @@ type KeyValueStore struct {
 // character from the Letter, Mark, Number, Punctuation or Symbol
 // categories.
 func (s *KeyValueStore) Open(ctx context.Context, path ...string) (kv.Keyspace, error) {
-	key := pathkey.New(path)
+	key := persistencepath.Join(path)
 	state, ok := s.keyspaces.Load(key)
 
 	if !ok {

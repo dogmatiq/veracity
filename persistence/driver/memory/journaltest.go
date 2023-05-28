@@ -9,17 +9,17 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// FailBeforeJournalAppend configures the journal at the given path to return an
-// error on the next call to Append() with a record that satisifies the given
+// FailBeforeJournalAppend configures the journal with the given name to return
+// an error on the next call to Append() with a record that satisifies the given
 // predicate function.
 //
 // The error is returned before the append is actually performed.
 func FailBeforeJournalAppend[R proto.Message](
 	s *JournalStore,
 	pred func(R) bool,
-	path ...string,
+	name string,
 ) {
-	j, err := s.Open(context.Background(), path...)
+	j, err := s.Open(context.Background(), name)
 	if err != nil {
 		panic(err)
 	}
@@ -33,17 +33,17 @@ func FailBeforeJournalAppend[R proto.Message](
 	h.state.BeforeAppend = failAppendOnce(pred)
 }
 
-// FailAfterJournalAppend configures the journal at the given path to return an
-// error on the next call to Append() with a record that satisifies the given
+// FailAfterJournalAppend configures the journal with the given name to return
+// an error on the next call to Append() with a record that satisifies the given
 // predicate function.
 //
 // The error is returned after the append is actually performed.
 func FailAfterJournalAppend[R proto.Message](
 	s *JournalStore,
 	pred func(R) bool,
-	path ...string,
+	name string,
 ) {
-	j, err := s.Open(context.Background(), path...)
+	j, err := s.Open(context.Background(), name)
 	if err != nil {
 		panic(err)
 	}

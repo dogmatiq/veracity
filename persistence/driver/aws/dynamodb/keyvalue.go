@@ -7,8 +7,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/dogmatiq/veracity/internal/persistencepath"
 	"github.com/dogmatiq/veracity/persistence/driver/aws/internal/awsx"
-	"github.com/dogmatiq/veracity/persistence/internal/pathkey"
 	"github.com/dogmatiq/veracity/persistence/kv"
 )
 
@@ -70,7 +70,7 @@ func (s *KeyValueStore) Open(ctx context.Context, path ...string) (kv.Keyspace, 
 		DecoratePutItem:    s.DecoratePutItem,
 		DecorateDeleteItem: s.DecorateDeleteItem,
 
-		path:  &types.AttributeValueMemberS{Value: pathkey.New(path)},
+		path:  &types.AttributeValueMemberS{Value: persistencepath.Join(path)},
 		key:   &types.AttributeValueMemberB{},
 		value: &types.AttributeValueMemberB{},
 	}

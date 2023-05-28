@@ -23,55 +23,6 @@ func RunTests(
 		t.Run("func Open()", func(t *testing.T) {
 			t.Parallel()
 
-			t.Run("does not perform naive path concatenation", func(t *testing.T) {
-				store := newStore(t)
-
-				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-				defer cancel()
-
-				paths := [][]string{
-					{"foobar"},
-					{"foo", "bar"},
-					{"foob", "ar"},
-					{"foo/bar"},
-					{"foo/", "bar"},
-					{"foo", "/bar"},
-				}
-
-				for i, path := range paths {
-					j, err := store.Open(ctx, path...)
-					if err != nil {
-						t.Fatal(err)
-					}
-					defer j.Close()
-
-					expect := []byte(fmt.Sprintf("<record-%d>", i))
-					ok, err := j.Append(ctx, 0, expect)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if !ok {
-						t.Fatal("unexpected optimistic concurrency conflict")
-					}
-
-					actual, ok, err := j.Get(ctx, 0)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if !ok {
-						t.Fatal("expected record to exist")
-					}
-
-					if !bytes.Equal(expect, actual) {
-						t.Fatalf(
-							"unexpected record, want %q, got %q",
-							string(expect),
-							string(actual),
-						)
-					}
-				}
-			})
-
 			t.Run("allows journals to be opened multiple times", func(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 				defer cancel()
