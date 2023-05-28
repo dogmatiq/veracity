@@ -66,9 +66,7 @@ func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, 
 		DecoratePutItem:    s.DecoratePutItem,
 		DecorateDeleteItem: s.DecorateDeleteItem,
 
-		name: &types.AttributeValueMemberS{
-			Value: name,
-		},
+		name:    &types.AttributeValueMemberS{Value: name},
 		version: &types.AttributeValueMemberN{},
 		record:  &types.AttributeValueMemberB{},
 	}

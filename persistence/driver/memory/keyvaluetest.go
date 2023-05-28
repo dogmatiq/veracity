@@ -6,17 +6,17 @@ import (
 	"sync"
 )
 
-// FailBeforeKeyspaceSet configures the keyspace at the given path to return an
-// error on the next call to Set() with a key/value pair that satisifies the
+// FailBeforeKeyspaceSet configures the keyspace with the given name to return
+// an error on the next call to Set() with a key/value pair that satisifies the
 // given predicate function.
 //
 // The error is returned before the set is actually performed.
 func FailBeforeKeyspaceSet(
 	s *KeyValueStore,
 	pred func(k, v []byte) bool,
-	path ...string,
+	name string,
 ) {
-	j, err := s.Open(context.Background(), path...)
+	j, err := s.Open(context.Background(), name)
 	if err != nil {
 		panic(err)
 	}
@@ -30,7 +30,7 @@ func FailBeforeKeyspaceSet(
 	h.state.BeforeSet = failSetOnce(pred)
 }
 
-// FailAfterKeyspaceSet configures the keyspace at the given path to return an
+// FailAfterKeyspaceSet configures the keyspace with the given name to return an
 // error on the next call to Set() with a key/value pair that satisifies the
 // given predicate function.
 //
@@ -38,9 +38,9 @@ func FailBeforeKeyspaceSet(
 func FailAfterKeyspaceSet(
 	s *KeyValueStore,
 	pred func(k, v []byte) bool,
-	path ...string,
+	name string,
 ) {
-	j, err := s.Open(context.Background(), path...)
+	j, err := s.Open(context.Background(), name)
 	if err != nil {
 		panic(err)
 	}

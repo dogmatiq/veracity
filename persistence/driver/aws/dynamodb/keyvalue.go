@@ -7,7 +7,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/dogmatiq/veracity/internal/persistencepath"
 	"github.com/dogmatiq/veracity/persistence/driver/aws/internal/awsx"
 	"github.com/dogmatiq/veracity/persistence/kv"
 )
@@ -51,18 +50,13 @@ type KeyValueStore struct {
 }
 
 const (
-	kvPathAttr  = "Path"
-	kvKeyAttr   = "Key"
-	kvValueAttr = "Value"
+	kvKeyspaceAttr = "Keyspace"
+	kvKeyAttr      = "Key"
+	kvValueAttr    = "Value"
 )
 
-// Open returns the keyspace at the given path.
-//
-// The path uniquely identifies the keyspace. It must not be empty. Each element
-// must be a non-empty UTF-8 string consisting solely of printable Unicode
-// characters, excluding whitespace. A printable character is any character from
-// the Letter, Mark, Number, Punctuation or Symbol categories.
-func (s *KeyValueStore) Open(ctx context.Context, path ...string) (kv.Keyspace, error) {
+// Open returns the keyspace with the given name.
+func (s *KeyValueStore) Open(ctx context.Context, name string) (kv.Keyspace, error) {
 	ks := &keyspace{
 		Client:             s.Client,
 		DecorateGetItem:    s.DecorateGetItem,
@@ -70,7 +64,7 @@ func (s *KeyValueStore) Open(ctx context.Context, path ...string) (kv.Keyspace, 
 		DecoratePutItem:    s.DecoratePutItem,
 		DecorateDeleteItem: s.DecorateDeleteItem,
 
-		path:  &types.AttributeValueMemberS{Value: persistencepath.Join(path)},
+		name:  &types.AttributeValueMemberS{Value: name},
 		key:   &types.AttributeValueMemberB{},
 		value: &types.AttributeValueMemberB{},
 	}
@@ -78,8 +72,8 @@ func (s *KeyValueStore) Open(ctx context.Context, path ...string) (kv.Keyspace, 
 	ks.getRequest = dynamodb.GetItemInput{
 		TableName: aws.String(s.Table),
 		Key: map[string]types.AttributeValue{
-			kvPathAttr: ks.path,
-			kvKeyAttr:  ks.key,
+			kvKeyspaceAttr: ks.name,
+			kvKeyAttr:      ks.key,
 		},
 		ProjectionExpression: aws.String(`#V`),
 		ExpressionAttributeNames: map[string]string{
@@ -91,40 +85,40 @@ func (s *KeyValueStore) Open(ctx context.Context, path ...string) (kv.Keyspace, 
 	ks.hasRequest = dynamodb.GetItemInput{
 		TableName: aws.String(s.Table),
 		Key: map[string]types.AttributeValue{
-			kvPathAttr: ks.path,
-			kvKeyAttr:  ks.key,
+			kvKeyspaceAttr: ks.name,
+			kvKeyAttr:      ks.key,
 		},
 		ProjectionExpression: aws.String(`NonExistent`),
 	}
 
 	ks.queryRequest = dynamodb.QueryInput{
 		TableName:              aws.String(s.Table),
-		KeyConditionExpression: aws.String(`#P = :P`),
+		KeyConditionExpression: aws.String(`#S = :S`),
 		ProjectionExpression:   aws.String("#K, #V"),
 		ExpressionAttributeNames: map[string]string{
-			"#P": kvPathAttr,
+			"#S": kvKeyspaceAttr,
 			"#K": kvKeyAttr,
 			"#V": kvValueAttr,
 		},
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":P": ks.path,
+			":S": ks.name,
 		},
 	}
 
 	ks.putRequest = dynamodb.PutItemInput{
 		TableName: aws.String(s.Table),
 		Item: map[string]types.AttributeValue{
-			kvPathAttr:  ks.path,
-			kvKeyAttr:   ks.key,
-			kvValueAttr: ks.value,
+			kvKeyspaceAttr: ks.name,
+			kvKeyAttr:      ks.key,
+			kvValueAttr:    ks.value,
 		},
 	}
 
 	ks.deleteRequest = dynamodb.DeleteItemInput{
 		TableName: aws.String(s.Table),
 		Key: map[string]types.AttributeValue{
-			kvPathAttr: ks.path,
-			kvKeyAttr:  ks.key,
+			kvKeyspaceAttr: ks.name,
+			kvKeyAttr:      ks.key,
 		},
 	}
 
@@ -138,7 +132,7 @@ type keyspace struct {
 	DecoratePutItem    func(*dynamodb.PutItemInput) []func(*dynamodb.Options)
 	DecorateDeleteItem func(*dynamodb.DeleteItemInput) []func(*dynamodb.Options)
 
-	path  *types.AttributeValueMemberS
+	name  *types.AttributeValueMemberS
 	key   *types.AttributeValueMemberB
 	value *types.AttributeValueMemberB
 
@@ -293,7 +287,7 @@ func CreateKeyValueStoreTable(
 			TableName: aws.String(table),
 			AttributeDefinitions: []types.AttributeDefinition{
 				{
-					AttributeName: aws.String(kvPathAttr),
+					AttributeName: aws.String(kvKeyspaceAttr),
 					AttributeType: types.ScalarAttributeTypeS,
 				},
 				{
@@ -303,7 +297,7 @@ func CreateKeyValueStoreTable(
 			},
 			KeySchema: []types.KeySchemaElement{
 				{
-					AttributeName: aws.String(kvPathAttr),
+					AttributeName: aws.String(kvKeyspaceAttr),
 					KeyType:       types.KeyTypeHash,
 				},
 				{
