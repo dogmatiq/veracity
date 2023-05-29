@@ -23,61 +23,6 @@ func RunTests(
 		t.Run("func Open()", func(t *testing.T) {
 			t.Parallel()
 
-			t.Run("does not perform naive path concatenation", func(t *testing.T) {
-				store := newStore(t)
-
-				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-				defer cancel()
-
-				paths := [][]string{
-					{"foobar"},
-					{"foo", "bar"},
-					{"foob", "ar"},
-					{"foo/bar"},
-					{"foo/", "bar"},
-					{"foo", "/bar"},
-				}
-
-				for i, path := range paths {
-					func() {
-						ks, err := store.Open(ctx, path...)
-						if err != nil {
-							t.Fatal(err)
-						}
-						defer ks.Close()
-
-						expect := []byte(fmt.Sprintf("<value-%d>", i))
-						if err := ks.Set(ctx, []byte("<key>"), expect); err != nil {
-							t.Fatal(err)
-						}
-					}()
-				}
-
-				for i, path := range paths {
-					func() {
-						ks, err := store.Open(ctx, path...)
-						if err != nil {
-							t.Fatal(err)
-						}
-						defer ks.Close()
-
-						expect := []byte(fmt.Sprintf("<value-%d>", i))
-						actual, err := ks.Get(ctx, []byte("<key>"))
-						if err != nil {
-							t.Fatal(err)
-						}
-
-						if !bytes.Equal(expect, actual) {
-							t.Fatalf(
-								"unexpected record, want %q, got %q",
-								string(expect),
-								string(actual),
-							)
-						}
-					}()
-				}
-			})
-
 			t.Run("allows keyspaces to be opened multiple times", func(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 				defer cancel()

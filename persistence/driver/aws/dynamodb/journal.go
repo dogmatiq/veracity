@@ -10,7 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/dogmatiq/veracity/persistence/driver/aws/internal/awsx"
-	"github.com/dogmatiq/veracity/persistence/internal/pathkey"
 	"github.com/dogmatiq/veracity/persistence/journal"
 )
 
@@ -53,18 +52,13 @@ type JournalStore struct {
 }
 
 const (
-	journalPathAttr    = "Path"
+	journalNameAttr    = "Name"
 	journalVersionAttr = "Version"
 	journalRecordAttr  = "Record"
 )
 
-// Open returns the journal at the given path.
-//
-// The path uniquely identifies the journal. It must not be empty. Each element
-// must be a non-empty UTF-8 string consisting solely of printable Unicode
-// characters, excluding whitespace. A printable character is any character from
-// the Letter, Mark, Number, Punctuation or Symbol categories.
-func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journal, error) {
+// Open returns the journal with the given name.
+func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, error) {
 	j := &journ{
 		Client:             s.Client,
 		DecorateGetItem:    s.DecorateGetItem,
@@ -72,9 +66,7 @@ func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journa
 		DecoratePutItem:    s.DecoratePutItem,
 		DecorateDeleteItem: s.DecorateDeleteItem,
 
-		path: &types.AttributeValueMemberS{
-			Value: pathkey.New(path),
-		},
+		name:    &types.AttributeValueMemberS{Value: name},
 		version: &types.AttributeValueMemberN{},
 		record:  &types.AttributeValueMemberB{},
 	}
@@ -82,7 +74,7 @@ func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journa
 	j.getRequest = dynamodb.GetItemInput{
 		TableName: aws.String(s.Table),
 		Key: map[string]types.AttributeValue{
-			journalPathAttr:    j.path,
+			journalNameAttr:    j.name,
 			journalVersionAttr: j.version,
 		},
 		ProjectionExpression: aws.String(`#R`),
@@ -93,27 +85,27 @@ func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journa
 
 	j.queryRequest = dynamodb.QueryInput{
 		TableName:              aws.String(s.Table),
-		KeyConditionExpression: aws.String(`#P = :P AND #V >= :V`),
+		KeyConditionExpression: aws.String(`#N = :N AND #V >= :V`),
 		ProjectionExpression:   aws.String("#V, #R"),
 		ExpressionAttributeNames: map[string]string{
-			"#P": journalPathAttr,
+			"#N": journalNameAttr,
 			"#V": journalVersionAttr,
 			"#R": journalRecordAttr,
 		},
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":P": j.path,
+			":N": j.name,
 			":V": j.version,
 		},
 	}
 
 	j.putRequest = dynamodb.PutItemInput{
 		TableName:           aws.String(s.Table),
-		ConditionExpression: aws.String(`attribute_not_exists(#P)`),
+		ConditionExpression: aws.String(`attribute_not_exists(#N)`),
 		ExpressionAttributeNames: map[string]string{
-			"#P": journalPathAttr,
+			"#N": journalNameAttr,
 		},
 		Item: map[string]types.AttributeValue{
-			journalPathAttr:    j.path,
+			journalNameAttr:    j.name,
 			journalVersionAttr: j.version,
 			journalRecordAttr:  j.record,
 		},
@@ -122,7 +114,7 @@ func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journa
 	j.deleteRequest = dynamodb.DeleteItemInput{
 		TableName: aws.String(s.Table),
 		Key: map[string]types.AttributeValue{
-			journalPathAttr:    j.path,
+			journalNameAttr:    j.name,
 			journalVersionAttr: j.version,
 		},
 	}
@@ -139,7 +131,7 @@ type journ struct {
 	DecoratePutItem    func(*dynamodb.PutItemInput) []func(*dynamodb.Options)
 	DecorateDeleteItem func(*dynamodb.DeleteItemInput) []func(*dynamodb.Options)
 
-	path    *types.AttributeValueMemberS
+	name    *types.AttributeValueMemberS
 	version *types.AttributeValueMemberN
 	record  *types.AttributeValueMemberB
 
@@ -323,7 +315,7 @@ func CreateJournalStoreTable(
 			TableName: aws.String(table),
 			AttributeDefinitions: []types.AttributeDefinition{
 				{
-					AttributeName: aws.String(journalPathAttr),
+					AttributeName: aws.String(journalNameAttr),
 					AttributeType: types.ScalarAttributeTypeS,
 				},
 				{
@@ -333,7 +325,7 @@ func CreateJournalStoreTable(
 			},
 			KeySchema: []types.KeySchemaElement{
 				{
-					AttributeName: aws.String(journalPathAttr),
+					AttributeName: aws.String(journalNameAttr),
 					KeyType:       types.KeyTypeHash,
 				},
 				{

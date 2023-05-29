@@ -6,30 +6,23 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/dogmatiq/veracity/persistence/internal/pathkey"
 	"github.com/dogmatiq/veracity/persistence/journal"
 	"golang.org/x/exp/slices"
 )
 
-// JournalStore is an implementation of journal.Store that stores journals in
+// JournalStore is an implementation of [journal.Store] that stores journals in
 // memory.
 type JournalStore struct {
 	journals sync.Map // map[string]*journalState
 }
 
-// Open returns the journal at the given path.
-//
-// The path uniquely identifies the journal. It must not be empty. Each element
-// must be a non-empty UTF-8 string consisting solely of printable Unicode
-// characters, excluding whitespace. A printable character is any character from
-// the Letter, Mark, Number, Punctuation or Symbol categories.
-func (s *JournalStore) Open(ctx context.Context, path ...string) (journal.Journal, error) {
-	key := pathkey.New(path)
-	state, ok := s.journals.Load(key)
+// Open returns the journal with the given name.
+func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, error) {
+	state, ok := s.journals.Load(name)
 
 	if !ok {
 		state, _ = s.journals.LoadOrStore(
-			key,
+			name,
 			&journalState{},
 		)
 	}
@@ -58,8 +51,8 @@ type journalState struct {
 	AfterAppend  func([]byte) error
 }
 
-// journalHandle is an implementation of journal.Journal[R] that accesses
-// journal state.
+// journalHandle is an implementation of [journal.Journal] that accesses
+// in-memory journal state.
 type journalHandle struct {
 	state *journalState
 }
