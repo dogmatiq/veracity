@@ -53,10 +53,9 @@ func (p *Provider) New(name string, options ...RecorderOption) *Recorder {
 	}
 
 	return &Recorder{
-		Meter: meter,
-
 		Name:   name,
 		Tracer: tracer,
+		Meter:  meter,
 		Logger: logger,
 		errors: errorCount,
 	}
