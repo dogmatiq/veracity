@@ -2,6 +2,7 @@ package tlog
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -12,9 +13,7 @@ import (
 // New returns a logger that writes to the test's log.
 func New(t testing.TB) *slog.Logger {
 	return slog.New(
-		&handler{
-			T: t,
-		},
+		&handler{T: t},
 	)
 }
 
@@ -29,28 +28,37 @@ func (h *handler) Enabled(context.Context, slog.Level) bool {
 }
 
 func (h *handler) Handle(_ context.Context, rec slog.Record) error {
-	h.T.Helper()
-
 	buf := &strings.Builder{}
 	buf.WriteString(rec.Message)
 
-	buf.WriteString("  ")
-	if len(h.groups) == 0 {
-		buf.WriteString("---")
-	} else {
-		buf.WriteString(strings.Join(h.groups, "."))
+	if len(h.attrs) == 0 && rec.NumAttrs() == 0 {
+		return nil
 	}
+
+	buf.WriteString("  ---")
 
 	for _, attr := range h.attrs {
 		buf.WriteString("  ")
-		buf.WriteString(attr.String())
+		fmt.Fprintf(buf, "%s: %s", attr.Key, attr.Value)
 	}
 
+	var attrs []any
 	rec.Attrs(func(attr slog.Attr) bool {
-		buf.WriteString("  ")
-		buf.WriteString(attr.String())
+		attrs = append(attrs, attr)
 		return true
 	})
+
+	for i := len(h.groups) - 1; i >= 0; i-- {
+		attrs = []any{
+			slog.Group(h.groups[i], attrs...),
+		}
+	}
+
+	for _, attr := range attrs {
+		a := attr.(slog.Attr)
+		buf.WriteString("  ")
+		fmt.Fprintf(buf, "%s: %s", a.Key, a.Value)
+	}
 
 	h.T.Log(buf.String())
 
