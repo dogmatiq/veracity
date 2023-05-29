@@ -5,11 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/uuid"
 )
 
 // RunTests runs tests that confirm a journal implementation behaves correctly.
@@ -531,6 +531,8 @@ func RunTests(
 	})
 }
 
+var keyspaceID atomic.Uint64
+
 func setup(
 	t *testing.T,
 	newStore func(t *testing.T) Store,
@@ -540,7 +542,8 @@ func setup(
 
 	store := newStore(t)
 
-	ks, err := store.Open(ctx, uuid.NewString())
+	name := fmt.Sprintf("<keyspace-%d>", keyspaceID.Add(1))
+	ks, err := store.Open(ctx, name)
 	if err != nil {
 		t.Fatal(err)
 	}

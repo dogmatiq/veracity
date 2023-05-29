@@ -5,11 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/uuid"
 )
 
 // RunTests runs tests that confirm a journal implementation behaves correctly.
@@ -612,6 +612,8 @@ func RunTests(
 	})
 }
 
+var journalCounter atomic.Uint64
+
 func setup(
 	t *testing.T,
 	newStore func(t *testing.T) Store,
@@ -621,7 +623,8 @@ func setup(
 
 	store := newStore(t)
 
-	j, err := store.Open(ctx, uuid.NewString())
+	name := fmt.Sprintf("<journal-%d>", journalCounter.Add(1))
+	j, err := store.Open(ctx, name)
 	if err != nil {
 		t.Fatal(err)
 	}
