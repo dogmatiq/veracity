@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"reflect"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -12,13 +13,15 @@ import (
 
 // Span represents a single named and timed operation of a workflow.
 type Span struct {
-	ctx      context.Context
-	recorder *Recorder
-	name     string
-	span     trace.Span
-	logger   *slog.Logger
-	logAttrs []any
-	errors   int64
+	ctx               context.Context
+	recorder          *Recorder
+	name              string
+	span              trace.Span
+	attrs             []Attr
+	logger            *slog.Logger
+	groupedLogAttrs   []any
+	ungroupedLogAttrs []any
+	errors            int64
 }
 
 // StartSpan starts a new span.
@@ -38,20 +41,29 @@ func (r *Recorder) StartSpan(
 		name:     name,
 		span:     underlying,
 		logger:   r.logger,
-		logAttrs: []any{
-			slog.String("span.name", name),
-		},
 	}
 
 	span.SetAttributes(r.attrs...)
 	span.SetAttributes(attrs...)
 
+	var spanLogAttrs []any
+
 	if sctx := underlying.SpanContext(); sctx.HasSpanID() {
-		span.logAttrs = append(
-			span.logAttrs,
-			slog.String("span.id", sctx.SpanID().String()),
+		spanLogAttrs = append(
+			spanLogAttrs,
+			slog.String("id", sctx.SpanID().String()),
 		)
 	}
+
+	spanLogAttrs = append(
+		spanLogAttrs,
+		slog.String("name", name),
+	)
+
+	span.groupedLogAttrs = append(
+		span.groupedLogAttrs,
+		slog.Group("span", spanLogAttrs...),
+	)
 
 	return ctx, span
 }
@@ -77,7 +89,7 @@ func (s *Span) End() {
 // and any future log messages.
 func (s *Span) SetAttributes(attrs ...Attr) {
 	tel, log := s.resolveAttrs(attrs)
-	s.logAttrs = append(s.logAttrs, log...)
+	s.ungroupedLogAttrs = append(s.ungroupedLogAttrs, log...)
 	s.span.SetAttributes(tel...)
 }
 
@@ -85,13 +97,14 @@ func (s *Span) resolveAttrs(attrs []Attr) ([]attribute.KeyValue, []any) {
 	tel := make([]attribute.KeyValue, 0, len(attrs))
 	log := make([]any, 0, len(attrs))
 
-	prefix := s.recorder.name + "."
+	prefix := attribute.Key(s.recorder.name + ".")
 
 	for _, attr := range attrs {
-		if attr, ok := attr.otel(prefix); ok {
+		if attr, ok := attr.otel(); ok {
+			attr.Key = prefix + attr.Key
 			tel = append(tel, attr)
 		}
-		if attr, ok := attr.slog(prefix); ok {
+		if attr, ok := attr.slog(); ok {
 			log = append(log, attr)
 		}
 	}
@@ -137,19 +150,36 @@ func (s *Span) recordEvent(
 		return
 	}
 
-	tel, log := s.resolveAttrs(attrs)
+	eventAttrs, ungroupedLogAttrs := s.resolveAttrs(attrs)
 
 	s.span.AddEvent(
 		message,
-		trace.WithAttributes(tel...),
+		trace.WithAttributes(eventAttrs...),
 	)
 
-	log = append(log, s.logAttrs...)
+	ungroupedLogAttrs = append(ungroupedLogAttrs, s.ungroupedLogAttrs...)
+	groupedLogAttrs := s.groupedLogAttrs
+
+	if err != nil {
+		groupedLogAttrs = append(
+			groupedLogAttrs,
+			slog.Group(
+				"exception",
+				slog.String("type", reflect.TypeOf(err).String()),
+				slog.String("message", err.Error()),
+			),
+		)
+	}
+
+	groupedLogAttrs = append(
+		groupedLogAttrs,
+		slog.Group(s.recorder.name, ungroupedLogAttrs...),
+	)
 
 	s.logger.Log(
 		s.ctx,
 		level,
 		message,
-		log...,
+		groupedLogAttrs...,
 	)
 }

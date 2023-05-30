@@ -65,39 +65,35 @@ func Float[T constraints.Float](k string, v T) Attr {
 	}
 }
 
-func (a Attr) otel(prefix string) (attribute.KeyValue, bool) {
-	key := prefix + a.key
-
+func (a Attr) otel() (attribute.KeyValue, bool) {
 	switch a.typ {
 	case attrTypeNone:
 		return attribute.KeyValue{}, false
 	case attrTypeString:
-		return attribute.String(key, a.str), true
+		return attribute.String(a.key, a.str), true
 	case attrTypeBool:
-		return attribute.Bool(key, a.num != 0), true
+		return attribute.Bool(a.key, a.num != 0), true
 	case attrTypeInt64:
-		return attribute.Int64(key, int64(a.num)), true
+		return attribute.Int64(a.key, int64(a.num)), true
 	case attrTypeFloat64:
-		return attribute.Float64(key, math.Float64frombits(a.num)), true
+		return attribute.Float64(a.key, math.Float64frombits(a.num)), true
 	default:
 		panic("unknown attribute type")
 	}
 }
 
-func (a Attr) slog(prefix string) (slog.Attr, bool) {
-	key := prefix + a.key
-
+func (a Attr) slog() (slog.Attr, bool) {
 	switch a.typ {
 	case attrTypeNone:
 		return slog.Attr{}, false
 	case attrTypeString:
-		return slog.String(key, a.str), true
+		return slog.String(a.key, a.str), true
 	case attrTypeBool:
-		return slog.Bool(key, a.num != 0), true
+		return slog.Bool(a.key, a.num != 0), true
 	case attrTypeInt64:
-		return slog.Int64(key, int64(a.num)), true
+		return slog.Int64(a.key, int64(a.num)), true
 	case attrTypeFloat64:
-		return slog.Float64(key, math.Float64frombits(a.num)), true
+		return slog.Float64(a.key, math.Float64frombits(a.num)), true
 	default:
 		panic("unknown attribute type")
 	}
