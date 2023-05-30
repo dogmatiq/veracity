@@ -1,4 +1,4 @@
-package instjournal_test
+package instrumented_test
 
 import (
 	"testing"
@@ -6,23 +6,23 @@ import (
 	"github.com/dogmatiq/veracity/internal/telemetry"
 	"github.com/dogmatiq/veracity/internal/tlog"
 	"github.com/dogmatiq/veracity/persistence/driver/memory"
-	. "github.com/dogmatiq/veracity/persistence/internal/instjournal"
+	. "github.com/dogmatiq/veracity/persistence/internal/instrumented"
 	"github.com/dogmatiq/veracity/persistence/journal"
 	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 )
 
-func TestStore(t *testing.T) {
+func TestJournalStore(t *testing.T) {
 	journal.RunTests(
 		t,
 		func(t *testing.T) journal.Store {
-			return &Store{
+			return &JournalStore{
 				Telemetry: &telemetry.Provider{
 					TracerProvider: trace.NewNoopTracerProvider(),
 					MeterProvider:  noop.NewMeterProvider(),
 					Logger:         tlog.New(t),
 				},
-				Store: &memory.JournalStore{},
+				Next: &memory.JournalStore{},
 			}
 		},
 	)
