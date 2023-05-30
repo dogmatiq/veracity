@@ -17,12 +17,12 @@ func TestJournalStore(t *testing.T) {
 		t,
 		func(t *testing.T) journal.Store {
 			return &JournalStore{
+				Next: &memory.JournalStore{},
 				Telemetry: &telemetry.Provider{
 					TracerProvider: trace.NewNoopTracerProvider(),
 					MeterProvider:  noop.NewMeterProvider(),
 					Logger:         tlog.New(t),
 				},
-				Next: &memory.JournalStore{},
 			}
 		},
 	)

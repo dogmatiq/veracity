@@ -8,22 +8,21 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// JournalStore is a decorator that adds instrumentation to a
-// [journal.JournalStore].
+// JournalStore is a decorator that adds instrumentation to a [journal.Store].
 type JournalStore struct {
 	Next      journal.Store
 	Telemetry *telemetry.Provider
 }
 
 // Open returns the journal with the given name.
-func (s *JournalStore) Open(ctx context.Context, name string) (_ journal.Journal, err error) {
+func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, error) {
 	r := s.Telemetry.New(
 		"github.com/dogmatiq/veracity/persistence",
 		"journal",
 		telemetry.String("name", name),
 	)
 
-	ctx, span := r.StartSpan(ctx, "JournalStore.Open")
+	ctx, span := r.StartSpan(ctx, "journal.open")
 	defer span.End()
 
 	next, err := s.Next.Open(ctx, name)
@@ -57,7 +56,7 @@ func (s *JournalStore) Open(ctx context.Context, name string) (_ journal.Journal
 		),
 		RecordSize: r.Int64Histogram(
 			"record.size",
-			metric.WithDescription("The size of journal records that have been read and written."),
+			metric.WithDescription("The sizes of the journal records that have been read and written."),
 			metric.WithUnit("By"),
 		),
 	}
@@ -82,7 +81,7 @@ type journ struct {
 func (j *journ) Get(ctx context.Context, ver uint64) (_ []byte, ok bool, err error) {
 	ctx, span := j.Telemetry.StartSpan(
 		ctx,
-		"Journal.Get",
+		"journal.get",
 		telemetry.Int("version", ver),
 	)
 	defer span.End()
@@ -120,7 +119,7 @@ func (j *journ) Range(
 ) error {
 	ctx, span := j.Telemetry.StartSpan(
 		ctx,
-		"Journal.Range",
+		"journal.range",
 		telemetry.Int("range_begin", ver),
 	)
 	defer span.End()
@@ -141,7 +140,7 @@ func (j *journ) RangeAll(
 ) error {
 	ctx, span := j.Telemetry.StartSpan(
 		ctx,
-		"Journal.RangeAll",
+		"journal.range_all",
 	)
 	defer span.End()
 
@@ -219,7 +218,7 @@ func (j *journ) Append(ctx context.Context, ver uint64, rec []byte) (bool, error
 
 	ctx, span := j.Telemetry.StartSpan(
 		ctx,
-		"Journal.Append",
+		"journal.append",
 		telemetry.Int("version", ver),
 		telemetry.Int("record_size", size),
 	)
@@ -253,7 +252,7 @@ func (j *journ) Append(ctx context.Context, ver uint64, rec []byte) (bool, error
 func (j *journ) Truncate(ctx context.Context, ver uint64) error {
 	ctx, span := j.Telemetry.StartSpan(
 		ctx,
-		"Journal.Truncate",
+		"journal.truncate",
 		telemetry.Int("oldest_retained_version", ver),
 	)
 	defer span.End()
@@ -269,7 +268,10 @@ func (j *journ) Truncate(ctx context.Context, ver uint64) error {
 }
 
 func (j *journ) Close() (err error) {
-	ctx, span := j.Telemetry.StartSpan(context.Background(), "Journal.Close")
+	ctx, span := j.Telemetry.StartSpan(
+		context.Background(),
+		"journal.close",
+	)
 	defer span.End()
 
 	if j.Next == nil {
