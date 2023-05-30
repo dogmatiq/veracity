@@ -19,7 +19,7 @@ func TestStore(t *testing.T) {
 			return &Store{
 				Telemetry: &telemetry.Provider{
 					TracerProvider: trace.NewNoopTracerProvider(),
-					MeterProvider:  noop.MeterProvider{},
+					MeterProvider:  noop.NewMeterProvider(),
 					Logger:         tlog.New(t),
 				},
 				Store: &memory.JournalStore{},

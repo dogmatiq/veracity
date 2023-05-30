@@ -2,6 +2,7 @@ package instjournal
 
 import (
 	"context"
+	"errors"
 
 	"github.com/dogmatiq/veracity/internal/telemetry"
 	"github.com/dogmatiq/veracity/persistence/journal"
@@ -16,6 +17,7 @@ type Store struct {
 // Open returns the journal with the given name.
 func (s *Store) Open(ctx context.Context, name string) (_ journal.Journal, err error) {
 	r := s.Telemetry.New(
+		"github.com/dogmatiq/veracity/persistence",
 		"journal",
 		telemetry.String("name", name),
 	)
@@ -183,13 +185,19 @@ func (j *journ) instrumentRange(
 }
 
 func (j *journ) Append(ctx context.Context, ver uint64, rec []byte) (bool, error) {
+	size := int64(len(rec))
+
 	ctx, span := j.Telemetry.StartSpan(
 		ctx,
 		"Journal.Append",
 		telemetry.Int("version", ver),
-		telemetry.Int("record_size", len(rec)),
+		telemetry.Int("record_size", size),
 	)
 	defer span.End()
+
+	j.Metrics.RecordIO.Add(ctx, 1, telemetry.WriteDirection)
+	j.Metrics.DataIO.Add(ctx, size, telemetry.WriteDirection)
+	j.Metrics.RecordSize.Record(ctx, size, telemetry.WriteDirection)
 
 	ok, err := j.Journal.Append(ctx, ver, rec)
 	if err != nil {
@@ -205,7 +213,10 @@ func (j *journ) Append(ctx context.Context, ver uint64, rec []byte) (bool, error
 		span.Debug("journal record appended")
 	} else {
 		j.Metrics.ConflictCount.Add(ctx, 1)
-		span.Debug("optimistic concurrency conflict")
+		span.Error(
+			"journal version conflict",
+			errors.New("journal version conflict"),
+		)
 	}
 
 	return ok, nil

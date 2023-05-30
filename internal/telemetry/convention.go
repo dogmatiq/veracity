@@ -7,12 +7,16 @@ import (
 
 var (
 	// ReadDirection is an attribute that indicates a read operation.
-	ReadDirection = metric.WithAttributes(
-		attribute.String("direction", "read"),
+	ReadDirection = metric.WithAttributeSet(
+		attribute.NewSet(
+			attribute.String("direction", "read"),
+		),
 	)
 
 	// WriteDirection is an attribute that indicates a write operation.
-	WriteDirection = metric.WithAttributes(
-		attribute.String("direction", "write"),
+	WriteDirection = metric.WithAttributeSet(
+		attribute.NewSet(
+			attribute.String("direction", "write"),
+		),
 	)
 )
