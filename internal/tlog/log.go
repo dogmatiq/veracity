@@ -2,6 +2,7 @@ package tlog
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -129,7 +130,13 @@ func writeAttrs(
 				buf.WriteString("┈")
 			}
 			buf.WriteString(" ")
-			buf.WriteString(attr.Value.String())
+
+			v := attr.Value.String()
+			if strings.ContainsAny(v, " \t\n\r") {
+				fmt.Fprintf(buf, "%q", v)
+			} else {
+				buf.WriteString(v)
+			}
 		}
 	}
 }
