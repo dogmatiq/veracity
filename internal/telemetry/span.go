@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"reflect"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -161,13 +162,20 @@ func (s *Span) recordEvent(
 	groupedLogAttrs := s.groupedLogAttrs
 
 	if err != nil {
+		exceptionAttrs := []any{
+			slog.String("message", err.Error()),
+		}
+
+		if err := unwrapError(err); err != nil {
+			exceptionAttrs = append(
+				exceptionAttrs,
+				slog.String("type", reflect.TypeOf(err).String()),
+			)
+		}
+
 		groupedLogAttrs = append(
 			groupedLogAttrs,
-			slog.Group(
-				"exception",
-				slog.String("type", reflect.TypeOf(err).String()),
-				slog.String("message", err.Error()),
-			),
+			slog.Group("exception", exceptionAttrs...),
 		)
 	}
 
@@ -182,4 +190,21 @@ func (s *Span) recordEvent(
 		message,
 		groupedLogAttrs...,
 	)
+}
+
+var errorsStringType = reflect.TypeOf(errors.New(""))
+
+// isStringError returns true if err is an error that was created using
+// errors.New() or fmt.Errorf(), and therefore has no meaningful type.
+func isStringError(err error) bool {
+	return reflect.TypeOf(err) == errorsStringType
+}
+
+// unwrapError unwraps err until an error with a meaningful type is found. If
+// all errors in the chain are "string errors", it returns nil.
+func unwrapError(err error) error {
+	for err != nil && isStringError(err) {
+		err = errors.Unwrap(err)
+	}
+	return err
 }
