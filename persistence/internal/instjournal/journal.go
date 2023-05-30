@@ -2,7 +2,6 @@ package instjournal
 
 import (
 	"context"
-	"errors"
 
 	"github.com/dogmatiq/veracity/internal/telemetry"
 	"github.com/dogmatiq/veracity/persistence/journal"
@@ -205,18 +204,16 @@ func (j *journ) Append(ctx context.Context, ver uint64, rec []byte) (bool, error
 		return false, err
 	}
 
-	span.SetAttributes(
-		telemetry.Bool("conflict", !ok),
-	)
-
 	if ok {
 		span.Debug("journal record appended")
 	} else {
-		j.Metrics.ConflictCount.Add(ctx, 1)
-		span.Error(
-			"journal version conflict",
-			errors.New("journal version conflict"),
+		span.SetAttributes(
+			telemetry.Bool("conflict", true),
 		)
+
+		j.Metrics.ConflictCount.Add(ctx, 1)
+
+		span.Error("journal version conflict", nil)
 	}
 
 	return ok, nil
