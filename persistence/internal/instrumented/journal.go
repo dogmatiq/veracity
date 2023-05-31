@@ -16,7 +16,7 @@ type JournalStore struct {
 
 // Open returns the journal with the given name.
 func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, error) {
-	r := s.Telemetry.New(
+	r := s.Telemetry.Recorder(
 		"github.com/dogmatiq/veracity/persistence",
 		"journal",
 		telemetry.Type("store", s.Next),

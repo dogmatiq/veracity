@@ -16,7 +16,7 @@ type KeyValueStore struct {
 
 // Open returns the keyspace with the given name.
 func (s *KeyValueStore) Open(ctx context.Context, name string) (kv.Keyspace, error) {
-	r := s.Telemetry.New(
+	r := s.Telemetry.Recorder(
 		"github.com/dogmatiq/veracity/persistence",
 		"keyspace",
 		telemetry.Type("store", s.Next),
