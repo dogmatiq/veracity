@@ -58,7 +58,7 @@ func (s *KeyValueStore) Open(ctx context.Context, name string) (kv.Keyspace, err
 		),
 		ValueSize: r.Int64Histogram(
 			"value.size",
-			metric.WithDescription("The sizes of the value that have been read and written."),
+			metric.WithDescription("The sizes of the values that have been read and written."),
 			metric.WithUnit("By"),
 		),
 	}
