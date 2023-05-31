@@ -33,6 +33,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.19.0 // indirect
 	github.com/aws/smithy-go v1.13.5 // indirect
 	github.com/dogmatiq/iago v0.4.0 // indirect
+	github.com/go-logr/logr v1.2.4 // indirect
+	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-sql-driver/mysql v1.5.0 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
 	github.com/jackc/pgconn v1.8.0 // indirect

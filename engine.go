@@ -8,11 +8,15 @@ import (
 	"github.com/dogmatiq/configkit"
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/veracity/internal/integration"
+	"github.com/dogmatiq/veracity/internal/telemetry"
+	"go.opentelemetry.io/otel"
+	"golang.org/x/exp/slog"
 )
 
 // Engine hosts a Dogma application.
 type Engine struct {
 	executors map[reflect.Type]dogma.CommandExecutor
+	telemetry telemetry.Provider
 }
 
 // New returns an engine that hosts the given application.
@@ -23,6 +27,11 @@ func New(app dogma.Application, options ...EngineOption) *Engine {
 
 	e := &Engine{
 		executors: map[reflect.Type]dogma.CommandExecutor{},
+		telemetry: telemetry.Provider{
+			TracerProvider: otel.GetTracerProvider(),
+			MeterProvider:  otel.GetMeterProvider(),
+			Logger:         slog.Default(),
+		},
 	}
 
 	for _, opt := range options {
