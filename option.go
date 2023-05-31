@@ -1,16 +1,20 @@
 package veracity
 
-// An EngineOption configures the behavior of an engine.
+// An EngineOption configures the behavior of an [Engine].
 type EngineOption interface {
 	applyEngineOption(*Engine)
 }
 
-type option struct {
-	engineOption func(*Engine)
+// An EngineRunOption configures the behavior of [Engine.Run].
+type EngineRunOption interface {
+	applyEngineRunOption(*Engine)
 }
 
-func (o option) applyEngineOption(e *Engine) {
-	if o.engineOption != nil {
-		o.engineOption(e)
-	}
+// option is a concrete implementation of all of the XXXOption interfaces.
+type option struct {
+	engineOption    func(*Engine)
+	engineRunOption func(*Engine)
 }
+
+func (o option) applyEngineOption(e *Engine)    { o.engineOption(e) }
+func (o option) applyEngineRunOption(e *Engine) { o.engineRunOption(e) }

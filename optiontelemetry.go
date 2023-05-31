@@ -6,8 +6,8 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-// WithTracerProvider is an EngineOption that configures the engine to use the
-// given OpenTelemetry tracer provider for recording spans.
+// WithTracerProvider is an [EngineOption] that sets the OpenTelemetry tracer
+// provider used by the engine.
 func WithTracerProvider(p trace.TracerProvider) EngineOption {
 	if p == nil {
 		panic("tracer provider must not be nil")
@@ -20,8 +20,8 @@ func WithTracerProvider(p trace.TracerProvider) EngineOption {
 	}
 }
 
-// WithMetricProvider is an EngineOption that configures the engine to use the
-// given OpenTelemetry metric provider for recording metrics.
+// WithMetricProvider is an [EngineOption] that sets the OpenTelemetry meter
+// provider used by the engine.
 func WithMetricProvider(p metric.MeterProvider) EngineOption {
 	if p == nil {
 		panic("metric provider must not be nil")
@@ -34,8 +34,7 @@ func WithMetricProvider(p metric.MeterProvider) EngineOption {
 	}
 }
 
-// WithLogger is an EngineOption that configures the engine to log to the given
-// slog logger.
+// WithLogger is an [EngineOption] that setes the logger used by the engine.
 func WithLogger(l *slog.Logger) EngineOption {
 	if l == nil {
 		panic("logger must not be nil")
