@@ -66,6 +66,14 @@ func Int[T constraints.Integer](k string, v T) Attr {
 	}
 }
 
+// If conditionally includes an attribute.
+func If(cond bool, attr Attr) Attr {
+	if cond {
+		return attr
+	}
+	return Attr{}
+}
+
 // Float returns a float64 attribute.
 func Float[T constraints.Float](k string, v T) Attr {
 	return Attr{
