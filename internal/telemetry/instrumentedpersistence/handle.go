@@ -1,4 +1,4 @@
-package instrumented
+package instrumentedpersistence
 
 import (
 	"fmt"
