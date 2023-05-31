@@ -16,24 +16,26 @@ type Engine struct {
 }
 
 // New returns an engine that hosts the given application.
-func New(app dogma.Application) *Engine {
-	cfg := configkit.FromApplication(app)
+func New(app dogma.Application, options ...EngineOption) *Engine {
+	if app == nil {
+		panic("application must not be nil")
+	}
+
 	e := &Engine{
 		executors: map[reflect.Type]dogma.CommandExecutor{},
 	}
-	b := &engineBuilder{engine: e}
 
+	for _, opt := range options {
+		opt.applyEngineOption(e)
+	}
+
+	cfg := configkit.FromApplication(app)
+	b := &engineBuilder{engine: e}
 	if err := cfg.AcceptRichVisitor(context.Background(), b); err != nil {
 		panic(err)
 	}
 
 	return e
-}
-
-// Run starts the engine and blocks until the context is canceled or an error
-// occurs.
-func (e *Engine) Run(ctx context.Context) error {
-	return nil
 }
 
 // ExecuteCommand enqueues a command for execution.
@@ -50,6 +52,23 @@ func (e *Engine) ExecuteCommand(ctx context.Context, c dogma.Command) error {
 	}
 
 	panic(fmt.Sprintf("command is unrecognized: %T", c))
+}
+
+// Run joins the cluster as a worker that handles the application's messages.
+//
+// [Engine.ExecuteCommand] may be called without calling [Engine.Run]. In this
+// mode of operation, the engine acts solely as a router that forwards messages
+// to worker nodes.
+//
+// It blocks until ctx is canceled or an error occurs.
+func (e *Engine) Run(ctx context.Context) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+// Close stops the engine.
+func (e *Engine) Close() error {
+	return nil
 }
 
 type engineBuilder struct {
