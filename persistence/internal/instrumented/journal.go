@@ -104,8 +104,8 @@ func (j *journ) Get(ctx context.Context, ver uint64) (_ []byte, ok bool, err err
 		telemetry.Int("record_size", size),
 	)
 
-	j.RecordIO.Add(ctx, 1, telemetry.ReadDirection)
 	j.DataIO.Add(ctx, size, telemetry.ReadDirection)
+	j.RecordIO.Add(ctx, 1, telemetry.ReadDirection)
 	j.RecordSize.Record(ctx, size, telemetry.ReadDirection)
 
 	span.Debug("fetched single journal record")
@@ -178,8 +178,8 @@ func (j *journ) instrumentRange(
 			size := int64(len(rec))
 			totalSize += size
 
-			j.RecordIO.Add(ctx, 1, telemetry.ReadDirection)
 			j.DataIO.Add(ctx, size, telemetry.ReadDirection)
+			j.RecordIO.Add(ctx, 1, telemetry.ReadDirection)
 			j.RecordSize.Record(ctx, size, telemetry.ReadDirection)
 
 			ok, err := fn(ctx, ver, rec)
@@ -224,8 +224,8 @@ func (j *journ) Append(ctx context.Context, ver uint64, rec []byte) (bool, error
 	)
 	defer span.End()
 
-	j.RecordIO.Add(ctx, 1, telemetry.WriteDirection)
 	j.DataIO.Add(ctx, size, telemetry.WriteDirection)
+	j.RecordIO.Add(ctx, 1, telemetry.WriteDirection)
 	j.RecordSize.Record(ctx, size, telemetry.WriteDirection)
 
 	ok, err := j.Next.Append(ctx, ver, rec)
