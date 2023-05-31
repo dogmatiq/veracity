@@ -19,6 +19,7 @@ func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, 
 	r := s.Telemetry.New(
 		"github.com/dogmatiq/veracity/persistence",
 		"journal",
+		telemetry.Type("store", s.Next),
 		telemetry.String("name", name),
 	)
 
@@ -120,7 +121,7 @@ func (j *journ) Range(
 	ctx, span := j.Telemetry.StartSpan(
 		ctx,
 		"journal.range",
-		telemetry.Int("range_begin", ver),
+		telemetry.Int("range_start", ver),
 	)
 	defer span.End()
 
@@ -193,15 +194,14 @@ func (j *journ) instrumentRange(
 
 	if count != 0 {
 		span.SetAttributes(
-			telemetry.Int("range_begin", first),
-			telemetry.Int("range_end", first+count-1),
+			telemetry.Int("range_start", first),
+			telemetry.Int("range_stop", first+count-1),
 		)
 	}
 
 	span.SetAttributes(
-		telemetry.Bool("reached_final_record", !brokeLoop && err == nil),
-		telemetry.Int("record_size_total", totalSize),
-		telemetry.Int("records_iterated", count),
+		telemetry.Bool("reached_end", !brokeLoop && err == nil),
+		telemetry.Int("bytes_read", totalSize),
 	)
 
 	if err != nil {
@@ -253,7 +253,7 @@ func (j *journ) Truncate(ctx context.Context, ver uint64) error {
 	ctx, span := j.Telemetry.StartSpan(
 		ctx,
 		"journal.truncate",
-		telemetry.Int("oldest_retained_version", ver),
+		telemetry.Int("retained_version", ver),
 	)
 	defer span.End()
 

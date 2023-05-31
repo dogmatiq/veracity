@@ -90,8 +90,8 @@ func (s *Span) End() {
 // and any future log messages.
 func (s *Span) SetAttributes(attrs ...Attr) {
 	tel, log := s.resolveAttrs(attrs)
-	s.ungroupedLogAttrs = append(s.ungroupedLogAttrs, log...)
 	s.span.SetAttributes(tel...)
+	s.ungroupedLogAttrs = append(s.ungroupedLogAttrs, log...)
 }
 
 func (s *Span) resolveAttrs(attrs []Attr) ([]attribute.KeyValue, []any) {
