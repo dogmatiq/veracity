@@ -53,7 +53,7 @@ func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, 
 		),
 		RecordIO: r.Int64Counter(
 			"record.io",
-			metric.WithDescription("The number of journal records being read and written."),
+			metric.WithDescription("The number of journal records that have been read and written."),
 			metric.WithUnit("{record}"),
 		),
 		RecordSize: r.Int64Histogram(

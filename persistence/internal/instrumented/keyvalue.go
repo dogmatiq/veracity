@@ -48,7 +48,7 @@ func (s *KeyValueStore) Open(ctx context.Context, name string) (kv.Keyspace, err
 		),
 		PairIO: r.Int64Counter(
 			"pair.io",
-			metric.WithDescription("The number of key/value pairs being read and written."),
+			metric.WithDescription("The number of key/value pairs that have been read and written."),
 			metric.WithUnit("{pair}"),
 		),
 		KeySize: r.Int64Histogram(
