@@ -13,10 +13,8 @@ func WithTracerProvider(p trace.TracerProvider) EngineOption {
 		panic("tracer provider must not be nil")
 	}
 
-	return option{
-		engineOption: func(e *Engine) {
-			e.telemetry.TracerProvider = p
-		},
+	return func(cfg *engineConfig) {
+		cfg.Telemetry.TracerProvider = p
 	}
 }
 
@@ -27,10 +25,8 @@ func WithMetricProvider(p metric.MeterProvider) EngineOption {
 		panic("metric provider must not be nil")
 	}
 
-	return option{
-		engineOption: func(e *Engine) {
-			e.telemetry.MeterProvider = p
-		},
+	return func(cfg *engineConfig) {
+		cfg.Telemetry.MeterProvider = p
 	}
 }
 
@@ -40,9 +36,7 @@ func WithLogger(l *slog.Logger) EngineOption {
 		panic("logger must not be nil")
 	}
 
-	return option{
-		engineOption: func(e *Engine) {
-			e.telemetry.Logger = l
-		},
+	return func(cfg *engineConfig) {
+		cfg.Telemetry.Logger = l
 	}
 }
