@@ -73,6 +73,10 @@ func (c *engineConfig) VisitRichProcess(ctx context.Context, cfg configkit.RichP
 
 func (c *engineConfig) VisitRichIntegration(ctx context.Context, cfg configkit.RichIntegration) error {
 	for t := range cfg.MessageTypes().Consumed {
+		if c.Application.Executors == nil {
+			c.Application.Executors = map[reflect.Type]dogma.CommandExecutor{}
+		}
+
 		c.Application.Executors[t.ReflectType()] = &integration.CommandExecutor{
 			Handler: cfg.Handler(),
 		}
