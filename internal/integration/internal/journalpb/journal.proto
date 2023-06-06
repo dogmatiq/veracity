@@ -1,0 +1,53 @@
+syntax = "proto3";
+package veracity.integration.journal.v1;
+
+import "github.com/dogmatiq/interopspec/envelopespec/envelope.proto";
+
+option go_package = "github.com/dogmatiq/veracity/internal/integration/internal/journalpb";
+
+// CommandEnqueued is a journal record that indicates a command has been
+// enqueued for handling.
+message CommandEnqueued {
+  // Command is the envelope containing the command to be handled.
+  dogma.interop.v1.envelope.Envelope command = 1;
+}
+
+// CommandHandled is a journal record that indicates a command has been
+// handled successfully.
+message CommandHandled {
+  // CommandId is the ID of the command that was handled.
+  string command_id = 1;
+  // Events is the list of events produced while handling the command, in
+  // chronological order.
+  repeated dogma.interop.v1.envelope.Envelope events = 2;
+}
+
+// CommandHandlerFailed is a journal record that the handler returned an error
+// when attempting to handle a command.
+message CommandHandlerFailed {
+  // CommandId is the ID of the command that was being handled.
+  string command_id = 1;
+  // Error is the message of the error that the handler returned.
+  string error = 2;
+}
+
+// EventStreamSelected is a journal record that indicates that a specific event
+// stream has been selected as the target for the events produced by the
+// handler.
+message EventStreamSelected {
+  // StreamId is the ID of the stream to which the events will be appended.
+  string stream_id = 1;
+  // Offset is the next offset of the stream, at the time it was selected.
+  uint64 offset = 2;
+}
+
+// EventAppendedToStream is a journal record that indicates that an event that
+// was produced by the handler has been appended to an event stream.
+message EventAppendedToStream {
+  // EventId is the ID of the event that was appended to the stream.
+  string event_id = 1;
+  // StreamId is the ID of the stream to which the event was appended.
+  string stream_id = 2;
+  // Offset is the offset of the event within the stream.
+  uint64 offset = 3;
+}
