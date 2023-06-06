@@ -22,14 +22,22 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Node represents an instance of the Veracity engine that is acting as a
+// "worker", and is therefore a member of the cluster.
+//
+// Engines that are only acting as a "router" are not members of a cluster.
 type Node struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Id        *uuidpb.UUID           `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Id is a unique identifier for the node.
+	Id *uuidpb.UUID `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// ExpiresAt is the time at which the node's entry in the registry expires.
 	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	Addresses []string               `protobuf:"bytes,3,rep,name=addresses,proto3" json:"addresses,omitempty"`
+	// Addresses is a list of network addresses at which the node's gRPC API can
+	// be contacted.
+	Addresses []string `protobuf:"bytes,3,rep,name=addresses,proto3" json:"addresses,omitempty"`
 }
 
 func (x *Node) Reset() {

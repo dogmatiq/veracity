@@ -6,8 +6,18 @@ import "github.com/dogmatiq/veracity/internal/protobuf/uuidpb/uuid.proto";
 
 option go_package = "github.com/dogmatiq/veracity/internal/cluster/internal/registrypb";
 
+// Node represents an instance of the Veracity engine that is acting as a
+// "worker", and is therefore a member of the cluster.
+//
+// Engines that are only acting as a "router" are not members of a cluster.
 message Node {
+  // Id is a unique identifier for the node.
   dogmatiq.protobuf.UUID id = 1;
+
+  // ExpiresAt is the time at which the node's entry in the registry expires.
   google.protobuf.Timestamp expires_at = 2;
+
+  // Addresses is a list of network addresses at which the node's gRPC API can
+  // be contacted.
   repeated string addresses = 3;
 }
