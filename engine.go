@@ -6,16 +6,14 @@ import (
 	"reflect"
 
 	"github.com/dogmatiq/dogma"
-	"github.com/dogmatiq/veracity/internal/telemetry/instrumentedpersistence"
-	"github.com/dogmatiq/veracity/persistence/journal"
-	"github.com/dogmatiq/veracity/persistence/kv"
+	"github.com/dogmatiq/veracity/internal/engineconfig"
+	"golang.org/x/sync/errgroup"
 )
 
 // Engine hosts a Dogma application.
 type Engine struct {
-	journals  journal.Store
-	keyspaces kv.Store
-	executors map[reflect.Type]dogma.CommandExecutor
+	executors   map[reflect.Type]dogma.CommandExecutor
+	heartbeater *heartbeater
 }
 
 // New returns an engine that hosts the given application.
@@ -24,18 +22,15 @@ func New(app dogma.Application, options ...EngineOption) *Engine {
 		panic("application must not be nil")
 	}
 
-	cfg := newEngineConfig(app, options)
+	return newEngine(
+		engineconfig.New(app, options),
+	)
+}
 
+func newEngine(cfg engineconfig.Config) *Engine {
 	return &Engine{
-		journals: &instrumentedpersistence.JournalStore{
-			Next:      cfg.Persistence.Journals,
-			Telemetry: cfg.Telemetry,
-		},
-		keyspaces: &instrumentedpersistence.KeyValueStore{
-			Next:      cfg.Persistence.Keyspaces,
-			Telemetry: cfg.Telemetry,
-		},
-		executors: cfg.Application.Executors,
+		executors:   cfg.Application.Executors,
+		heartbeater: newHeartbeater(cfg),
 	}
 }
 
@@ -49,11 +44,12 @@ func (e *Engine) ExecuteCommand(ctx context.Context, c dogma.Command) error {
 		panic(fmt.Sprintf("command is invalid: %s", err))
 	}
 
-	if x, ok := e.executors[reflect.TypeOf(c)]; ok {
-		return x.ExecuteCommand(ctx, c)
+	x, ok := e.executors[reflect.TypeOf(c)]
+	if !ok {
+		panic(fmt.Sprintf("command is unrecognized: %T", c))
 	}
 
-	panic(fmt.Sprintf("command is unrecognized: %T", c))
+	return x.ExecuteCommand(ctx, c)
 }
 
 // Run joins the cluster as a worker that handles the application's messages.
@@ -64,11 +60,16 @@ func (e *Engine) ExecuteCommand(ctx context.Context, c dogma.Command) error {
 //
 // It blocks until ctx is canceled or an error occurs.
 func (e *Engine) Run(ctx context.Context) error {
-	<-ctx.Done()
-	return ctx.Err()
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		return e.heartbeater.Run(ctx)
+	})
+
+	return g.Wait()
 }
 
-// Close stops the engine.
+// Close stops the engine immediately.
 func (e *Engine) Close() error {
 	return nil
 }

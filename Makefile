@@ -5,3 +5,7 @@
 
 .makefiles/%:
 	@curl -sfL https://makefiles.dev/v1 | bash /dev/stdin "$@"
+
+@PHONY: run-example
+run-example: $(GO_DEBUG_DIR)/example
+	$^ $(args)

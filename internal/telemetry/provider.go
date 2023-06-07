@@ -1,9 +1,9 @@
 package telemetry
 
 import (
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/exp/slices"
 	"golang.org/x/exp/slog"
 )
 
@@ -12,16 +12,7 @@ type Provider struct {
 	TracerProvider trace.TracerProvider
 	MeterProvider  metric.MeterProvider
 	Logger         *slog.Logger
-}
-
-// DefaultProvider returns a telemetry provider that uses the global
-// OpenTelemetry providers and the default logger.
-func DefaultProvider() *Provider {
-	return &Provider{
-		TracerProvider: otel.GetTracerProvider(),
-		MeterProvider:  otel.GetMeterProvider(),
-		Logger:         slog.Default(),
-	}
+	Attrs          []Attr
 }
 
 // Recorder returns a new Recorder instance.
@@ -34,8 +25,11 @@ func DefaultProvider() *Provider {
 // example "journal" or "aggregate".
 func (p *Provider) Recorder(pkg, name string, attrs ...Attr) *Recorder {
 	r := &Recorder{
-		name:   "io.dogmatiq.veracity." + name,
-		attrs:  attrs,
+		name: "io.dogmatiq.veracity." + name,
+		attrs: append(
+			slices.Clone(p.Attrs),
+			attrs...,
+		),
 		tracer: p.TracerProvider.Tracer(pkg, tracerVersion),
 		meter:  p.MeterProvider.Meter(pkg, meterVersion),
 		logger: p.Logger,

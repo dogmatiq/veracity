@@ -80,8 +80,14 @@ func TestRegistry(t *testing.T) {
 		ctx, cancel, reg := setup(t)
 		defer cancel()
 
-		if err := reg.Register(ctx, node); err != nil {
+		delay, err := reg.Register(ctx, node)
+		if err != nil {
 			t.Fatal(err)
+		}
+
+		expectDelay := 50 * time.Millisecond
+		if delay != expectDelay {
+			t.Fatalf("got %s, want %s", delay, expectDelay)
 		}
 
 		notify := make(chan MembershipChange)
@@ -109,8 +115,14 @@ func TestRegistry(t *testing.T) {
 		ctx, cancel, reg := setup(t)
 		defer cancel()
 
-		if err := reg.Register(ctx, node); err != nil {
+		delay, err := reg.Register(ctx, node)
+		if err != nil {
 			t.Fatal(err)
+		}
+
+		expectDelay := 50 * time.Millisecond
+		if delay != expectDelay {
+			t.Fatalf("got %s, want %s", delay, expectDelay)
 		}
 
 		if err := reg.Deregister(ctx, node.ID); err != nil {
@@ -141,7 +153,7 @@ func TestRegistry(t *testing.T) {
 			// Let the first poll happen before we register the node.
 			time.Sleep(reg.PollInterval)
 
-			if err := reg.Register(ctx, node); err != nil {
+			if _, err := reg.Register(ctx, node); err != nil {
 				panic(err)
 			}
 		}()
@@ -171,7 +183,7 @@ func TestRegistry(t *testing.T) {
 		ctx, cancel, reg := setup(t)
 		defer cancel()
 
-		if err := reg.Register(ctx, node); err != nil {
+		if _, err := reg.Register(ctx, node); err != nil {
 			t.Fatal(err)
 		}
 
@@ -209,7 +221,7 @@ func TestRegistry(t *testing.T) {
 		ctx, cancel, reg := setup(t)
 		defer cancel()
 
-		if err := reg.Register(ctx, node); err != nil {
+		if _, err := reg.Register(ctx, node); err != nil {
 			t.Fatal(err)
 		}
 
@@ -245,16 +257,21 @@ func TestRegistry(t *testing.T) {
 		ctx, cancel, reg := setup(t)
 		defer cancel()
 
-		if err := reg.Register(ctx, node); err != nil {
+		delay, err := reg.Register(ctx, node)
+		if err != nil {
 			t.Fatal(err)
 		}
 
 		result := make(chan error, 1)
 		go func() {
-			for {
-				time.Sleep(reg.HeartbeatInterval)
+			delay := delay
+			var err error
 
-				if err := reg.Heartbeat(ctx, node.ID); err != nil {
+			for {
+				time.Sleep(delay)
+
+				delay, err = reg.Heartbeat(ctx, node.ID)
+				if err != nil {
 					result <- err
 					return
 				}

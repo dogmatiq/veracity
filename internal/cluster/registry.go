@@ -22,6 +22,9 @@ const (
 	// DefaultHeartbeatInterval is the default interval at which nodes send
 	// heartbeats to the registry.
 	DefaultHeartbeatInterval = 10 * time.Second
+
+	// RegistryKeyspace is the name of the keyspace that contains registry data.
+	RegistryKeyspace = "cluster.registry"
 )
 
 // MembershipChange is an event that indicates a change in membership to the
@@ -40,7 +43,9 @@ type Registry struct {
 }
 
 // Register adds a node to the registry.
-func (r *Registry) Register(ctx context.Context, n Node) error {
+//
+// It returns the delay before the node should send a heartbeat.
+func (r *Registry) Register(ctx context.Context, n Node) (time.Duration, error) {
 	interval := r.HeartbeatInterval
 	if interval <= 0 {
 		interval = DefaultHeartbeatInterval
@@ -54,7 +59,7 @@ func (r *Registry) Register(ctx context.Context, n Node) error {
 		n.ID[:],
 		marshalNode(n, expiresAt),
 	); err != nil {
-		return fmt.Errorf("unable to register node: %w", err)
+		return 0, fmt.Errorf("unable to register node: %w", err)
 	}
 
 	r.Logger.DebugCtx(
@@ -65,7 +70,7 @@ func (r *Registry) Register(ctx context.Context, n Node) error {
 		slog.Time("expires_at", expiresAt),
 	)
 
-	return nil
+	return interval, nil
 }
 
 // Deregister removes the node with the given ID from the registry.
@@ -84,23 +89,25 @@ func (r *Registry) Deregister(ctx context.Context, id uuid.UUID) error {
 }
 
 // Heartbeat updates the expiry time of the node with the given ID.
-func (r *Registry) Heartbeat(ctx context.Context, id uuid.UUID) error {
+//
+// It returns the delay before the node should send its next heartbeat.
+func (r *Registry) Heartbeat(ctx context.Context, id uuid.UUID) (time.Duration, error) {
 	n, ok, err := protokv.Get[*registrypb.Node](
 		ctx,
 		r.Keyspace,
 		id[:],
 	)
 	if err != nil {
-		return fmt.Errorf("unable to update heartbeat: %w", err)
+		return 0, fmt.Errorf("unable to update heartbeat: %w", err)
 	}
 	if !ok {
-		return fmt.Errorf("node not registered")
+		return 0, fmt.Errorf("node not registered")
 	}
 	if expired, err := r.deleteIfExpired(ctx, n); expired {
 		if err != nil {
-			return fmt.Errorf("unable to update heartbeat: %w", err)
+			return 0, fmt.Errorf("unable to update heartbeat: %w", err)
 		}
-		return fmt.Errorf("node has expired")
+		return 0, fmt.Errorf("node has expired")
 	}
 
 	interval := r.HeartbeatInterval
@@ -117,7 +124,7 @@ func (r *Registry) Heartbeat(ctx context.Context, id uuid.UUID) error {
 		id[:],
 		n,
 	); err != nil {
-		return fmt.Errorf("unable to register node: %w", err)
+		return 0, fmt.Errorf("unable to register node: %w", err)
 	}
 
 	r.Logger.DebugCtx(
@@ -128,7 +135,7 @@ func (r *Registry) Heartbeat(ctx context.Context, id uuid.UUID) error {
 		slog.Time("expires_at", expiresAt),
 	)
 
-	return nil
+	return interval, nil
 }
 
 // Watch sends notifications about changes to the cluster's membership to the
