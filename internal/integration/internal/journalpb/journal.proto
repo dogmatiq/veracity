@@ -5,6 +5,17 @@ import "github.com/dogmatiq/interopspec/envelopespec/envelope.proto";
 
 option go_package = "github.com/dogmatiq/veracity/internal/integration/internal/journalpb";
 
+// Record is a journal record.m
+message Record {
+  oneof one_of {
+    CommandEnqueued command_enqueued = 1;
+    CommandHandled command_handled = 2;
+    CommandHandlerFailed command_handler_failed = 3;
+    EventStreamSelected event_stream_selected = 4;
+    EventAppendedToStream event_appended_to_stream = 5;
+  }
+}
+
 // CommandEnqueued is a journal record that indicates a command has been
 // enqueued for handling.
 message CommandEnqueued {

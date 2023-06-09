@@ -14,6 +14,7 @@ import (
 type Engine struct {
 	executors   map[reflect.Type]dogma.CommandExecutor
 	heartbeater *heartbeater
+	tasks       []func(context.Context) error
 }
 
 // New returns an engine that hosts the given application.
@@ -31,6 +32,7 @@ func newEngine(cfg engineconfig.Config) *Engine {
 	return &Engine{
 		executors:   cfg.Application.Executors,
 		heartbeater: newHeartbeater(cfg),
+		tasks:       cfg.Tasks,
 	}
 }
 
@@ -65,6 +67,13 @@ func (e *Engine) Run(ctx context.Context) error {
 	g.Go(func() error {
 		return e.heartbeater.Run(ctx)
 	})
+
+	for _, t := range e.tasks {
+		t := t // capture loop variable
+		g.Go(func() error {
+			return t(ctx)
+		})
+	}
 
 	return g.Wait()
 }
