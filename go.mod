@@ -9,7 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.19.7
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/dogmatiq/configkit v0.12.1
-	github.com/dogmatiq/discoverkit v0.1.1
+	github.com/dogmatiq/discoverkit v0.1.2
 	github.com/dogmatiq/dogma v0.12.0
 	github.com/dogmatiq/example v0.0.0-20230606031437-2bd84c72050b
 	github.com/dogmatiq/ferrite v1.1.1-0.20230607012043-afc5e1684878
