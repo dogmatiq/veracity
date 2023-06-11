@@ -14,5 +14,5 @@ on:
 jobs:
   ci:
     name: Shared
-    uses: dogmatiq/repos/.github/workflows/shared-go+persistence.yml@main
+    uses: dogmatiq/repos/.github/workflows/shared-go+veracity.yml@main
     secrets: inherit
