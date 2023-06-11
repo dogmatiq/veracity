@@ -16,7 +16,11 @@ import (
 )
 
 // FerriteRegistry is a registry of the environment variables used by Veracity.
-var FerriteRegistry = ferrite.NewRegistry("dogmatiq/veracity")
+var FerriteRegistry = ferrite.NewRegistry(
+	"dogmatiq.veracity",
+	"Veracity",
+	ferrite.WithDocumentationURL("https://github.com/dogmatiq/veracity#readme"),
+)
 
 // Config encapsulates the configuration of a [veracity.Engine], built by
 // applying [veracity.EngineOption] functions, and visiting the

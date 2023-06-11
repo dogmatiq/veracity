@@ -12,7 +12,7 @@ require (
 	github.com/dogmatiq/discoverkit v0.1.2
 	github.com/dogmatiq/dogma v0.12.0
 	github.com/dogmatiq/example v0.0.0-20230606031437-2bd84c72050b
-	github.com/dogmatiq/ferrite v1.1.1-0.20230607012043-afc5e1684878
+	github.com/dogmatiq/ferrite v1.2.0
 	github.com/dogmatiq/interopspec v0.5.2
 	github.com/dogmatiq/marshalkit v0.7.3
 	github.com/dogmatiq/sqltest v0.3.0

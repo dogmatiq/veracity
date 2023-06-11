@@ -50,8 +50,8 @@ github.com/dogmatiq/dogma v0.12.0 h1:hUvAbdrcLGAP2IrpBKvdbUSGubgNKzqa5QfFarIQPfU
 github.com/dogmatiq/dogma v0.12.0/go.mod h1:op4IjAGC593ONvvUPhh2xNyk/3Ezv9HkCPRlzdbkX9Y=
 github.com/dogmatiq/example v0.0.0-20230606031437-2bd84c72050b h1:vRJWjMJA6MIKe8IaEv9Z/3AXdCHDXsvBqmMoKyMCcTU=
 github.com/dogmatiq/example v0.0.0-20230606031437-2bd84c72050b/go.mod h1:d8HZas5KOk53VdrditUtsAab4OTAN3JPI48+Od14o5U=
-github.com/dogmatiq/ferrite v1.1.1-0.20230607012043-afc5e1684878 h1:48LTM/tr2toZNPiBHbDL6J56nMeRXYEHHPX4JSxKKgE=
-github.com/dogmatiq/ferrite v1.1.1-0.20230607012043-afc5e1684878/go.mod h1:9hB0y+UW93nMMSkTTquq+7PERfqpGwZpQS0Y+jWFpNA=
+github.com/dogmatiq/ferrite v1.2.0 h1:JJt94m85bArcr1JoInbp9t7K7Jnc+i8SkaQNCUwaiEc=
+github.com/dogmatiq/ferrite v1.2.0/go.mod h1:a62SEP9Us4DMzSe3Q1CkucreQwi0o+70eZythxmI9cI=
 github.com/dogmatiq/iago v0.4.0 h1:57nZqVT34IZxtCZEW/RFif7DNUEjMXgevfr/Mmd0N8I=
 github.com/dogmatiq/iago v0.4.0/go.mod h1:fishMWBtzYcjgis6d873VTv9kFm/wHYLOzOyO9ECBDc=
 github.com/dogmatiq/interopspec v0.5.2 h1:opcn/hxV128Lgo+1rBJY8TsIdpagwXNOawx/UTx9e08=
@@ -193,12 +193,12 @@ github.com/onsi/ginkgo v1.7.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+W
 github.com/onsi/ginkgo v1.12.1/go.mod h1:zj2OWP4+oCPe1qIXoGWkgMRwljMUYCdkwsT2108oapk=
 github.com/onsi/ginkgo v1.14.2/go.mod h1:iSB4RoI2tjJc9BBv4NKIKWKya62Rps+oPG/Lv9klQyY=
 github.com/onsi/ginkgo v1.16.5 h1:8xi0RTUf59SOSfEtZMvwTvXYMzG4gV23XVHOZiXNtnE=
-github.com/onsi/ginkgo/v2 v2.9.7 h1:06xGQy5www2oN160RtEZoTvnP2sPhEfePYmCDc2szss=
+github.com/onsi/ginkgo/v2 v2.10.0 h1:sfUl4qgLdvkChZrWCYndY2EAu9BRIw1YphNAzy1VNWs=
 github.com/onsi/gomega v1.4.3/go.mod h1:ex+gbHU/CVuBBDIJjb2X0qEXbFg53c61hWP/1CpauHY=
 github.com/onsi/gomega v1.7.1/go.mod h1:XdKZgCCFLUoM/7CFJVPcG8C1xQ1AJ0vpAezJrB7JYyY=
 github.com/onsi/gomega v1.10.1/go.mod h1:iN09h71vgCQne3DLsj+A5owkum+a2tYe+TOCB1ybHNo=
 github.com/onsi/gomega v1.10.4/go.mod h1:g/HbgYopi++010VEqkFgJHKC09uJiW9UkXvMUuKHUCQ=
-github.com/onsi/gomega v1.27.7 h1:fVih9JD6ogIiHUN6ePK7HJidyEDpWGVB5mzM7cWNXoU=
+github.com/onsi/gomega v1.27.8 h1:gegWiwZjBsf2DgiSbf5hpokZ98JVDMcWkUiigk6/KXc=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
@@ -303,7 +303,7 @@ golang.org/x/tools v0.0.0-20190621195816-6e04913cbbac/go.mod h1:/rFqwRUd4F7ZHNgw
 golang.org/x/tools v0.0.0-20190823170909-c4a336ef6a2f/go.mod h1:b+2E5dAYhXwXZwtnZ6UAqBI28+e2cm9otk0dWdXHAEo=
 golang.org/x/tools v0.0.0-20191029041327-9cc4af7d6b2c/go.mod h1:b+2E5dAYhXwXZwtnZ6UAqBI28+e2cm9otk0dWdXHAEo=
 golang.org/x/tools v0.0.0-20191029190741-b9c20aec41a5/go.mod h1:b+2E5dAYhXwXZwtnZ6UAqBI28+e2cm9otk0dWdXHAEo=
-golang.org/x/tools v0.9.1 h1:8WMNJAz3zrtPmnYC7ISf5dEn3MT0gY7jBJfw27yrrLo=
+golang.org/x/tools v0.9.3 h1:Gn1I8+64MsuTb/HpH+LmQtNas23LhUVr3rYZ0eKuaMM=
 golang.org/x/xerrors v0.0.0-20190410155217-1f06c39b4373/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 golang.org/x/xerrors v0.0.0-20190513163551-3ee3066db522/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
