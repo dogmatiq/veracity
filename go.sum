@@ -54,8 +54,8 @@ github.com/dogmatiq/ferrite v1.2.0 h1:JJt94m85bArcr1JoInbp9t7K7Jnc+i8SkaQNCUwaiE
 github.com/dogmatiq/ferrite v1.2.0/go.mod h1:a62SEP9Us4DMzSe3Q1CkucreQwi0o+70eZythxmI9cI=
 github.com/dogmatiq/iago v0.4.0 h1:57nZqVT34IZxtCZEW/RFif7DNUEjMXgevfr/Mmd0N8I=
 github.com/dogmatiq/iago v0.4.0/go.mod h1:fishMWBtzYcjgis6d873VTv9kFm/wHYLOzOyO9ECBDc=
-github.com/dogmatiq/interopspec v0.5.2 h1:opcn/hxV128Lgo+1rBJY8TsIdpagwXNOawx/UTx9e08=
-github.com/dogmatiq/interopspec v0.5.2/go.mod h1:RFQfwrmj1VEYy51/pFTGMcm4BHErA3eLwsxX95COf6U=
+github.com/dogmatiq/interopspec v0.5.3 h1:AES184nLWcek8/vafykZJLmm59NlRiYiC40Tll8hEeg=
+github.com/dogmatiq/interopspec v0.5.3/go.mod h1:3RdRwvDzgqLwemSieP+YAvKp3CMP0rYwZFl5tpmn6DI=
 github.com/dogmatiq/linger v1.1.0 h1:kGL9sL79qRa6Cr8PhadeJ/ptbum+b48pAaNWWlyVVKg=
 github.com/dogmatiq/linger v1.1.0/go.mod h1:OOWJUwTxNkFolhuVdaTYjO4FmFLjZHZ8EMc5H5qOJ7Q=
 github.com/dogmatiq/marshalkit v0.7.3 h1:kBymR5txcHFBJcYvzld6kFWshqL9YqfBfnFzl9KwEaI=

@@ -2,7 +2,7 @@ syntax = "proto3";
 package veracity.cluster.registry.v1;
 
 import "google/protobuf/timestamp.proto";
-import "github.com/dogmatiq/veracity/internal/protobuf/uuidpb/uuid.proto";
+import "github.com/dogmatiq/interopspec/wellknown/uuidpb/uuid.proto";
 
 option go_package = "github.com/dogmatiq/veracity/internal/cluster/internal/registrypb";
 
@@ -12,7 +12,7 @@ option go_package = "github.com/dogmatiq/veracity/internal/cluster/internal/regi
 // Engines that are only acting as a "router" are not members of a cluster.
 message Node {
   // Id is a unique identifier for the node.
-  dogmatiq.protobuf.UUID id = 1;
+  dogma.protobuf.UUID id = 1;
 
   // ExpiresAt is the time at which the node's entry in the registry expires.
   google.protobuf.Timestamp expires_at = 2;

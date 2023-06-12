@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/dogmatiq/interopspec/wellknown/uuidpb"
 	"github.com/dogmatiq/veracity/internal/cluster/internal/registrypb"
 	"github.com/dogmatiq/veracity/internal/protobuf/protokv"
-	"github.com/dogmatiq/veracity/internal/protobuf/uuidpb"
 	"github.com/dogmatiq/veracity/persistence/kv"
 	"github.com/google/uuid"
 	"golang.org/x/exp/slog"
@@ -224,8 +224,8 @@ func (r *Registry) members(ctx context.Context) (map[uuid.UUID]Node, error) {
 				return true, err
 			}
 
-			id := n.GetId().ToNative()
-			members[id] = unmarshalNode(n)
+			nn := unmarshalNode(n)
+			members[nn.ID] = nn
 
 			return true, nil
 		},
@@ -271,7 +271,7 @@ func membershipDiff(before, after map[uuid.UUID]Node) MembershipChange {
 // marshalNode converts a Node to its protocol buffer representation.
 func marshalNode(n Node, expiresAt time.Time) *registrypb.Node {
 	return &registrypb.Node{
-		Id:        uuidpb.FromNative(n.ID),
+		Id:        uuidpb.FromBytes(n.ID[:]),
 		ExpiresAt: timestamppb.New(expiresAt),
 		Addresses: n.Addresses,
 	}
@@ -279,8 +279,11 @@ func marshalNode(n Node, expiresAt time.Time) *registrypb.Node {
 
 // unmarshalNode converts a Node from its protocol buffer representation.
 func unmarshalNode(n *registrypb.Node) Node {
+	var id uuid.UUID
+	copy(id[:], n.GetId().ToBytes())
+
 	return Node{
-		ID:        n.GetId().ToNative(),
+		ID:        id,
 		Addresses: n.GetAddresses(),
 	}
 }
