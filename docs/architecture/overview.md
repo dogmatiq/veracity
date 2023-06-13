@@ -12,7 +12,7 @@ flowchart TD
     end
 
     subgraph Engine["Veracity Engine"]
-        CommandRouter["<a href='command-router.md'>Command\nRouter</a>"]
+        CommandRouter["<a href='./command-router.md'>Command\nRouter</a>"]
 
         AggregateSubsystem["Aggregate\nSubsystem"]
         IntegrationSubsystem["Integration\nSubsystem"]
