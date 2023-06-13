@@ -1,19 +1,7 @@
 ```mermaid
 flowchart LR
     NonDogma((Non-Dogma\nApplication Code))
-
-    AggregateMessageHandler((Aggregate\nHandler))
-    ProcessMessageHandler((Process\nHandler))
-    IntegrationMessageHandler((Integration\nHandler))
-    ProjectionMessageHandler((Projection\nHandler))
-
-    ProjectionDatabase[(Read Models)]
-    ThirdPartySystems{{Third Party Systems}}
-
-    ProjectionMessageHandler -.- ProjectionDatabase
-    IntegrationMessageHandler -.- ThirdPartySystems
-
-    NonDogma --> CommandExecutor
+    NonDogma ----> CommandExecutor
 
     subgraph Routing[Routing Subsystem - per node]
         CommandExecutor
@@ -22,20 +10,28 @@ flowchart LR
         CommandExecutor --> Router
     end
 
-    Router --> AggregateAPI
-    Router --> IntegrationAPI
+    subgraph Integrations[Integration Subsystem]
+        IntegrationAPI[gRPC API]
 
-    subgraph EventStreams[Event Stream Subsystem]
-        EventStreamAPI[gRPC API]
+        subgraph IntegrationSupervisor[Supervisor - per handler, per node]
+            IntegrationInbox([Inbox])
+            IntegrationOutbox([Outbox])
+            IntegrationJournal[(Journal)]
 
-        subgraph EventStreamSupervisor[Supervisor - per partition]
-            EventStreamPartition([Partition])
-            EventStreamJournal[(Journal)]
-            EventStreamPartition -.- EventStreamJournal
+            IntegrationInbox -.- IntegrationJournal
+            IntegrationOutbox -.- IntegrationJournal
         end
 
-        EventStreamAPI <--> EventStreamPartition
+        IntegrationAPI --> IntegrationInbox
     end
+    IntegrationMessageHandler((Integration\nHandler))
+    ThirdPartySystems{{Third Party Systems}}
+    IntegrationMessageHandler -.- ThirdPartySystems
+
+    Router --> IntegrationAPI
+    IntegrationInbox --> IntegrationMessageHandler
+    IntegrationMessageHandler --> IntegrationOutbox
+    IntegrationOutbox ----> EventStreamAPI
 
     subgraph Aggregates[Aggregate Subsystem]
         AggregateAPI[gRPC API]
@@ -55,11 +51,25 @@ flowchart LR
 
         AggregateAPI --> AggregateInbox
     end
+    AggregateMessageHandler((Aggregate\nHandler))
 
+    Router --> AggregateAPI
     AggregateInbox --> AggregateMessageHandler
     AggregateMessageHandler --> AggregateOutbox
     AggregateState -.- AggregateMessageHandler
-    AggregateOutbox --> EventStreamAPI
+    AggregateOutbox ----> EventStreamAPI
+
+    subgraph EventStreams[Event Stream Subsystem]
+        EventStreamAPI[gRPC API]
+
+        subgraph EventStreamSupervisor[Supervisor - per partition]
+            EventStreamPartition([Partition])
+            EventStreamJournal[(Journal)]
+            EventStreamPartition -.- EventStreamJournal
+        end
+
+        EventStreamAPI <--> EventStreamPartition
+    end
 
     subgraph Processes[Process Subsystem]
         subgraph ProcessSupervisor[Supervisor - per handler, per instance]
@@ -73,37 +83,23 @@ flowchart LR
             ProcessState -.- ProcessJournal
         end
     end
+    ProcessMessageHandler((Process\nHandler))
 
     EventStreamAPI --> ProcessInbox
     ProcessInbox --> ProcessMessageHandler
     ProcessMessageHandler --> ProcessOutbox
     ProcessState -.- ProcessMessageHandler
-    ProcessOutbox --> Router
+    ProcessOutbox ----> Router
 
-    subgraph Integrations[Integration Subsystem]
-        IntegrationAPI[gRPC API]
-
-        subgraph IntegrationSupervisor[Supervisor - per handler, per node]
-            IntegrationInbox([Inbox])
-            IntegrationOutbox([Outbox])
-            IntegrationJournal[(Journal)]
-
-            IntegrationInbox -.- IntegrationJournal
-            IntegrationOutbox -.- IntegrationJournal
-        end
-
-        IntegrationAPI --> IntegrationInbox
-    end
-
-    IntegrationInbox --> IntegrationMessageHandler
-    IntegrationMessageHandler --> IntegrationOutbox
-    IntegrationOutbox --> EventStreamAPI
 
     subgraph Projections[Projection Subsystem]
         subgraph ProjectionSupervisor[Supervisor - per handler, per partition]
             ProjectionResource([Resource])
         end
     end
+    ProjectionMessageHandler((Projection\nHandler))
+    ProjectionDatabase[(Read Models)]
+    ProjectionMessageHandler -.- ProjectionDatabase
 
     EventStreamAPI --> ProjectionResource
     ProjectionResource --> ProjectionMessageHandler
