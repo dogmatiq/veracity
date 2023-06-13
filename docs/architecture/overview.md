@@ -42,11 +42,11 @@ flowchart TD
     ProjectionSubsystem --> ProjectionMessageHandler
     ProjectionMessageHandler -.- ReadModel[("Read Model")]
 
-    click CommandExecutor href "https://pkg.go.dev/github.com/dogmatiq/dogma#CommandExecutor" "View Documentation" _blank
-    click AggregateMessageHandler href "https://pkg.go.dev/github.com/dogmatiq/dogma#AggregateMessageHandler" "View Documentation" _blank
-    click ProcessMessageHandler href "https://pkg.go.dev/github.com/dogmatiq/dogma#ProcessMessageHandler" "View Documentation" _blank
-    click IntegrationMessageHandler href "https://pkg.go.dev/github.com/dogmatiq/dogma#IntegrationMessageHandler" "View Documentation" _blank
-    click ProjectionMessageHandler href "https://pkg.go.dev/github.com/dogmatiq/dogma#ProjectionMessageHandler" "View Documentation" _blank
+    click CommandExecutor "https://pkg.go.dev/github.com/dogmatiq/dogma#CommandExecutor" _parent
+    click AggregateMessageHandler "https://pkg.go.dev/github.com/dogmatiq/dogma#AggregateMessageHandler" _parent
+    click ProcessMessageHandler "https://pkg.go.dev/github.com/dogmatiq/dogma#ProcessMessageHandler" _parent
+    click IntegrationMessageHandler "https://pkg.go.dev/github.com/dogmatiq/dogma#IntegrationMessageHandler" _parent
+    click ProjectionMessageHandler "https://pkg.go.dev/github.com/dogmatiq/dogma#ProjectionMessageHandler" _parent
 
-    click CommandRouter href "./command-router.md" "Drill Down" _parent
+    click CommandRouter "./command-router.md" _parent
 ```
