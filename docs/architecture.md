@@ -1,106 +1,51 @@
 ```mermaid
-flowchart LR
-    NonDogma((Non-Dogma\nApplication Code))
-    NonDogma ----> CommandExecutor
+flowchart TD
+    NonDogma(("Non-Dogma\nCode"))
 
-    subgraph Routing[Routing Subsystem - per node]
-        CommandExecutor
-        Router([Router])
-
-        CommandExecutor --> Router
+    subgraph App["Dogma Application"]
+        AggregateHandler{{"Aggregate\nMessage Handler"}}
+        IntegrationHandler{{"Integration\nMessage Handler"}}
+        ProcessHandler{{"Process\nMessage Handler"}}
+        ProjectionHandler{{"Projection\nMessage Handler"}}
     end
 
-    subgraph Integrations[Integration Subsystem]
-        IntegrationAPI[gRPC API]
+    subgraph Engine["Veracity Engine"]
+        Executor{{"Command Executor"}}
 
-        subgraph IntegrationSupervisor[Supervisor - per handler, per node]
-            IntegrationInbox([Inbox])
-            IntegrationOutbox([Outbox])
-            IntegrationJournal[(Journal)]
+        Router["Command Router"]
 
-            IntegrationInbox -.- IntegrationJournal
-            IntegrationOutbox -.- IntegrationJournal
-        end
+        AggregateInstance["Aggregate Instance"]
+        Integration["Integration"]
+        ProcessInstance["Process Instance"]
+        Projection["Projection"]
 
-        IntegrationAPI --> IntegrationInbox
-    end
-    IntegrationMessageHandler((Integration\nHandler))
-    ThirdPartySystems{{Third Party Systems}}
-    IntegrationMessageHandler -.- ThirdPartySystems
-
-    Router --> IntegrationAPI
-    IntegrationInbox --> IntegrationMessageHandler
-    IntegrationMessageHandler --> IntegrationOutbox
-    IntegrationOutbox ----> EventStreamAPI
-
-    subgraph Aggregates[Aggregate Subsystem]
-        AggregateAPI[gRPC API]
-
-        subgraph AggregateSupervisor[Supervisor - per handler, per instance]
-            AggregateInbox([Inbox])
-            AggregateOutbox([Outbox])
-            AggregateState([State])
-            AggregateJournal[(Journal)]
-            AggregateKV[(Keyspace)]
-
-            AggregateInbox -.- AggregateJournal
-            AggregateOutbox -.- AggregateJournal
-            AggregateState -.- AggregateJournal
-            AggregateState -.- AggregateKV
-        end
-
-        AggregateAPI --> AggregateInbox
-    end
-    AggregateMessageHandler((Aggregate\nHandler))
-
-    Router --> AggregateAPI
-    AggregateInbox --> AggregateMessageHandler
-    AggregateMessageHandler --> AggregateOutbox
-    AggregateState -.- AggregateMessageHandler
-    AggregateOutbox ----> EventStreamAPI
-
-    subgraph EventStreams[Event Stream Subsystem]
-        EventStreamAPI[gRPC API]
-
-        subgraph EventStreamSupervisor[Supervisor - per partition]
-            EventStreamPartition([Partition])
-            EventStreamJournal[(Journal)]
-            EventStreamPartition -.- EventStreamJournal
-        end
-
-        EventStreamAPI <--> EventStreamPartition
+        EventStreamPartition["Event Stream Partition"]
     end
 
-    subgraph Processes[Process Subsystem]
-        subgraph ProcessSupervisor[Supervisor - per handler, per instance]
-            ProcessInbox([Inbox])
-            ProcessOutbox([Outbox])
-            ProcessState([State])
-            ProcessJournal[(Journal)]
+    NonDogma --> Executor
 
-            ProcessInbox -.- ProcessJournal
-            ProcessOutbox -.- ProcessJournal
-            ProcessState -.- ProcessJournal
-        end
-    end
-    ProcessMessageHandler((Process\nHandler))
+    Executor --> Router
 
-    EventStreamAPI --> ProcessInbox
-    ProcessInbox --> ProcessMessageHandler
-    ProcessMessageHandler --> ProcessOutbox
-    ProcessState -.- ProcessMessageHandler
-    ProcessOutbox ----> Router
+    Router --> AggregateInstance
+    Router --> Integration
 
+    AggregateInstance <--> AggregateHandler
+    AggregateInstance --> EventStreamPartition
 
-    subgraph Projections[Projection Subsystem]
-        subgraph ProjectionSupervisor[Supervisor - per handler, per partition]
-            ProjectionResource([Resource])
-        end
-    end
-    ProjectionMessageHandler((Projection\nHandler))
-    ProjectionDatabase[(Read Models)]
-    ProjectionMessageHandler -.- ProjectionDatabase
+    Integration <--> IntegrationHandler
+    IntegrationHandler -.- ThirdParty(("Third-party System"))
+    Integration --> EventStreamPartition
 
-    EventStreamAPI --> ProjectionResource
-    ProjectionResource --> ProjectionMessageHandler
+    EventStreamPartition --> ProcessInstance
+    ProcessInstance <--> ProcessHandler
+    ProcessInstance --> Router
+
+    EventStreamPartition --> Projection
+    Projection --> ProjectionHandler
+    ProjectionHandler -.- ReadModel[("Read Model")]
+
+    click AggregateHandler "https://pkg.go.dev/github.com/dogmatiq/dogma#AggregateMessageHandler"
+    click ProcessHandler "https://pkg.go.dev/github.com/dogmatiq/dogma#ProcessMessageHandler"
+    click IntegrationHandler "https://pkg.go.dev/github.com/dogmatiq/dogma#IntegrationMessageHandler"
+    click ProjectionHandler "https://pkg.go.dev/github.com/dogmatiq/dogma#ProjectionMessageHandler"
 ```
