@@ -2,17 +2,17 @@
 
 ```mermaid
 flowchart TD
-    CommandExecutor{{"dogma.CommandExecutor"}}
+    CommandExecutor{{"<a href='https://pkg.go.dev/github.com/dogmatiq/dogma#CommandExecutor'>dogma.CommandExecutor</a>"}}
 
     subgraph App["Dogma Application"]
-        AggregateMessageHandler{{"dogma.AggregateMessageHandler"}}
-        ProjectionMessageHandler{{"dogma.ProjectionMessageHandler"}}
-        IntegrationMessageHandler{{"dogma.IntegrationMessageHandler"}}
-        ProcessMessageHandler{{"dogma.ProcessMessageHandler"}}
+        AggregateMessageHandler{{"<a href='https://pkg.go.dev/github.com/dogmatiq/dogma#AggregateMessageHandler'>dogma.AggregateMessageHandler</a>"}}
+        ProjectionMessageHandler{{"<a href='https://pkg.go.dev/github.com/dogmatiq/dogma#ProjectionMessageHandler'>dogma.ProjectionMessageHandler</a>"}}
+        IntegrationMessageHandler{{"<a href='https://pkg.go.dev/github.com/dogmatiq/dogma#IntegrationMessageHandler'>dogma.IntegrationMessageHandler</a>"}}
+        ProcessMessageHandler{{"<a href='https://pkg.go.dev/github.com/dogmatiq/dogma#ProcessMessageHandler'>dogma.ProcessMessageHandler</a>"}}
     end
 
     subgraph Engine["Veracity Engine"]
-        CommandRouter["Command\nRouter"]
+        CommandRouter["<a href='command-router.md'>Command\nRouter</a>"]
 
         AggregateSubsystem["Aggregate\nSubsystem"]
         IntegrationSubsystem["Integration\nSubsystem"]
@@ -41,12 +41,4 @@ flowchart TD
     EventStreamSubsystem --> ProjectionSubsystem
     ProjectionSubsystem --> ProjectionMessageHandler
     ProjectionMessageHandler -.- ReadModel[("Read Model")]
-
-    click CommandExecutor "https://pkg.go.dev/github.com/dogmatiq/dogma#CommandExecutor" _parent
-    click AggregateMessageHandler "https://pkg.go.dev/github.com/dogmatiq/dogma#AggregateMessageHandler" _parent
-    click ProcessMessageHandler "https://pkg.go.dev/github.com/dogmatiq/dogma#ProcessMessageHandler" _parent
-    click IntegrationMessageHandler "https://pkg.go.dev/github.com/dogmatiq/dogma#IntegrationMessageHandler" _parent
-    click ProjectionMessageHandler "https://pkg.go.dev/github.com/dogmatiq/dogma#ProjectionMessageHandler" _parent
-
-    click CommandRouter "./command-router.md" _parent
 ```
