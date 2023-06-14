@@ -1,9 +1,9 @@
 package integration
 
-import "github.com/dogmatiq/interopspec/envelopespec"
+import "github.com/dogmatiq/enginekit/protobuf/envelopepb"
 
 type EnqueueCommandExchange struct {
-	Command *envelopespec.Envelope
+	Command *envelopepb.Envelope
 
 	Done chan<- struct{}
 }

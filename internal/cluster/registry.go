@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dogmatiq/interopspec/wellknown/uuidpb"
+	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/veracity/internal/cluster/internal/registrypb"
 	"github.com/dogmatiq/veracity/internal/protobuf/protokv"
 	"github.com/dogmatiq/veracity/persistence/kv"
@@ -130,7 +130,7 @@ func (r *Registry) Heartbeat(ctx context.Context, id uuid.UUID) (time.Duration, 
 	r.Logger.DebugCtx(
 		ctx,
 		"member node expiry extended",
-		slog.String("node_id", n.GetId().ToString()),
+		slog.String("node_id", n.GetId().AsString()),
 		slog.Duration("heartbeat_interval", interval),
 		slog.Time("expires_at", expiresAt),
 	)
@@ -243,7 +243,7 @@ func (r *Registry) deleteIfExpired(
 
 	return true, r.Keyspace.Set(
 		ctx,
-		n.GetId().ToBytes(),
+		n.GetId().AsBytes(),
 		nil,
 	)
 }
@@ -271,7 +271,7 @@ func membershipDiff(before, after map[uuid.UUID]Node) MembershipChange {
 // marshalNode converts a Node to its protocol buffer representation.
 func marshalNode(n Node, expiresAt time.Time) *registrypb.Node {
 	return &registrypb.Node{
-		Id:        uuidpb.FromBytes(n.ID[:]),
+		Id:        uuidpb.FromByteArray(n.ID),
 		ExpiresAt: timestamppb.New(expiresAt),
 		Addresses: n.Addresses,
 	}
@@ -279,11 +279,8 @@ func marshalNode(n Node, expiresAt time.Time) *registrypb.Node {
 
 // unmarshalNode converts a Node from its protocol buffer representation.
 func unmarshalNode(n *registrypb.Node) Node {
-	var id uuid.UUID
-	copy(id[:], n.GetId().ToBytes())
-
 	return Node{
-		ID:        id,
+		ID:        uuidpb.AsByteArray[uuid.UUID](n.GetId()),
 		Addresses: n.GetAddresses(),
 	}
 }

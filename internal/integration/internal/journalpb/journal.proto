@@ -1,11 +1,11 @@
 syntax = "proto3";
 package veracity.integration.journal.v1;
 
-import "github.com/dogmatiq/interopspec/envelopespec/envelope.proto";
-
 option go_package = "github.com/dogmatiq/veracity/internal/integration/internal/journalpb";
 
-// Record is a journal record.m
+import "github.com/dogmatiq/enginekit/protobuf/envelopepb/envelope.proto";
+
+// Record is a container for a journal record.
 message Record {
   oneof one_of {
     CommandEnqueued command_enqueued = 1;
@@ -20,7 +20,7 @@ message Record {
 // enqueued for handling.
 message CommandEnqueued {
   // Command is the envelope containing the command to be handled.
-  dogma.interop.v1.envelope.Envelope command = 1;
+  dogma.protobuf.Envelope command = 1;
 }
 
 // CommandHandled is a journal record that indicates a command has been
@@ -28,9 +28,10 @@ message CommandEnqueued {
 message CommandHandled {
   // CommandId is the ID of the command that was handled.
   string command_id = 1;
+
   // Events is the list of events produced while handling the command, in
   // chronological order.
-  repeated dogma.interop.v1.envelope.Envelope events = 2;
+  repeated dogma.protobuf.Envelope events = 2;
 }
 
 // CommandHandlerFailed is a journal record that the handler returned an error
@@ -38,6 +39,7 @@ message CommandHandled {
 message CommandHandlerFailed {
   // CommandId is the ID of the command that was being handled.
   string command_id = 1;
+
   // Error is the message of the error that the handler returned.
   string error = 2;
 }
@@ -48,6 +50,7 @@ message CommandHandlerFailed {
 message EventStreamSelected {
   // StreamId is the ID of the stream to which the events will be appended.
   string stream_id = 1;
+
   // Offset is the next offset of the stream, at the time it was selected.
   uint64 offset = 2;
 }
@@ -57,8 +60,10 @@ message EventStreamSelected {
 message EventAppendedToStream {
   // EventId is the ID of the event that was appended to the stream.
   string event_id = 1;
+
   // StreamId is the ID of the stream to which the event was appended.
   string stream_id = 2;
+
   // Offset is the offset of the event within the stream.
   uint64 offset = 3;
 }

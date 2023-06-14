@@ -2,14 +2,14 @@ package envelope
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/dogmatiq/dogma"
-	"github.com/dogmatiq/interopspec/envelopespec"
+	"github.com/dogmatiq/enginekit/protobuf/envelopepb"
+	"github.com/dogmatiq/enginekit/protobuf/identitypb"
+	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/marshalkit"
-	"github.com/dogmatiq/marshalkit/fixtures"
-	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Packer puts messages into parcels.
@@ -19,80 +19,43 @@ type Packer struct {
 	//
 	// The site is used to disambiguate between messages from different
 	// installations of the same application.
-	Site *envelopespec.Identity
+	Site *identitypb.Identity
 
 	// Application is the identity of the application that is the source of the
 	// messages.
-	Application *envelopespec.Identity
+	Application *identitypb.Identity
 
 	// Marshaler is used to marshal messages into envelopes.
 	Marshaler marshalkit.ValueMarshaler
-
-	// GenerateID is a function used to generate new message IDs. If it is nil,
-	// a UUID is generated.
-	GenerateID func() string
-
-	// Now is a function used to get the current time. If it is nil, time.Now()
-	// is used.
-	Now func() time.Time
-}
-
-// NewTestPacker returns an envelope packer that uses a deterministic ID
-// sequence and clock.
-//
-// MessageID is a monotonically increasing integer, starting at 0. CreatedAt
-// starts at 2000-01-01 00:00:00 UTC and increases by 1 second for each message.
-func NewTestPacker() *Packer {
-	var (
-		m     sync.Mutex
-		id    uint64
-		clock = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
-	)
-
-	return &Packer{
-		Site: &envelopespec.Identity{
-			Name: "<site-name>",
-			Key:  "<site-key>",
-		},
-		Application: &envelopespec.Identity{
-			Name: "<app-name>",
-			Key:  "<app-key>",
-		},
-		Marshaler: fixtures.Marshaler,
-		GenerateID: func() string {
-			m.Lock()
-			defer m.Unlock()
-
-			id++
-
-			return fmt.Sprintf("<id-%d>", id)
-		},
-		Now: func() time.Time {
-			m.Lock()
-			defer m.Unlock()
-
-			now := clock
-			clock = clock.Add(1 * time.Second)
-
-			return now
-		},
-	}
 }
 
 // Pack returns an envelope containing the given message.
-func (p *Packer) Pack(m dogma.Message, options ...PackOption) *envelopespec.Envelope {
-	id := p.generateID()
-	env := &envelopespec.Envelope{
+func (p *Packer) Pack(
+	m dogma.Message,
+	options ...PackOption,
+) *envelopepb.Envelope {
+	packet := marshalkit.MustMarshal(p.Marshaler, m)
+	_, name, err := packet.ParseMediaType()
+	if err != nil {
+		// CODE COVERAGE: This branch would require the marshaler to violate its
+		// own requirements on the format of the media-type.
+		panic(err)
+	}
+
+	id := uuidpb.Generate()
+
+	env := &envelopepb.Envelope{
 		MessageId:         id,
 		CorrelationId:     id,
 		CausationId:       id,
 		SourceSite:        p.Site,
 		SourceApplication: p.Application,
-		CreatedAt:         marshalkit.MustMarshalEnvelopeTime(p.now()),
+		CreatedAt:         timestamppb.Now(),
 		Description:       dogma.DescribeMessage(m),
+		PortableName:      name,
+		MediaType:         packet.MediaType,
+		Data:              packet.Data,
 	}
-
-	marshalkit.MustMarshalMessageIntoEnvelope(p.Marshaler, m, env)
 
 	for _, opt := range options {
 		opt(env)
@@ -106,22 +69,30 @@ func (p *Packer) Pack(m dogma.Message, options ...PackOption) *envelopespec.Enve
 }
 
 // Unpack returns the message contained within an envelope.
-func (p *Packer) Unpack(env *envelopespec.Envelope) (dogma.Message, error) {
-	return marshalkit.UnmarshalMessageFromEnvelope(p.Marshaler, env)
+func (p *Packer) Unpack(env *envelopepb.Envelope) (dogma.Message, error) {
+	packet := marshalkit.Packet{
+		MediaType: env.MediaType,
+		Data:      env.Data,
+	}
+
+	m, err := p.Marshaler.Unmarshal(packet)
+	if err != nil {
+		return nil, err
+	}
+
+	if m, ok := m.(dogma.Message); ok {
+		return m, nil
+	}
+
+	return nil, fmt.Errorf("'%T' is not a dogma message", m)
 }
 
 // PackOption is an option that alters the behavior of a Pack operation.
-type PackOption func(*envelopespec.Envelope)
-
-func WithID(id string) PackOption {
-	return func(e *envelopespec.Envelope) {
-		e.MessageId = id
-	}
-}
+type PackOption func(*envelopepb.Envelope)
 
 // WithCause sets env as the "cause" of the message being packed.
-func WithCause(env *envelopespec.Envelope) PackOption {
-	return func(e *envelopespec.Envelope) {
+func WithCause(env *envelopepb.Envelope) PackOption {
+	return func(e *envelopepb.Envelope) {
 		e.CausationId = env.GetMessageId()
 		e.CorrelationId = env.GetCorrelationId()
 	}
@@ -129,8 +100,8 @@ func WithCause(env *envelopespec.Envelope) PackOption {
 
 // WithHandler sets h as the identity of the handler that is the source of the
 // message.
-func WithHandler(h *envelopespec.Identity) PackOption {
-	return func(e *envelopespec.Envelope) {
+func WithHandler(h *identitypb.Identity) PackOption {
+	return func(e *envelopepb.Envelope) {
 		e.SourceHandler = h
 	}
 }
@@ -138,40 +109,21 @@ func WithHandler(h *envelopespec.Identity) PackOption {
 // WithInstanceID sets the aggregate or process instance ID that is the
 // source of the message.
 func WithInstanceID(id string) PackOption {
-	return func(e *envelopespec.Envelope) {
+	return func(e *envelopepb.Envelope) {
 		e.SourceInstanceId = id
 	}
 }
 
 // WithCreatedAt sets the creation time of a message.
 func WithCreatedAt(t time.Time) PackOption {
-	return func(e *envelopespec.Envelope) {
-		e.CreatedAt = marshalkit.MustMarshalEnvelopeTime(t)
+	return func(e *envelopepb.Envelope) {
+		e.CreatedAt = timestamppb.New(t)
 	}
 }
 
 // WithScheduledFor sets the scheduled time of a timeout message.
 func WithScheduledFor(t time.Time) PackOption {
-	return func(e *envelopespec.Envelope) {
-		e.ScheduledFor = marshalkit.MustMarshalEnvelopeTime(t)
+	return func(e *envelopepb.Envelope) {
+		e.ScheduledFor = timestamppb.New(t)
 	}
-}
-
-// now returns the current time.
-func (p *Packer) now() time.Time {
-	now := p.Now
-	if now == nil {
-		now = time.Now
-	}
-
-	return now()
-}
-
-// generateID generates a new message ID.
-func (p *Packer) generateID() string {
-	if p.GenerateID != nil {
-		return p.GenerateID()
-	}
-
-	return uuid.NewString()
 }

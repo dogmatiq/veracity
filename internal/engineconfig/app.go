@@ -6,6 +6,8 @@ import (
 
 	"github.com/dogmatiq/configkit"
 	"github.com/dogmatiq/dogma"
+	"github.com/dogmatiq/enginekit/protobuf/identitypb"
+	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/marshalkit"
 	"github.com/dogmatiq/marshalkit/codec"
 	"github.com/dogmatiq/marshalkit/codec/json"
@@ -42,7 +44,7 @@ func (c applicationVisitor) VisitRichApplication(ctx context.Context, cfg config
 
 	c.packer = &envelope.Packer{
 		Site:        c.SiteID,
-		Application: marshalkit.MustMarshalEnvelopeIdentity(cfg.Identity()),
+		Application: marshalIdentity(cfg.Identity()),
 		Marshaler:   c.marshaler,
 	}
 
@@ -88,4 +90,13 @@ func (c applicationVisitor) VisitRichIntegration(ctx context.Context, cfg config
 
 func (c applicationVisitor) VisitRichProjection(ctx context.Context, cfg configkit.RichProjection) error {
 	return nil
+}
+
+func marshalIdentity(id configkit.Identity) *identitypb.Identity {
+	key, err := uuidpb.FromString(id.Key)
+	if err != nil {
+		panic(err)
+	}
+
+	return identitypb.New(id.Name, key)
 }

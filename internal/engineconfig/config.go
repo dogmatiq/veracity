@@ -6,8 +6,8 @@ import (
 
 	"github.com/dogmatiq/configkit"
 	"github.com/dogmatiq/dogma"
+	"github.com/dogmatiq/enginekit/protobuf/identitypb"
 	"github.com/dogmatiq/ferrite"
-	"github.com/dogmatiq/interopspec/envelopespec"
 	"github.com/dogmatiq/veracity/internal/telemetry"
 	"github.com/dogmatiq/veracity/persistence/journal"
 	"github.com/dogmatiq/veracity/persistence/kv"
@@ -28,7 +28,7 @@ var FerriteRegistry = ferrite.NewRegistry(
 // engine hosts.
 type Config struct {
 	UseEnv    bool
-	SiteID    *envelopespec.Identity
+	SiteID    *identitypb.Identity
 	NodeID    uuid.UUID
 	Telemetry *telemetry.Provider
 	Tasks     []func(context.Context) error
@@ -57,7 +57,6 @@ func New[Option ~func(*Config)](
 	options []Option,
 ) Config {
 	c := Config{
-		NodeID:    uuid.New(),
 		Telemetry: &telemetry.Provider{},
 	}
 

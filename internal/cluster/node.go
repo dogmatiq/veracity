@@ -1,8 +1,6 @@
 package cluster
 
-import (
-	"github.com/google/uuid"
-)
+import "github.com/google/uuid"
 
 // A Node is a member of the cluster.
 type Node struct {
