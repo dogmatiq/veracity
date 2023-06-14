@@ -1,3 +1,3 @@
-// Package protokv provides utilities for storing protocol buffers messages in
+// Package protokv provides utilities for storing Protocol Buffers messages in
 // key/value stores.
 package protokv
