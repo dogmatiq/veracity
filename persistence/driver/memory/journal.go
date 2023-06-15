@@ -57,7 +57,7 @@ type journalHandle struct {
 	state *journalState
 }
 
-func (h *journalHandle) Get(ctx context.Context, ver uint64) ([]byte, bool, error) {
+func (h *journalHandle) Get(ctx context.Context, offset uint64) ([]byte, bool, error) {
 	if h.state == nil {
 		panic("journal is closed")
 	}
@@ -65,16 +65,16 @@ func (h *journalHandle) Get(ctx context.Context, ver uint64) ([]byte, bool, erro
 	h.state.RLock()
 	defer h.state.RUnlock()
 
-	if ver < h.state.Begin || ver >= h.state.End {
+	if offset < h.state.Begin || offset >= h.state.End {
 		return nil, false, nil
 	}
 
-	return slices.Clone(h.state.Records[ver-h.state.Begin]), true, ctx.Err()
+	return slices.Clone(h.state.Records[offset-h.state.Begin]), true, ctx.Err()
 }
 
 func (h *journalHandle) Range(
 	ctx context.Context,
-	ver uint64,
+	begin uint64,
 	fn journal.RangeFunc,
 ) error {
 	if h.state == nil {
@@ -82,22 +82,22 @@ func (h *journalHandle) Range(
 	}
 
 	h.state.RLock()
-	begin := h.state.Begin
+	first := h.state.Begin
 	records := h.state.Records
 	h.state.RUnlock()
 
-	if begin > ver {
+	if first > begin {
 		return fmt.Errorf("cannot range over truncated records")
 	}
 
-	start := ver - begin
+	start := begin - first
 	for i, rec := range records[start:] {
 		v := start + uint64(i)
 		ok, err := fn(ctx, v, slices.Clone(rec))
 		if !ok || err != nil {
 			return err
 		}
-		ver++
+		begin++
 	}
 
 	return ctx.Err()
@@ -112,22 +112,22 @@ func (h *journalHandle) RangeAll(
 	}
 
 	h.state.RLock()
-	ver := h.state.Begin
+	offset := h.state.Begin
 	records := h.state.Records
 	h.state.RUnlock()
 
 	for _, rec := range records {
-		ok, err := fn(ctx, ver, slices.Clone(rec))
+		ok, err := fn(ctx, offset, slices.Clone(rec))
 		if !ok || err != nil {
 			return err
 		}
-		ver++
+		offset++
 	}
 
 	return ctx.Err()
 }
 
-func (h *journalHandle) Append(ctx context.Context, ver uint64, rec []byte) (bool, error) {
+func (h *journalHandle) Append(ctx context.Context, offset uint64, rec []byte) (bool, error) {
 	if h.state == nil {
 		panic("journal is closed")
 	}
@@ -144,13 +144,13 @@ func (h *journalHandle) Append(ctx context.Context, ver uint64, rec []byte) (boo
 	}
 
 	switch {
-	case ver < h.state.End:
+	case offset < h.state.End:
 		return false, ctx.Err()
-	case ver == h.state.End:
+	case offset == h.state.End:
 		h.state.Records = append(h.state.Records, rec)
 		h.state.End++
 	default:
-		panic("version out of range, this behavior would be undefined in a real journal implementation")
+		panic("offset out of range, this behavior may be undefined in a 'real' journal implementation")
 	}
 
 	if h.state.AfterAppend != nil {
@@ -162,7 +162,7 @@ func (h *journalHandle) Append(ctx context.Context, ver uint64, rec []byte) (boo
 	return true, ctx.Err()
 }
 
-func (h *journalHandle) Truncate(ctx context.Context, ver uint64) error {
+func (h *journalHandle) Truncate(ctx context.Context, end uint64) error {
 	if h.state == nil {
 		panic("journal is closed")
 	}
@@ -170,13 +170,13 @@ func (h *journalHandle) Truncate(ctx context.Context, ver uint64) error {
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	if ver > h.state.End {
-		panic("version out of range, this behavior would be undefined in a real journal implementation")
+	if end > h.state.End {
+		panic("offset out of range, this behavior may be undefined in a real journal implementation")
 	}
 
-	if ver > h.state.Begin {
-		h.state.Records = h.state.Records[ver-h.state.Begin:]
-		h.state.Begin = ver
+	if end > h.state.Begin {
+		h.state.Records = h.state.Records[end-h.state.Begin:]
+		h.state.Begin = end
 	}
 
 	return ctx.Err()

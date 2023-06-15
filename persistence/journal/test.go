@@ -75,7 +75,7 @@ func RunTests(
 		t.Run("func Get()", func(t *testing.T) {
 			t.Parallel()
 
-			t.Run("it returns false if the version doesn't exist", func(t *testing.T) {
+			t.Run("it returns false if there is no record at the given offset", func(t *testing.T) {
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
@@ -96,7 +96,7 @@ func RunTests(
 
 				var expect [][]byte
 
-				// Ensure we test with a version that becomes 2 digits long.
+				// Ensure we test with an offset that becomes 2 digits long.
 				for i := 0; i < 15; i++ {
 					expect = append(
 						expect,
@@ -104,8 +104,8 @@ func RunTests(
 					)
 				}
 
-				for ver, rec := range expect {
-					ok, err := j.Append(ctx, uint64(ver), rec)
+				for offset, rec := range expect {
+					ok, err := j.Append(ctx, uint64(offset), rec)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -114,8 +114,8 @@ func RunTests(
 					}
 				}
 
-				for ver, rec := range expect {
-					actual, ok, err := j.Get(ctx, uint64(ver))
+				for offset, rec := range expect {
+					actual, ok, err := j.Get(ctx, uint64(offset))
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -184,9 +184,9 @@ func RunTests(
 
 				var expect [][]byte
 
-				for ver := uint64(0); ver < 100; ver++ {
-					rec := []byte(fmt.Sprintf("<record-%d>", ver))
-					ok, err := j.Append(ctx, ver, rec)
+				for offset := uint64(0); offset < 100; offset++ {
+					rec := []byte(fmt.Sprintf("<record-%d>", offset))
+					ok, err := j.Append(ctx, offset, rec)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -198,19 +198,19 @@ func RunTests(
 				}
 
 				var actual [][]byte
-				expectVer := uint64(50)
-				expect = expect[expectVer:]
+				expectOffset := uint64(50)
+				expect = expect[expectOffset:]
 
 				if err := j.Range(
 					ctx,
-					expectVer,
-					func(ctx context.Context, ver uint64, rec []byte) (bool, error) {
-						if ver != expectVer {
-							t.Fatalf("unexpected version: want %d, got %d", expectVer, ver)
+					expectOffset,
+					func(ctx context.Context, offset uint64, rec []byte) (bool, error) {
+						if offset != expectOffset {
+							t.Fatalf("unexpected offset: want %d, got %d", expectOffset, offset)
 						}
 
 						actual = append(actual, rec)
-						expectVer++
+						expectOffset++
 
 						return true, nil
 					},
@@ -228,8 +228,8 @@ func RunTests(
 
 				ctx, j := setup(t, newStore)
 
-				for ver := uint64(0); ver < 2; ver++ {
-					ok, err := j.Append(ctx, ver, []byte("<record>"))
+				for offset := uint64(0); offset < 2; offset++ {
+					ok, err := j.Append(ctx, offset, []byte("<record>"))
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -242,7 +242,7 @@ func RunTests(
 				if err := j.Range(
 					ctx,
 					0,
-					func(ctx context.Context, ver uint64, rec []byte) (bool, error) {
+					func(ctx context.Context, offset uint64, rec []byte) (bool, error) {
 						if called {
 							return false, errors.New("unexpected call")
 						}
@@ -268,8 +268,8 @@ func RunTests(
 					[]byte("<record-5>"),
 				}
 
-				for ver, rec := range records {
-					ok, err := j.Append(ctx, uint64(ver), rec)
+				for offset, rec := range records {
+					ok, err := j.Append(ctx, uint64(offset), rec)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -278,8 +278,8 @@ func RunTests(
 					}
 				}
 
-				retainVersion := uint64(len(records) - 1)
-				err := j.Truncate(ctx, retainVersion)
+				retainOffset := uint64(len(records) - 1)
+				err := j.Truncate(ctx, retainOffset)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -287,7 +287,7 @@ func RunTests(
 				err = j.Range(
 					ctx,
 					1,
-					func(ctx context.Context, ver uint64, rec []byte) (bool, error) {
+					func(ctx context.Context, offset uint64, rec []byte) (bool, error) {
 						panic("unexpected call")
 					},
 				)
@@ -317,7 +317,7 @@ func RunTests(
 				if err := j.Range(
 					ctx,
 					0,
-					func(ctx context.Context, ver uint64, rec []byte) (bool, error) {
+					func(ctx context.Context, offset uint64, rec []byte) (bool, error) {
 						rec[0] = 'X'
 
 						return true, nil
@@ -354,9 +354,9 @@ func RunTests(
 
 				var expect [][]byte
 
-				for ver := uint64(0); ver < 100; ver++ {
-					rec := []byte(fmt.Sprintf("<record-%d>", ver))
-					ok, err := j.Append(ctx, ver, rec)
+				for offset := uint64(0); offset < 100; offset++ {
+					rec := []byte(fmt.Sprintf("<record-%d>", offset))
+					ok, err := j.Append(ctx, offset, rec)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -368,17 +368,17 @@ func RunTests(
 				}
 
 				var actual [][]byte
-				var expectVer uint64
+				var expectOffset uint64
 
 				if err := j.RangeAll(
 					ctx,
-					func(ctx context.Context, ver uint64, rec []byte) (bool, error) {
-						if ver != expectVer {
-							t.Fatalf("unexpected version: want %d, got %d", expectVer, ver)
+					func(ctx context.Context, offset uint64, rec []byte) (bool, error) {
+						if offset != expectOffset {
+							t.Fatalf("unexpected offset: want %d, got %d", expectOffset, offset)
 						}
 
 						actual = append(actual, rec)
-						expectVer++
+						expectOffset++
 
 						return true, nil
 					},
@@ -396,8 +396,8 @@ func RunTests(
 
 				ctx, j := setup(t, newStore)
 
-				for ver := uint64(0); ver < 2; ver++ {
-					ok, err := j.Append(ctx, ver, []byte("<record>"))
+				for offset := uint64(0); offset < 2; offset++ {
+					ok, err := j.Append(ctx, offset, []byte("<record>"))
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -409,7 +409,7 @@ func RunTests(
 				called := false
 				if err := j.RangeAll(
 					ctx,
-					func(ctx context.Context, ver uint64, rec []byte) (bool, error) {
+					func(ctx context.Context, offset uint64, rec []byte) (bool, error) {
 						if called {
 							return false, errors.New("unexpected call")
 						}
@@ -435,8 +435,8 @@ func RunTests(
 					[]byte("<record-5>"),
 				}
 
-				for ver, rec := range records {
-					ok, err := j.Append(ctx, uint64(ver), rec)
+				for offset, rec := range records {
+					ok, err := j.Append(ctx, uint64(offset), rec)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -445,21 +445,21 @@ func RunTests(
 					}
 				}
 
-				retainVersion := uint64(len(records) - 1)
-				err := j.Truncate(ctx, retainVersion)
+				retainOffset := uint64(len(records) - 1)
+				err := j.Truncate(ctx, retainOffset)
 				if err != nil {
 					t.Fatal(err)
 				}
 
 				if err := j.RangeAll(
 					ctx,
-					func(ctx context.Context, ver uint64, rec []byte) (bool, error) {
-						if ver != retainVersion {
-							t.Fatalf("unexpected version: want %d, got %d", retainVersion, ver)
+					func(ctx context.Context, offset uint64, rec []byte) (bool, error) {
+						if offset != retainOffset {
+							t.Fatalf("unexpected offset: want %d, got %d", retainOffset, offset)
 						}
 
-						if !bytes.Equal(rec, records[retainVersion]) {
-							t.Fatalf("unexpected record: want %q, got %q", records[retainVersion], rec)
+						if !bytes.Equal(rec, records[retainOffset]) {
+							t.Fatalf("unexpected record: want %q, got %q", records[retainOffset], rec)
 						}
 
 						return false, nil
@@ -514,7 +514,7 @@ func RunTests(
 		t.Run("func Append()", func(t *testing.T) {
 			t.Parallel()
 
-			t.Run("it returns true if the version doesn't exist", func(t *testing.T) {
+			t.Run("it returns true if the offset doesn't exist", func(t *testing.T) {
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
@@ -528,7 +528,7 @@ func RunTests(
 				}
 			})
 
-			t.Run("it returns false if the version already exists", func(t *testing.T) {
+			t.Run("it returns false if the offset already exists", func(t *testing.T) {
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)

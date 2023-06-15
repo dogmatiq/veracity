@@ -11,16 +11,16 @@ func Search(
 	j Journal,
 	begin, end uint64,
 	cmp func(ctx context.Context, rec []byte) (int, error),
-) (ver uint64, rec []byte, ok bool, err error) {
+) (offset uint64, rec []byte, ok bool, err error) {
 	for {
-		ver := begin>>1 + end>>1
+		offset := begin>>1 + end>>1
 
-		rec, ok, err := j.Get(ctx, ver)
+		rec, ok, err := j.Get(ctx, offset)
 		if err != nil {
 			return 0, nil, false, err
 		}
 		if !ok {
-			return 0, nil, false, fmt.Errorf("journal is corrupt: missing version %d", ver)
+			return 0, nil, false, fmt.Errorf("journal is corrupt: missing record at offset %d", offset)
 		}
 
 		n, err := cmp(ctx, rec)
@@ -29,11 +29,11 @@ func Search(
 		}
 
 		if n < 0 {
-			end = ver
+			end = offset
 		} else if n > 0 {
-			begin = ver + 1
+			begin = offset + 1
 		} else {
-			return ver, rec, true, nil
+			return offset, rec, true, nil
 		}
 	}
 }

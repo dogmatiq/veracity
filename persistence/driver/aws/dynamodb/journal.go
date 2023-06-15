@@ -52,9 +52,9 @@ type JournalStore struct {
 }
 
 const (
-	journalNameAttr    = "Name"
-	journalVersionAttr = "Version"
-	journalRecordAttr  = "Record"
+	journalNameAttr   = "Name"
+	journalOffsetAttr = "Offset"
+	journalRecordAttr = "Record"
 )
 
 // Open returns the journal with the given name.
@@ -66,16 +66,16 @@ func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, 
 		DecoratePutItem:    s.DecoratePutItem,
 		DecorateDeleteItem: s.DecorateDeleteItem,
 
-		name:    &types.AttributeValueMemberS{Value: name},
-		version: &types.AttributeValueMemberN{},
-		record:  &types.AttributeValueMemberB{},
+		name:   &types.AttributeValueMemberS{Value: name},
+		offset: &types.AttributeValueMemberN{},
+		record: &types.AttributeValueMemberB{},
 	}
 
 	j.getRequest = dynamodb.GetItemInput{
 		TableName: aws.String(s.Table),
 		Key: map[string]types.AttributeValue{
-			journalNameAttr:    j.name,
-			journalVersionAttr: j.version,
+			journalNameAttr:   j.name,
+			journalOffsetAttr: j.offset,
 		},
 		ProjectionExpression: aws.String(`#R`),
 		ExpressionAttributeNames: map[string]string{
@@ -85,16 +85,16 @@ func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, 
 
 	j.queryRequest = dynamodb.QueryInput{
 		TableName:              aws.String(s.Table),
-		KeyConditionExpression: aws.String(`#N = :N AND #V >= :V`),
-		ProjectionExpression:   aws.String("#V, #R"),
+		KeyConditionExpression: aws.String(`#N = :N AND #O >= :O`),
+		ProjectionExpression:   aws.String("#O, #R"),
 		ExpressionAttributeNames: map[string]string{
 			"#N": journalNameAttr,
-			"#V": journalVersionAttr,
+			"#O": journalOffsetAttr,
 			"#R": journalRecordAttr,
 		},
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":N": j.name,
-			":V": j.version,
+			":O": j.offset,
 		},
 	}
 
@@ -105,17 +105,17 @@ func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, 
 			"#N": journalNameAttr,
 		},
 		Item: map[string]types.AttributeValue{
-			journalNameAttr:    j.name,
-			journalVersionAttr: j.version,
-			journalRecordAttr:  j.record,
+			journalNameAttr:   j.name,
+			journalOffsetAttr: j.offset,
+			journalRecordAttr: j.record,
 		},
 	}
 
 	j.deleteRequest = dynamodb.DeleteItemInput{
 		TableName: aws.String(s.Table),
 		Key: map[string]types.AttributeValue{
-			journalNameAttr:    j.name,
-			journalVersionAttr: j.version,
+			journalNameAttr:   j.name,
+			journalOffsetAttr: j.offset,
 		},
 	}
 
@@ -131,9 +131,9 @@ type journ struct {
 	DecoratePutItem    func(*dynamodb.PutItemInput) []func(*dynamodb.Options)
 	DecorateDeleteItem func(*dynamodb.DeleteItemInput) []func(*dynamodb.Options)
 
-	name    *types.AttributeValueMemberS
-	version *types.AttributeValueMemberN
-	record  *types.AttributeValueMemberB
+	name   *types.AttributeValueMemberS
+	offset *types.AttributeValueMemberN
+	record *types.AttributeValueMemberB
 
 	getRequest    dynamodb.GetItemInput
 	queryRequest  dynamodb.QueryInput
@@ -141,8 +141,8 @@ type journ struct {
 	deleteRequest dynamodb.DeleteItemInput
 }
 
-func (j *journ) Get(ctx context.Context, ver uint64) ([]byte, bool, error) {
-	j.version.Value = strconv.FormatUint(ver, 10)
+func (j *journ) Get(ctx context.Context, offset uint64) ([]byte, bool, error) {
+	j.offset.Value = strconv.FormatUint(offset, 10)
 
 	out, err := awsx.Do(
 		ctx,
@@ -161,27 +161,27 @@ func (j *journ) Get(ctx context.Context, ver uint64) ([]byte, bool, error) {
 
 func (j *journ) Range(
 	ctx context.Context,
-	ver uint64,
+	begin uint64,
 	fn journal.RangeFunc,
 ) error {
-	checkVersion := true
+	checkOffset := true
 
 	return j.rangeQuery(
 		ctx,
-		ver,
+		begin,
 		func(
 			ctx context.Context,
-			v uint64,
+			offset uint64,
 			rec []byte,
 		) (bool, error) {
-			if checkVersion {
-				if v != ver {
+			if checkOffset {
+				if offset != begin {
 					return false, errors.New("cannot range over truncated records")
 				}
-				checkVersion = false
+				checkOffset = false
 			}
 
-			return fn(ctx, v, rec)
+			return fn(ctx, offset, rec)
 		},
 	)
 }
@@ -199,9 +199,9 @@ func (j *journ) rangeQuery(
 	fn func(context.Context, uint64, []byte) (bool, error),
 ) error {
 	j.queryRequest.ExclusiveStartKey = nil
-	j.version.Value = strconv.FormatUint(begin, 10)
+	j.offset.Value = strconv.FormatUint(begin, 10)
 
-	var expectVer uint64
+	var expectOffset uint64
 
 	for {
 		out, err := awsx.Do(
@@ -215,28 +215,28 @@ func (j *journ) rangeQuery(
 		}
 
 		for _, item := range out.Items {
-			attr, ok := item[journalVersionAttr]
+			attr, ok := item[journalOffsetAttr]
 			if !ok {
-				return errors.New("journal is corrupt: item is missing version attribute")
+				return errors.New("journal is corrupt: item is missing offset attribute")
 			}
 
-			ver, err := strconv.ParseUint(attr.(*types.AttributeValueMemberN).Value, 10, 64)
+			offset, err := strconv.ParseUint(attr.(*types.AttributeValueMemberN).Value, 10, 64)
 			if err != nil {
 				return err
 			}
 
-			if expectVer != 0 && ver != expectVer {
-				return fmt.Errorf("journal is corrupt: item has incorrect version (%d), expected %d", ver, expectVer)
+			if expectOffset != 0 && offset != expectOffset {
+				return fmt.Errorf("journal is corrupt: item has incorrect offset (%d), expected %d", offset, expectOffset)
 			}
 
-			expectVer = ver + 1
+			expectOffset = offset + 1
 
 			attr, ok = item[journalRecordAttr]
 			if !ok {
 				return errors.New("journal is corrupt: item is missing record attribute")
 			}
 
-			ok, err = fn(ctx, ver, attr.(*types.AttributeValueMemberB).Value)
+			ok, err = fn(ctx, offset, attr.(*types.AttributeValueMemberB).Value)
 			if !ok || err != nil {
 				return err
 			}
@@ -250,8 +250,8 @@ func (j *journ) rangeQuery(
 	}
 }
 
-func (j *journ) Append(ctx context.Context, ver uint64, rec []byte) (bool, error) {
-	j.version.Value = strconv.FormatUint(ver, 10)
+func (j *journ) Append(ctx context.Context, offset uint64, rec []byte) (bool, error) {
+	j.offset.Value = strconv.FormatUint(offset, 10)
 	j.record.Value = rec
 
 	_, err := awsx.Do(
@@ -268,15 +268,15 @@ func (j *journ) Append(ctx context.Context, ver uint64, rec []byte) (bool, error
 	return true, err
 }
 
-func (j *journ) Truncate(ctx context.Context, ver uint64) error {
+func (j *journ) Truncate(ctx context.Context, end uint64) error {
 	return j.RangeAll(
 		ctx,
-		func(ctx context.Context, v uint64, _ []byte) (bool, error) {
-			if v >= ver {
+		func(ctx context.Context, offset uint64, _ []byte) (bool, error) {
+			if offset >= end {
 				return false, nil
 			}
 
-			j.version.Value = strconv.FormatUint(v, 10)
+			j.offset.Value = strconv.FormatUint(offset, 10)
 
 			_, err := awsx.Do(
 				ctx,
@@ -319,7 +319,7 @@ func CreateJournalStoreTable(
 					AttributeType: types.ScalarAttributeTypeS,
 				},
 				{
-					AttributeName: aws.String(journalVersionAttr),
+					AttributeName: aws.String(journalOffsetAttr),
 					AttributeType: types.ScalarAttributeTypeN,
 				},
 			},
@@ -329,7 +329,7 @@ func CreateJournalStoreTable(
 					KeyType:       types.KeyTypeHash,
 				},
 				{
-					AttributeName: aws.String(journalVersionAttr),
+					AttributeName: aws.String(journalOffsetAttr),
 					KeyType:       types.KeyTypeRange,
 				},
 			},

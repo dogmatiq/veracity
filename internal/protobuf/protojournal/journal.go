@@ -10,19 +10,18 @@ import (
 )
 
 // A RangeFunc is a function used to range over the records in a [Journal].
-type RangeFunc[T proto.Message] func(ctx context.Context, ver uint64, rec T) (ok bool, err error)
+type RangeFunc[T proto.Message] func(ctx context.Context, offset uint64, rec T) (ok bool, err error)
 
-// Get returns the record written to produce the given version of the
-// journal.
+// Get returns the record at the given offset.
 func Get[
 	T typedproto.Message[S],
 	S typedproto.MessageStruct,
 ](
 	ctx context.Context,
 	j journal.Journal,
-	ver uint64,
+	offset uint64,
 ) (T, bool, error) {
-	data, ok, err := j.Get(ctx, ver)
+	data, ok, err := j.Get(ctx, offset)
 	if !ok || err != nil {
 		return nil, ok, err
 	}
@@ -35,26 +34,26 @@ func Get[
 	return rec, true, nil
 }
 
-// Range invokes fn for each record in the journal, beginning at the given
-// version, in order.
+// Range invokes fn for each record in the journal, in order, beginning at the
+// given offset.
 func Range[
 	T typedproto.Message[S],
 	S typedproto.MessageStruct,
 ](
 	ctx context.Context,
 	j journal.Journal,
-	ver uint64,
+	begin uint64,
 	fn RangeFunc[T],
 ) error {
 	return j.Range(
 		ctx,
-		ver,
-		func(ctx context.Context, ver uint64, data []byte) (bool, error) {
+		begin,
+		func(ctx context.Context, offset uint64, data []byte) (bool, error) {
 			rec, err := typedproto.Unmarshal[T](data)
 			if err != nil {
 				return false, fmt.Errorf("unable to unmarshal record: %w", err)
 			}
-			return fn(ctx, ver, rec)
+			return fn(ctx, offset, rec)
 		},
 	)
 }
@@ -70,12 +69,12 @@ func RangeAll[
 ) error {
 	return j.RangeAll(
 		ctx,
-		func(ctx context.Context, ver uint64, data []byte) (bool, error) {
+		func(ctx context.Context, offset uint64, data []byte) (bool, error) {
 			rec, err := typedproto.Unmarshal[T](data)
 			if err != nil {
 				return false, fmt.Errorf("unable to unmarshal record: %w", err)
 			}
-			return fn(ctx, ver, rec)
+			return fn(ctx, offset, rec)
 		},
 	)
 }
@@ -87,12 +86,12 @@ func Append[
 ](
 	ctx context.Context,
 	j journal.Journal,
-	ver uint64,
+	offset uint64,
 	rec T,
 ) (bool, error) {
 	data, err := typedproto.Marshal(rec)
 	if err != nil {
 		return false, fmt.Errorf("unable to marshal record: %w", err)
 	}
-	return j.Append(ctx, ver, data)
+	return j.Append(ctx, offset, data)
 }

@@ -30,16 +30,15 @@ type journ struct {
 	DB   *sql.DB
 }
 
-func (j *journ) Get(ctx context.Context, ver uint64) ([]byte, bool, error) {
+func (j *journ) Get(ctx context.Context, offset uint64) ([]byte, bool, error) {
 	row := j.DB.QueryRowContext(
 		ctx,
-		`SELECT
-			record
+		`SELECT record
 		FROM veracity.journal
 		WHERE name = $1
-		AND version = $2`,
+		AND "offset" = $2`,
 		j.Name,
-		ver,
+		offset,
 	)
 
 	var rec []byte
@@ -53,41 +52,41 @@ func (j *journ) Get(ctx context.Context, ver uint64) ([]byte, bool, error) {
 
 func (j *journ) Range(
 	ctx context.Context,
-	ver uint64,
+	begin uint64,
 	fn journal.RangeFunc,
 ) error {
+	// TODO: use a limit and offset to "page" through records
 	rows, err := j.DB.QueryContext(
 		ctx,
-		`SELECT
-			version,
-			record
+		`SELECT "offset", record
 		FROM veracity.journal
 		WHERE name = $1
-		AND version >= $2
-		ORDER BY version`,
+		AND "offset" >= $2
+		ORDER BY "offset"`,
 		j.Name,
-		ver,
+		begin,
 	)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
-	expectedVersion := ver
+	expectedOffset := begin
+
 	for rows.Next() {
 		var (
-			v   uint64
-			rec []byte
+			offset uint64
+			rec    []byte
 		)
-		if err = rows.Scan(&v, &rec); err != nil {
+		if err = rows.Scan(&offset, &rec); err != nil {
 			return err
 		}
-		if v != expectedVersion {
+		if offset != expectedOffset {
 			return errors.New("cannot range over truncated records")
 		}
-		expectedVersion++
+		expectedOffset++
 
-		ok, err := fn(ctx, v, rec)
+		ok, err := fn(ctx, offset, rec)
 		if !ok || err != nil {
 			return err
 		}
@@ -100,14 +99,13 @@ func (j *journ) RangeAll(
 	ctx context.Context,
 	fn journal.RangeFunc,
 ) error {
+	// TODO: use a limit and offset to "page" through records
 	rows, err := j.DB.QueryContext(
 		ctx,
-		`SELECT
-		 	version,
-			record
+		`SELECT "offset", record
 		FROM veracity.journal
 		WHERE name = $1
-		ORDER BY version`,
+		ORDER BY "offset"`,
 		j.Name,
 	)
 	if err != nil {
@@ -116,27 +114,28 @@ func (j *journ) RangeAll(
 	defer rows.Close()
 
 	var (
-		firstIteration  = true
-		expectedVersion uint64
+		firstIteration = true
+		expectedOffset uint64
 	)
 	for rows.Next() {
 		var (
-			v   uint64
-			rec []byte
+			offset uint64
+			rec    []byte
 		)
-		if err = rows.Scan(&v, &rec); err != nil {
+		if err = rows.Scan(&offset, &rec); err != nil {
 			return err
 		}
 
 		if firstIteration {
-			expectedVersion = v
+			expectedOffset = offset
 			firstIteration = false
-		} else if v != expectedVersion {
+		} else if offset != expectedOffset {
 			return errors.New("cannot range over truncated records")
 		}
-		expectedVersion++
 
-		ok, err := fn(ctx, v, rec)
+		expectedOffset++
+
+		ok, err := fn(ctx, offset, rec)
 		if !ok || err != nil {
 			return err
 		}
@@ -145,18 +144,14 @@ func (j *journ) RangeAll(
 	return rows.Err()
 }
 
-func (j *journ) Append(ctx context.Context, ver uint64, rec []byte) (bool, error) {
+func (j *journ) Append(ctx context.Context, offset uint64, rec []byte) (bool, error) {
 	res, err := j.DB.ExecContext(
 		ctx,
-		`INSERT INTO veracity.journal (
-			name,
-			version,
-			record
-		) VALUES (
-			$1, $2, $3
-		) ON CONFLICT (name, version) DO NOTHING`,
+		`INSERT INTO veracity.journal
+		(name, "offset", record) VALUES ($1, $2, $3)
+		ON CONFLICT (name, "offset") DO NOTHING`,
 		j.Name,
-		ver,
+		offset,
 		rec,
 	)
 	if err != nil {
@@ -167,14 +162,14 @@ func (j *journ) Append(ctx context.Context, ver uint64, rec []byte) (bool, error
 	return ra == 1, err
 }
 
-func (j *journ) Truncate(ctx context.Context, ver uint64) error {
+func (j *journ) Truncate(ctx context.Context, end uint64) error {
 	_, err := j.DB.ExecContext(
 		ctx,
 		`DELETE FROM veracity.journal
 		WHERE name = $1
-		AND version < $2`,
+		AND "offset" < $2`,
 		j.Name,
-		ver,
+		end,
 	)
 
 	return err
@@ -203,11 +198,11 @@ func CreateJournalStoreSchema(
 	if _, err := db.ExecContext(
 		ctx,
 		`CREATE TABLE IF NOT EXISTS veracity.journal (
-			name    TEXT NOT NULL,
-			version BIGINT NOT NULL,
-			record  BYTEA NOT NULL,
+			name     TEXT NOT NULL,
+			"offset" BIGINT NOT NULL,
+			record   BYTEA NOT NULL,
 
-			PRIMARY KEY (name, version)
+			PRIMARY KEY (name, "offset")
 		)`,
 	); err != nil {
 		return err

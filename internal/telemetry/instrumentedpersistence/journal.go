@@ -43,7 +43,7 @@ func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, 
 		),
 		ConflictCount: r.Int64Counter(
 			"conflicts",
-			metric.WithDescription("The number of times appending a record to the journal has failed due to a version conflict."),
+			metric.WithDescription("The number of times appending a record to the journal has failed due to a optimistic-concurrency conflict."),
 			metric.WithUnit("{conflict}"),
 		),
 		DataIO: r.Int64Counter(
@@ -80,15 +80,15 @@ type journ struct {
 	RecordSize    metric.Int64Histogram
 }
 
-func (j *journ) Get(ctx context.Context, ver uint64) (_ []byte, ok bool, err error) {
+func (j *journ) Get(ctx context.Context, offset uint64) (_ []byte, ok bool, err error) {
 	ctx, span := j.Telemetry.StartSpan(
 		ctx,
 		"journal.get",
-		telemetry.Int("version", ver),
+		telemetry.Int("offset", offset),
 	)
 	defer span.End()
 
-	rec, ok, err := j.Next.Get(ctx, ver)
+	rec, ok, err := j.Next.Get(ctx, offset)
 	if err != nil {
 		span.Error("could not fetch journal record", err)
 		return nil, false, err
@@ -116,13 +116,13 @@ func (j *journ) Get(ctx context.Context, ver uint64) (_ []byte, ok bool, err err
 
 func (j *journ) Range(
 	ctx context.Context,
-	ver uint64,
+	begin uint64,
 	fn journal.RangeFunc,
 ) error {
 	ctx, span := j.Telemetry.StartSpan(
 		ctx,
 		"journal.range",
-		telemetry.Int("range_start", ver),
+		telemetry.Int("range_start", begin),
 	)
 	defer span.End()
 
@@ -131,7 +131,7 @@ func (j *journ) Range(
 		span,
 		fn,
 		func(ctx context.Context, fn journal.RangeFunc) error {
-			return j.Next.Range(ctx, ver, fn)
+			return j.Next.Range(ctx, begin, fn)
 		},
 	)
 }
@@ -167,9 +167,9 @@ func (j *journ) instrumentRange(
 
 	err := doRange(
 		ctx,
-		func(ctx context.Context, ver uint64, rec []byte) (bool, error) {
+		func(ctx context.Context, offset uint64, rec []byte) (bool, error) {
 			if count == 0 {
-				first = ver
+				first = offset
 			}
 			count++
 
@@ -180,7 +180,7 @@ func (j *journ) instrumentRange(
 			j.RecordIO.Add(ctx, 1, telemetry.ReadDirection)
 			j.RecordSize.Record(ctx, size, telemetry.ReadDirection)
 
-			ok, err := fn(ctx, ver, rec)
+			ok, err := fn(ctx, offset, rec)
 			if ok || err != nil {
 				return ok, err
 			}
@@ -213,13 +213,13 @@ func (j *journ) instrumentRange(
 	return nil
 }
 
-func (j *journ) Append(ctx context.Context, ver uint64, rec []byte) (bool, error) {
+func (j *journ) Append(ctx context.Context, offset uint64, rec []byte) (bool, error) {
 	size := int64(len(rec))
 
 	ctx, span := j.Telemetry.StartSpan(
 		ctx,
 		"journal.append",
-		telemetry.Int("version", ver),
+		telemetry.Int("offset", offset),
 		telemetry.Int("record_size", size),
 	)
 	defer span.End()
@@ -228,7 +228,7 @@ func (j *journ) Append(ctx context.Context, ver uint64, rec []byte) (bool, error
 	j.RecordIO.Add(ctx, 1, telemetry.WriteDirection)
 	j.RecordSize.Record(ctx, size, telemetry.WriteDirection)
 
-	ok, err := j.Next.Append(ctx, ver, rec)
+	ok, err := j.Next.Append(ctx, offset, rec)
 	if err != nil {
 		span.Error("unable to append journal record", err)
 		return false, err
@@ -243,21 +243,21 @@ func (j *journ) Append(ctx context.Context, ver uint64, rec []byte) (bool, error
 
 		j.ConflictCount.Add(ctx, 1)
 
-		span.Error("journal version conflict", nil)
+		span.Error("journal record conflict", nil)
 	}
 
 	return ok, nil
 }
 
-func (j *journ) Truncate(ctx context.Context, ver uint64) error {
+func (j *journ) Truncate(ctx context.Context, end uint64) error {
 	ctx, span := j.Telemetry.StartSpan(
 		ctx,
 		"journal.truncate",
-		telemetry.Int("retained_version", ver),
+		telemetry.Int("retained_offset", end),
 	)
 	defer span.End()
 
-	if err := j.Next.Truncate(ctx, ver); err != nil {
+	if err := j.Next.Truncate(ctx, end); err != nil {
 		span.Error("unable to truncate journal", err)
 		return err
 	}
