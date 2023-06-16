@@ -44,6 +44,7 @@ require (
 	github.com/dogmatiq/interopspec v0.5.2 // indirect
 	github.com/dogmatiq/linger v1.1.0 // indirect
 	github.com/dogmatiq/projectionkit v0.6.5 // indirect
+	github.com/fxamacker/cbor/v2 v2.4.0 // indirect
 	github.com/go-logr/logr v1.2.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-sql-driver/mysql v1.5.0 // indirect
@@ -62,6 +63,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.14 // indirect
 	github.com/mattn/go-sqlite3 v1.14.17 // indirect
 	github.com/rivo/uniseg v0.4.4 // indirect
+	github.com/x448/float16 v0.8.4 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.1.0 // indirect
 	golang.org/x/net v0.10.0 // indirect
