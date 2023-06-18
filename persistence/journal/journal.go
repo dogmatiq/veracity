@@ -12,6 +12,10 @@ type RangeFunc func(ctx context.Context, offset uint64, rec []byte) (ok bool, er
 
 // A Journal is an append-only log of binary records.
 type Journal interface {
+	// Bounds returns the half-open range [begin, end) describing the offsets of
+	// the journal records that are available for reading.
+	Bounds(ctx context.Context) (begin, end uint64, err error)
+
 	// Get returns the record at the given offset.
 	//
 	// ok is false if the record does not exist, either because it has been

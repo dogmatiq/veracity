@@ -71,6 +71,21 @@ func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, 
 		record: &types.AttributeValueMemberB{},
 	}
 
+	j.boundsQueryRequest = dynamodb.QueryInput{
+		TableName:              aws.String(s.Table),
+		KeyConditionExpression: aws.String(`#N = :N`),
+		ProjectionExpression:   aws.String("#O"),
+		ExpressionAttributeNames: map[string]string{
+			"#N": journalNameAttr,
+			"#O": journalOffsetAttr,
+		},
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":N": j.name,
+		},
+		ScanIndexForward: aws.Bool(true),
+		Limit:            aws.Int32(1),
+	}
+
 	j.getRequest = dynamodb.GetItemInput{
 		TableName: aws.String(s.Table),
 		Key: map[string]types.AttributeValue{
@@ -83,7 +98,7 @@ func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, 
 		},
 	}
 
-	j.queryRequest = dynamodb.QueryInput{
+	j.rangeQueryRequest = dynamodb.QueryInput{
 		TableName:              aws.String(s.Table),
 		KeyConditionExpression: aws.String(`#N = :N AND #O >= :O`),
 		ProjectionExpression:   aws.String("#O, #R"),
@@ -135,10 +150,47 @@ type journ struct {
 	offset *types.AttributeValueMemberN
 	record *types.AttributeValueMemberB
 
-	getRequest    dynamodb.GetItemInput
-	queryRequest  dynamodb.QueryInput
-	putRequest    dynamodb.PutItemInput
-	deleteRequest dynamodb.DeleteItemInput
+	boundsQueryRequest dynamodb.QueryInput
+	getRequest         dynamodb.GetItemInput
+	rangeQueryRequest  dynamodb.QueryInput
+	putRequest         dynamodb.PutItemInput
+	deleteRequest      dynamodb.DeleteItemInput
+}
+
+func (j *journ) Bounds(ctx context.Context) (begin, end uint64, err error) {
+	*j.boundsQueryRequest.ScanIndexForward = true
+	out, err := awsx.Do(
+		ctx,
+		j.Client.Query,
+		j.DecorateQuery,
+		&j.boundsQueryRequest,
+	)
+	if err != nil || len(out.Items) == 0 {
+		return 0, 0, err
+	}
+
+	begin, err = parseOffset(out.Items[0])
+	if err != nil {
+		return 0, 0, err
+	}
+
+	*j.boundsQueryRequest.ScanIndexForward = false
+	out, err = awsx.Do(
+		ctx,
+		j.Client.Query,
+		j.DecorateQuery,
+		&j.boundsQueryRequest,
+	)
+	if err != nil || len(out.Items) == 0 {
+		return 0, 0, err
+	}
+
+	end, err = parseOffset(out.Items[0])
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return begin, end + 1, nil
 }
 
 func (j *journ) Get(ctx context.Context, offset uint64) ([]byte, bool, error) {
@@ -150,13 +202,16 @@ func (j *journ) Get(ctx context.Context, offset uint64) ([]byte, bool, error) {
 		j.DecorateGetItem,
 		&j.getRequest,
 	)
-	if out.Item == nil || err != nil {
+	if err != nil || out.Item == nil {
 		return nil, false, err
 	}
 
-	b := out.Item[journalRecordAttr].(*types.AttributeValueMemberB)
+	rec, err := getAttr[*types.AttributeValueMemberB](out.Item, journalRecordAttr)
+	if err != nil {
+		return nil, false, err
+	}
 
-	return b.Value, true, nil
+	return rec.Value, true, nil
 }
 
 func (j *journ) Range(
@@ -198,7 +253,7 @@ func (j *journ) rangeQuery(
 	begin uint64,
 	fn func(context.Context, uint64, []byte) (bool, error),
 ) error {
-	j.queryRequest.ExclusiveStartKey = nil
+	j.rangeQueryRequest.ExclusiveStartKey = nil
 	j.offset.Value = strconv.FormatUint(begin, 10)
 
 	var expectOffset uint64
@@ -208,35 +263,35 @@ func (j *journ) rangeQuery(
 			ctx,
 			j.Client.Query,
 			j.DecorateQuery,
-			&j.queryRequest,
+			&j.rangeQueryRequest,
 		)
 		if err != nil {
 			return err
 		}
 
 		for _, item := range out.Items {
-			attr, ok := item[journalOffsetAttr]
-			if !ok {
-				return errors.New("journal is corrupt: item is missing offset attribute")
-			}
-
-			offset, err := strconv.ParseUint(attr.(*types.AttributeValueMemberN).Value, 10, 64)
+			offset, err := parseOffset(item)
 			if err != nil {
 				return err
 			}
 
 			if expectOffset != 0 && offset != expectOffset {
-				return fmt.Errorf("journal is corrupt: item has incorrect offset (%d), expected %d", offset, expectOffset)
+				return fmt.Errorf(
+					"item is corrupt: %q attribute should be %d not %d",
+					journalOffsetAttr,
+					expectOffset,
+					offset,
+				)
 			}
 
 			expectOffset = offset + 1
 
-			attr, ok = item[journalRecordAttr]
-			if !ok {
-				return errors.New("journal is corrupt: item is missing record attribute")
+			rec, err := getAttr[*types.AttributeValueMemberB](item, journalRecordAttr)
+			if err != nil {
+				return err
 			}
 
-			ok, err = fn(ctx, offset, attr.(*types.AttributeValueMemberB).Value)
+			ok, err := fn(ctx, offset, rec.Value)
 			if !ok || err != nil {
 				return err
 			}
@@ -246,7 +301,7 @@ func (j *journ) rangeQuery(
 			return nil
 		}
 
-		j.queryRequest.ExclusiveStartKey = out.LastEvaluatedKey
+		j.rangeQueryRequest.ExclusiveStartKey = out.LastEvaluatedKey
 	}
 }
 
@@ -284,6 +339,7 @@ func (j *journ) Truncate(ctx context.Context, end uint64) error {
 				j.DecorateDeleteItem,
 				&j.deleteRequest,
 			)
+
 			return true, err
 		},
 	)
@@ -342,4 +398,19 @@ func CreateJournalStoreTable(
 	}
 
 	return err
+}
+
+// parseOffset parses the offset attribute in the given item.
+func parseOffset(item map[string]types.AttributeValue) (uint64, error) {
+	attr, err := getAttr[*types.AttributeValueMemberN](item, journalOffsetAttr)
+	if err != nil {
+		return 0, err
+	}
+
+	offset, err := strconv.ParseUint(attr.Value, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("item is corrupt: invalid offset: %w", err)
+	}
+
+	return offset, nil
 }

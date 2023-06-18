@@ -57,6 +57,17 @@ type journalHandle struct {
 	state *journalState
 }
 
+func (h *journalHandle) Bounds(ctx context.Context) (begin, end uint64, err error) {
+	if h.state == nil {
+		panic("journal is closed")
+	}
+
+	h.state.RLock()
+	defer h.state.RUnlock()
+
+	return h.state.Begin, h.state.End, ctx.Err()
+}
+
 func (h *journalHandle) Get(ctx context.Context, offset uint64) ([]byte, bool, error) {
 	if h.state == nil {
 		panic("journal is closed")

@@ -80,7 +80,30 @@ type journ struct {
 	RecordSize    metric.Int64Histogram
 }
 
-func (j *journ) Get(ctx context.Context, offset uint64) (_ []byte, ok bool, err error) {
+func (j *journ) Bounds(ctx context.Context) (uint64, uint64, error) {
+	ctx, span := j.Telemetry.StartSpan(
+		ctx,
+		"journal.bounds",
+	)
+	defer span.End()
+
+	begin, end, err := j.Next.Bounds(ctx)
+	if err != nil {
+		span.Error("could not fetch journal bounds", err)
+		return 0, 0, err
+	}
+
+	span.SetAttributes(
+		telemetry.Int("begin", begin),
+		telemetry.Int("end", end),
+	)
+
+	span.Debug("fetched journal bounds")
+
+	return begin, end, nil
+}
+
+func (j *journ) Get(ctx context.Context, offset uint64) ([]byte, bool, error) {
 	ctx, span := j.Telemetry.StartSpan(
 		ctx,
 		"journal.get",
@@ -267,7 +290,7 @@ func (j *journ) Truncate(ctx context.Context, end uint64) error {
 	return nil
 }
 
-func (j *journ) Close() (err error) {
+func (j *journ) Close() error {
 	ctx, span := j.Telemetry.StartSpan(context.Background(), "journal.close")
 	defer span.End()
 

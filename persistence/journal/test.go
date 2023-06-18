@@ -72,6 +72,64 @@ func RunTests(
 	t.Run("type Journal", func(t *testing.T) {
 		t.Parallel()
 
+		t.Run("func Bounds()", func(t *testing.T) {
+			t.Parallel()
+
+			t.Run("it returns the expected bounds", func(t *testing.T) {
+				cases := []struct {
+					Desc                   string
+					ExpectBegin, ExpectEnd uint64
+					Setup                  func(ctx context.Context, t *testing.T, j Journal)
+				}{
+					{
+						"empty",
+						0, 0,
+						func(ctx context.Context, t *testing.T, j Journal) {},
+					},
+					{
+						"with records",
+						0, 10,
+						func(ctx context.Context, t *testing.T, j Journal) {
+							appendRecords(ctx, t, j, 10)
+						},
+					},
+					{
+						"with truncated records",
+						5, 10,
+						func(ctx context.Context, t *testing.T, j Journal) {
+							appendRecords(ctx, t, j, 10)
+							if err := j.Truncate(ctx, 5); err != nil {
+								t.Fatal(err)
+							}
+						},
+					},
+				}
+
+				for _, c := range cases {
+					c := c // capture loop variable
+					t.Run(c.Desc, func(t *testing.T) {
+						t.Parallel()
+
+						ctx, j := setup(t, newStore)
+						c.Setup(ctx, t, j)
+
+						begin, end, err := j.Bounds(ctx)
+						if err != nil {
+							t.Fatal(err)
+						}
+
+						if begin != c.ExpectBegin {
+							t.Fatalf("unexpected begin offset, want %d, got %d", c.ExpectBegin, begin)
+						}
+
+						if end != c.ExpectEnd {
+							t.Fatalf("unexpected end offset, want %d, got %d", c.ExpectEnd, end)
+						}
+					})
+				}
+			})
+		})
+
 		t.Run("func Get()", func(t *testing.T) {
 			t.Parallel()
 
@@ -94,25 +152,10 @@ func RunTests(
 
 				ctx, j := setup(t, newStore)
 
-				var expect [][]byte
-
-				// Ensure we test with an offset that becomes 2 digits long.
-				for i := 0; i < 15; i++ {
-					expect = append(
-						expect,
-						[]byte(fmt.Sprintf("<record-%d>", i)),
-					)
-				}
-
-				for offset, rec := range expect {
-					ok, err := j.Append(ctx, uint64(offset), rec)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if !ok {
-						t.Fatal("unexpected optimistic concurrency conflict")
-					}
-				}
+				// Ensure we test with an offset that becomes 2 digits long to
+				// confirm that the implementation is not using a lexical sort
+				// on the offset.
+				expect := appendRecords(ctx, t, j, 15)
 
 				for offset, rec := range expect {
 					actual, ok, err := j.Get(ctx, uint64(offset))
@@ -137,14 +180,7 @@ func RunTests(
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
-
-				ok, err := j.Append(ctx, 0, []byte("<record>"))
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !ok {
-					t.Fatal("unexpected optimistic concurrency conflict")
-				}
+				appendRecords(ctx, t, j, 1)
 
 				rec, ok, err := j.Get(ctx, 0)
 				if err != nil {
@@ -164,7 +200,7 @@ func RunTests(
 					t.Fatal("expected record to exist")
 				}
 
-				if expect := []byte("<record>"); !bytes.Equal(expect, actual) {
+				if expect := []byte("<record-0>"); !bytes.Equal(expect, actual) {
 					t.Fatalf(
 						"unexpected record, want %q, got %q",
 						string(expect),
@@ -181,24 +217,10 @@ func RunTests(
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
-
-				var expect [][]byte
-
-				for offset := uint64(0); offset < 100; offset++ {
-					rec := []byte(fmt.Sprintf("<record-%d>", offset))
-					ok, err := j.Append(ctx, offset, rec)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if !ok {
-						t.Fatal("unexpected optimistic concurrency conflict")
-					}
-
-					expect = append(expect, rec)
-				}
+				expect := appendRecords(ctx, t, j, 15)
 
 				var actual [][]byte
-				expectOffset := uint64(50)
+				expectOffset := uint64(10)
 				expect = expect[expectOffset:]
 
 				if err := j.Range(
@@ -227,16 +249,7 @@ func RunTests(
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
-
-				for offset := uint64(0); offset < 2; offset++ {
-					ok, err := j.Append(ctx, offset, []byte("<record>"))
-					if err != nil {
-						t.Fatal(err)
-					}
-					if !ok {
-						t.Fatal("unexpected optimistic concurrency conflict")
-					}
-				}
+				appendRecords(ctx, t, j, 2)
 
 				called := false
 				if err := j.Range(
@@ -259,26 +272,9 @@ func RunTests(
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
-
-				records := [][]byte{
-					[]byte("<record-1>"),
-					[]byte("<record-2>"),
-					[]byte("<record-3>"),
-					[]byte("<record-4>"),
-					[]byte("<record-5>"),
-				}
-
-				for offset, rec := range records {
-					ok, err := j.Append(ctx, uint64(offset), rec)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if !ok {
-						t.Fatal("unexpected optimistic concurrency conflict")
-					}
-				}
-
+				records := appendRecords(ctx, t, j, 5)
 				retainOffset := uint64(len(records) - 1)
+
 				err := j.Truncate(ctx, retainOffset)
 				if err != nil {
 					t.Fatal(err)
@@ -305,14 +301,7 @@ func RunTests(
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
-
-				ok, err := j.Append(ctx, 0, []byte("<record>"))
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !ok {
-					t.Fatal("unexpected optimistic concurrency conflict")
-				}
+				appendRecords(ctx, t, j, 1)
 
 				if err := j.Range(
 					ctx,
@@ -334,7 +323,7 @@ func RunTests(
 					t.Fatal("expected record to exist")
 				}
 
-				if expect := []byte("<record>"); !bytes.Equal(expect, actual) {
+				if expect := []byte("<record-0>"); !bytes.Equal(expect, actual) {
 					t.Fatalf(
 						"unexpected record, want %q, got %q",
 						string(expect),
@@ -351,21 +340,7 @@ func RunTests(
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
-
-				var expect [][]byte
-
-				for offset := uint64(0); offset < 100; offset++ {
-					rec := []byte(fmt.Sprintf("<record-%d>", offset))
-					ok, err := j.Append(ctx, offset, rec)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if !ok {
-						t.Fatal("unexpected optimistic concurrency conflict")
-					}
-
-					expect = append(expect, rec)
-				}
+				expect := appendRecords(ctx, t, j, 15)
 
 				var actual [][]byte
 				var expectOffset uint64
@@ -395,16 +370,7 @@ func RunTests(
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
-
-				for offset := uint64(0); offset < 2; offset++ {
-					ok, err := j.Append(ctx, offset, []byte("<record>"))
-					if err != nil {
-						t.Fatal(err)
-					}
-					if !ok {
-						t.Fatal("unexpected optimistic concurrency conflict")
-					}
-				}
+				appendRecords(ctx, t, j, 2)
 
 				called := false
 				if err := j.RangeAll(
@@ -426,24 +392,7 @@ func RunTests(
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
-
-				records := [][]byte{
-					[]byte("<record-1>"),
-					[]byte("<record-2>"),
-					[]byte("<record-3>"),
-					[]byte("<record-4>"),
-					[]byte("<record-5>"),
-				}
-
-				for offset, rec := range records {
-					ok, err := j.Append(ctx, uint64(offset), rec)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if !ok {
-						t.Fatal("unexpected optimistic concurrency conflict")
-					}
-				}
+				records := appendRecords(ctx, t, j, 5)
 
 				retainOffset := uint64(len(records) - 1)
 				err := j.Truncate(ctx, retainOffset)
@@ -473,14 +422,7 @@ func RunTests(
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
-
-				ok, err := j.Append(ctx, 0, []byte("<record>"))
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !ok {
-					t.Fatal("unexpected optimistic concurrency conflict")
-				}
+				appendRecords(ctx, t, j, 1)
 
 				if err := j.RangeAll(
 					ctx,
@@ -501,7 +443,7 @@ func RunTests(
 					t.Fatal("expected record to exist")
 				}
 
-				if expect := []byte("<record>"); !bytes.Equal(expect, actual) {
+				if expect := []byte("<record-0>"); !bytes.Equal(expect, actual) {
 					t.Fatalf(
 						"unexpected record, want %q, got %q",
 						string(expect),
@@ -609,6 +551,56 @@ func RunTests(
 				}
 			})
 		})
+
+		t.Run("func Truncate()", func(t *testing.T) {
+			t.Parallel()
+
+			t.Run("it truncates the journal", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, j := setup(t, newStore)
+				appendRecords(ctx, t, j, 3)
+
+				if err := j.Truncate(ctx, 1); err != nil {
+					t.Fatal(err)
+				}
+
+				begin, _, err := j.Bounds(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				const expect = 1
+				if begin != expect {
+					t.Fatalf("unexpected begin offset, want %d, got %d", expect, begin)
+				}
+			})
+
+			t.Run("it truncates the journal when it has already been truncated", func(t *testing.T) {
+				t.Parallel()
+
+				ctx, j := setup(t, newStore)
+				appendRecords(ctx, t, j, 3)
+
+				if err := j.Truncate(ctx, 1); err != nil {
+					t.Fatal(err)
+				}
+
+				if err := j.Truncate(ctx, 2); err != nil {
+					t.Fatal(err)
+				}
+
+				begin, _, err := j.Bounds(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				const expect = 2
+				if begin != expect {
+					t.Fatalf("unexpected begin offset, want %d, got %d", expect, begin)
+				}
+			})
+		})
 	})
 }
 
@@ -636,4 +628,32 @@ func setup(
 	})
 
 	return ctx, j
+}
+
+// appendRecords appends records to j.
+func appendRecords(
+	ctx context.Context,
+	t interface{ Fatal(...interface{}) },
+	j Journal,
+	n uint64,
+) [][]byte {
+	var records [][]byte
+
+	for offset := uint64(0); offset < n; offset++ {
+		rec := []byte(
+			fmt.Sprintf("<record-%d>", offset),
+		)
+
+		records = append(records, rec)
+
+		ok, err := j.Append(ctx, offset, rec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ok {
+			t.Fatal("unexpected optimistic concurrency conflict")
+		}
+	}
+
+	return records
 }

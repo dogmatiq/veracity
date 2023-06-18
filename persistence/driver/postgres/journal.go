@@ -30,6 +30,21 @@ type journ struct {
 	DB   *sql.DB
 }
 
+func (j *journ) Bounds(ctx context.Context) (begin, end uint64, err error) {
+	row := j.DB.QueryRowContext(
+		ctx,
+		`SELECT
+			COALESCE(MIN("offset"),     0),
+			COALESCE(MAX("offset") + 1, 0)
+		FROM veracity.journal
+		WHERE name = $1`,
+		j.Name,
+	)
+
+	err = row.Scan(&begin, &end)
+	return begin, end, err
+}
+
 func (j *journ) Get(ctx context.Context, offset uint64) ([]byte, bool, error) {
 	row := j.DB.QueryRowContext(
 		ctx,

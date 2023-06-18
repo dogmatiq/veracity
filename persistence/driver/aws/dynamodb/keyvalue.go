@@ -152,17 +152,16 @@ func (ks *keyspace) Get(ctx context.Context, k []byte) ([]byte, error) {
 		ks.DecorateGetItem,
 		&ks.getRequest,
 	)
+	if err != nil || out.Item == nil {
+		return nil, err
+	}
+
+	v, err := getAttr[*types.AttributeValueMemberB](out.Item, kvValueAttr)
 	if err != nil {
 		return nil, err
 	}
 
-	if out.Item == nil || err != nil {
-		return nil, err
-	}
-
-	b := out.Item[kvValueAttr].(*types.AttributeValueMemberB)
-
-	return b.Value, nil
+	return v.Value, nil
 
 }
 
@@ -186,6 +185,7 @@ func (ks *keyspace) Set(ctx context.Context, k, v []byte) error {
 	if v == nil {
 		return ks.delete(ctx, k)
 	}
+
 	return ks.set(ctx, k, v)
 }
 
@@ -199,6 +199,7 @@ func (ks *keyspace) set(ctx context.Context, k, v []byte) error {
 		ks.DecoratePutItem,
 		&ks.putRequest,
 	)
+
 	return err
 }
 
@@ -211,6 +212,7 @@ func (ks *keyspace) delete(ctx context.Context, k []byte) error {
 		ks.DecorateDeleteItem,
 		&ks.deleteRequest,
 	)
+
 	return err
 }
 
@@ -232,21 +234,17 @@ func (ks *keyspace) RangeAll(
 		}
 
 		for _, item := range out.Items {
-			key, ok := item[kvKeyAttr]
-			if !ok {
-				return errors.New("keyspace is corrupt: item is missing key attribute")
+			key, err := getAttr[*types.AttributeValueMemberB](item, kvKeyAttr)
+			if err != nil {
+				return err
 			}
 
-			value, ok := item[kvValueAttr]
-			if !ok {
-				return errors.New("keyspace is corrupt: item is missing value attribute")
+			value, err := getAttr[*types.AttributeValueMemberB](item, kvValueAttr)
+			if err != nil {
+				return err
 			}
 
-			ok, err = fn(
-				ctx,
-				key.(*types.AttributeValueMemberB).Value,
-				value.(*types.AttributeValueMemberB).Value,
-			)
+			ok, err := fn(ctx, key.Value, value.Value)
 			if !ok || err != nil {
 				return err
 			}
