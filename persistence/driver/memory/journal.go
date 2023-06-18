@@ -138,7 +138,7 @@ func (h *journalHandle) RangeAll(
 	return ctx.Err()
 }
 
-func (h *journalHandle) Append(ctx context.Context, offset uint64, rec []byte) (bool, error) {
+func (h *journalHandle) Append(ctx context.Context, offset uint64, rec []byte) error {
 	if h.state == nil {
 		panic("journal is closed")
 	}
@@ -150,13 +150,13 @@ func (h *journalHandle) Append(ctx context.Context, offset uint64, rec []byte) (
 
 	if h.state.BeforeAppend != nil {
 		if err := h.state.BeforeAppend(rec); err != nil {
-			return false, err
+			return err
 		}
 	}
 
 	switch {
 	case offset < h.state.End:
-		return false, ctx.Err()
+		return journal.ErrConflict
 	case offset == h.state.End:
 		h.state.Records = append(h.state.Records, rec)
 		h.state.End++
@@ -166,11 +166,11 @@ func (h *journalHandle) Append(ctx context.Context, offset uint64, rec []byte) (
 
 	if h.state.AfterAppend != nil {
 		if err := h.state.AfterAppend(rec); err != nil {
-			return false, err
+			return err
 		}
 	}
 
-	return true, ctx.Err()
+	return ctx.Err()
 }
 
 func (h *journalHandle) Truncate(ctx context.Context, end uint64) error {

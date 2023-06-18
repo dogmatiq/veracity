@@ -305,7 +305,7 @@ func (j *journ) rangeQuery(
 	}
 }
 
-func (j *journ) Append(ctx context.Context, offset uint64, rec []byte) (bool, error) {
+func (j *journ) Append(ctx context.Context, offset uint64, rec []byte) error {
 	j.offset.Value = strconv.FormatUint(offset, 10)
 	j.record.Value = rec
 
@@ -317,10 +317,10 @@ func (j *journ) Append(ctx context.Context, offset uint64, rec []byte) (bool, er
 	)
 
 	if errors.As(err, new(*types.ConditionalCheckFailedException)) {
-		return false, nil
+		return journal.ErrConflict
 	}
 
-	return true, err
+	return err
 }
 
 func (j *journ) Truncate(ctx context.Context, end uint64) error {

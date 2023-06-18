@@ -2,7 +2,6 @@ package integration
 
 import (
 	"context"
-	"errors"
 
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/veracity/internal/envelope"
@@ -44,12 +43,8 @@ func (s *Supervisor) Run(ctx context.Context) error {
 				return err
 			}
 
-			ok, err := j.Append(ctx, 0, data)
-			if err != nil {
+			if err := j.Append(ctx, 0, data); err != nil {
 				return err
-			}
-			if !ok {
-				return errors.New("optimistic concurrency control failure occurred")
 			}
 
 			close(ex.Done)

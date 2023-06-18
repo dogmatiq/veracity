@@ -2,6 +2,7 @@ package instrumentedpersistence
 
 import (
 	"context"
+	"errors"
 
 	"github.com/dogmatiq/veracity/internal/telemetry"
 	"github.com/dogmatiq/veracity/persistence/journal"
@@ -236,7 +237,7 @@ func (j *journ) instrumentRange(
 	return nil
 }
 
-func (j *journ) Append(ctx context.Context, offset uint64, rec []byte) (bool, error) {
+func (j *journ) Append(ctx context.Context, offset uint64, rec []byte) error {
 	size := int64(len(rec))
 
 	ctx, span := j.Telemetry.StartSpan(
@@ -251,25 +252,24 @@ func (j *journ) Append(ctx context.Context, offset uint64, rec []byte) (bool, er
 	j.RecordIO.Add(ctx, 1, telemetry.WriteDirection)
 	j.RecordSize.Record(ctx, size, telemetry.WriteDirection)
 
-	ok, err := j.Next.Append(ctx, offset, rec)
+	err := j.Next.Append(ctx, offset, rec)
 	if err != nil {
 		span.Error("unable to append journal record", err)
-		return false, err
+
+		if errors.Is(err, journal.ErrConflict) {
+			span.SetAttributes(
+				telemetry.Bool("conflict", true),
+			)
+
+			j.ConflictCount.Add(ctx, 1)
+		}
+
+		return err
 	}
 
-	if ok {
-		span.Debug("journal record appended")
-	} else {
-		span.SetAttributes(
-			telemetry.Bool("conflict", true),
-		)
+	span.Debug("journal record appended")
 
-		j.ConflictCount.Add(ctx, 1)
-
-		span.Error("journal record conflict", nil)
-	}
-
-	return ok, nil
+	return nil
 }
 
 func (j *journ) Truncate(ctx context.Context, end uint64) error {

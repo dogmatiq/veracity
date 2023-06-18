@@ -159,7 +159,7 @@ func (j *journ) RangeAll(
 	return rows.Err()
 }
 
-func (j *journ) Append(ctx context.Context, offset uint64, rec []byte) (bool, error) {
+func (j *journ) Append(ctx context.Context, offset uint64, rec []byte) error {
 	res, err := j.DB.ExecContext(
 		ctx,
 		`INSERT INTO veracity.journal
@@ -170,11 +170,19 @@ func (j *journ) Append(ctx context.Context, offset uint64, rec []byte) (bool, er
 		rec,
 	)
 	if err != nil {
-		return false, err
+		return err
 	}
 
-	ra, err := res.RowsAffected()
-	return ra == 1, err
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if n != 1 {
+		return journal.ErrConflict
+	}
+
+	return nil
 }
 
 func (j *journ) Truncate(ctx context.Context, end uint64) error {

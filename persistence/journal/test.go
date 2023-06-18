@@ -42,12 +42,8 @@ func RunTests(
 				defer j2.Close()
 
 				expect := []byte("<record>")
-				ok, err := j1.Append(ctx, 0, expect)
-				if err != nil {
+				if err := j1.Append(ctx, 0, expect); err != nil {
 					t.Fatal(err)
-				}
-				if !ok {
-					t.Fatal("unexpected optimistic concurrency conflict")
 				}
 
 				actual, ok, err := j2.Get(ctx, 0)
@@ -456,48 +452,36 @@ func RunTests(
 		t.Run("func Append()", func(t *testing.T) {
 			t.Parallel()
 
-			t.Run("it returns true if the offset doesn't exist", func(t *testing.T) {
+			t.Run("it does not return an error if there is no record at the given offset", func(t *testing.T) {
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
 
-				ok, err := j.Append(ctx, 0, []byte("<record>"))
-				if err != nil {
+				if err := j.Append(ctx, 0, []byte("<record>")); err != nil {
 					t.Fatal(err)
-				}
-				if !ok {
-					t.Fatal("unexpected optimistic concurrency conflict")
 				}
 			})
 
-			t.Run("it returns false if the offset already exists", func(t *testing.T) {
+			t.Run("it returns ErrConflict there is already a record at the given offset", func(t *testing.T) {
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
 
-				ok, err := j.Append(ctx, 0, []byte("<prior>"))
-				if err != nil {
+				if err := j.Append(ctx, 0, []byte("<prior>")); err != nil {
 					t.Fatal(err)
-				}
-				if !ok {
-					t.Fatal("unexpected optimistic concurrency conflict")
 				}
 
 				expect := []byte("<original>")
-				ok, err = j.Append(ctx, 1, expect)
-				if err != nil {
+				if err := j.Append(ctx, 1, expect); err != nil {
 					t.Fatal(err)
-				}
-				if !ok {
-					t.Fatal("unexpected optimistic concurrency conflict")
 				}
 
-				ok, err = j.Append(ctx, 1, []byte("<modified>"))
-				if err != nil {
-					t.Fatal(err)
+				err := j.Append(ctx, 1, []byte("<modified>"))
+				if err == nil {
+					t.Fatal("expected ErrConflict")
 				}
-				if ok {
-					t.Fatal("expected an optimistic concurrency conflict")
+				if err != ErrConflict {
+					t.Fatal(err)
 				}
 
 				actual, ok, err := j.Get(ctx, 1)
@@ -524,12 +508,8 @@ func RunTests(
 
 				rec := []byte("<record>")
 
-				ok, err := j.Append(ctx, 0, rec)
-				if err != nil {
+				if err := j.Append(ctx, 0, rec); err != nil {
 					t.Fatal(err)
-				}
-				if !ok {
-					t.Fatal("unexpected optimistic concurrency conflict")
 				}
 
 				rec[0] = 'X'
@@ -646,12 +626,8 @@ func appendRecords(
 
 		records = append(records, rec)
 
-		ok, err := j.Append(ctx, offset, rec)
-		if err != nil {
+		if err := j.Append(ctx, offset, rec); err != nil {
 			t.Fatal(err)
-		}
-		if !ok {
-			t.Fatal("unexpected optimistic concurrency conflict")
 		}
 	}
 

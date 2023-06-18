@@ -88,10 +88,11 @@ func Append[
 	j journal.Journal,
 	offset uint64,
 	rec T,
-) (bool, error) {
+) error {
 	data, err := typedproto.Marshal(rec)
 	if err != nil {
-		return false, fmt.Errorf("unable to marshal record: %w", err)
+		return fmt.Errorf("unable to marshal record: %w", err)
 	}
+
 	return j.Append(ctx, offset, data)
 }

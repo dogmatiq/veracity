@@ -2,6 +2,7 @@ package journal
 
 import (
 	"context"
+	"errors"
 )
 
 // A RangeFunc is a function used to range over the records in a [Journal].
@@ -9,6 +10,10 @@ import (
 // If err is non-nil, ranging stops and err is propagated up the stack.
 // Otherwise, if ok is false, ranging stops without any error being propagated.
 type RangeFunc func(ctx context.Context, offset uint64, rec []byte) (ok bool, err error)
+
+// ErrConflict is returned by [Journal.Append] if there is already a record at
+// the specified offset.
+var ErrConflict = errors.New("optimistic concurrency conflict")
 
 // A Journal is an append-only log of binary records.
 type Journal interface {
@@ -31,15 +36,15 @@ type Journal interface {
 
 	// Append adds a record to the journal.
 	//
-	// offset is the next "unused" offset in the journal. The first offset is
-	// always 0.
+	// offset must be the next "unused" offset in the journal. The first offset
+	// is always 0.
 	//
-	// If there is already a record at the given offset then ok is false,
-	// indicating an optimistic concurrency conflict.
+	// If there is already a record at the given offset then [ErrConflict] is
+	// returned, indicating an optimistic concurrency conflict.
 	//
 	// The behavior is undefined of the offset is larger than the next "unused"
 	// offset.
-	Append(ctx context.Context, offset uint64, rec []byte) (ok bool, err error)
+	Append(ctx context.Context, offset uint64, rec []byte) error
 
 	// Truncate removes journal records in the half-open range [..., end). That
 	// is, it removes the oldest records up to, but not including, the record at
