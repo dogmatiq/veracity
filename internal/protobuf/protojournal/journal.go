@@ -10,7 +10,7 @@ import (
 )
 
 // A RangeFunc is a function used to range over the records in a [Journal].
-type RangeFunc[T proto.Message] func(ctx context.Context, offset uint64, rec T) (ok bool, err error)
+type RangeFunc[T proto.Message] func(context.Context, journal.Offset, T) (ok bool, err error)
 
 // Get returns the record at the given offset.
 func Get[
@@ -19,9 +19,9 @@ func Get[
 ](
 	ctx context.Context,
 	j journal.Journal,
-	offset uint64,
+	off journal.Offset,
 ) (T, bool, error) {
-	data, ok, err := j.Get(ctx, offset)
+	data, ok, err := j.Get(ctx, off)
 	if !ok || err != nil {
 		return nil, ok, err
 	}
@@ -42,18 +42,18 @@ func Range[
 ](
 	ctx context.Context,
 	j journal.Journal,
-	begin uint64,
+	begin journal.Offset,
 	fn RangeFunc[T],
 ) error {
 	return j.Range(
 		ctx,
 		begin,
-		func(ctx context.Context, offset uint64, data []byte) (bool, error) {
+		func(ctx context.Context, off journal.Offset, data []byte) (bool, error) {
 			rec, err := typedproto.Unmarshal[T](data)
 			if err != nil {
 				return false, fmt.Errorf("unable to unmarshal record: %w", err)
 			}
-			return fn(ctx, offset, rec)
+			return fn(ctx, off, rec)
 		},
 	)
 }
@@ -69,12 +69,12 @@ func RangeAll[
 ) error {
 	return j.RangeAll(
 		ctx,
-		func(ctx context.Context, offset uint64, data []byte) (bool, error) {
+		func(ctx context.Context, off journal.Offset, data []byte) (bool, error) {
 			rec, err := typedproto.Unmarshal[T](data)
 			if err != nil {
 				return false, fmt.Errorf("unable to unmarshal record: %w", err)
 			}
-			return fn(ctx, offset, rec)
+			return fn(ctx, off, rec)
 		},
 	)
 }
@@ -86,7 +86,7 @@ func Append[
 ](
 	ctx context.Context,
 	j journal.Journal,
-	offset uint64,
+	end journal.Offset,
 	rec T,
 ) error {
 	data, err := typedproto.Marshal(rec)
@@ -94,5 +94,5 @@ func Append[
 		return fmt.Errorf("unable to marshal record: %w", err)
 	}
 
-	return j.Append(ctx, offset, data)
+	return j.Append(ctx, end, data)
 }

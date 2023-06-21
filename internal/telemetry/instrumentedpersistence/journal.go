@@ -81,14 +81,14 @@ type journ struct {
 	RecordSize    metric.Int64Histogram
 }
 
-func (j *journ) Bounds(ctx context.Context) (uint64, uint64, error) {
+func (j *journ) Bounds(ctx context.Context) (begin, end journal.Offset, err error) {
 	ctx, span := j.Telemetry.StartSpan(
 		ctx,
 		"journal.bounds",
 	)
 	defer span.End()
 
-	begin, end, err := j.Next.Bounds(ctx)
+	begin, end, err = j.Next.Bounds(ctx)
 	if err != nil {
 		span.Error("could not fetch journal bounds", err)
 		return 0, 0, err
@@ -104,15 +104,15 @@ func (j *journ) Bounds(ctx context.Context) (uint64, uint64, error) {
 	return begin, end, nil
 }
 
-func (j *journ) Get(ctx context.Context, offset uint64) ([]byte, bool, error) {
+func (j *journ) Get(ctx context.Context, off journal.Offset) ([]byte, bool, error) {
 	ctx, span := j.Telemetry.StartSpan(
 		ctx,
 		"journal.get",
-		telemetry.Int("offset", offset),
+		telemetry.Int("offset", off),
 	)
 	defer span.End()
 
-	rec, ok, err := j.Next.Get(ctx, offset)
+	rec, ok, err := j.Next.Get(ctx, off)
 	if err != nil {
 		span.Error("could not fetch journal record", err)
 		return nil, false, err
@@ -140,7 +140,7 @@ func (j *journ) Get(ctx context.Context, offset uint64) ([]byte, bool, error) {
 
 func (j *journ) Range(
 	ctx context.Context,
-	begin uint64,
+	begin journal.Offset,
 	fn journal.RangeFunc,
 ) error {
 	ctx, span := j.Telemetry.StartSpan(
@@ -182,7 +182,7 @@ func (j *journ) instrumentRange(
 	doRange func(context.Context, journal.RangeFunc) error,
 ) error {
 	var (
-		first, count uint64
+		first, count journal.Offset
 		totalSize    int64
 		brokeLoop    bool
 	)
@@ -191,9 +191,9 @@ func (j *journ) instrumentRange(
 
 	err := doRange(
 		ctx,
-		func(ctx context.Context, offset uint64, rec []byte) (bool, error) {
+		func(ctx context.Context, off journal.Offset, rec []byte) (bool, error) {
 			if count == 0 {
-				first = offset
+				first = off
 			}
 			count++
 
@@ -204,7 +204,7 @@ func (j *journ) instrumentRange(
 			j.RecordIO.Add(ctx, 1, telemetry.ReadDirection)
 			j.RecordSize.Record(ctx, size, telemetry.ReadDirection)
 
-			ok, err := fn(ctx, offset, rec)
+			ok, err := fn(ctx, off, rec)
 			if ok || err != nil {
 				return ok, err
 			}
@@ -237,13 +237,13 @@ func (j *journ) instrumentRange(
 	return nil
 }
 
-func (j *journ) Append(ctx context.Context, offset uint64, rec []byte) error {
+func (j *journ) Append(ctx context.Context, end journal.Offset, rec []byte) error {
 	size := int64(len(rec))
 
 	ctx, span := j.Telemetry.StartSpan(
 		ctx,
 		"journal.append",
-		telemetry.Int("offset", offset),
+		telemetry.Int("offset", end),
 		telemetry.Int("record_size", size),
 	)
 	defer span.End()
@@ -252,7 +252,7 @@ func (j *journ) Append(ctx context.Context, offset uint64, rec []byte) error {
 	j.RecordIO.Add(ctx, 1, telemetry.WriteDirection)
 	j.RecordSize.Record(ctx, size, telemetry.WriteDirection)
 
-	err := j.Next.Append(ctx, offset, rec)
+	err := j.Next.Append(ctx, end, rec)
 	if err != nil {
 		span.Error("unable to append journal record", err)
 
@@ -272,7 +272,7 @@ func (j *journ) Append(ctx context.Context, offset uint64, rec []byte) error {
 	return nil
 }
 
-func (j *journ) Truncate(ctx context.Context, end uint64) error {
+func (j *journ) Truncate(ctx context.Context, end journal.Offset) error {
 	ctx, span := j.Telemetry.StartSpan(
 		ctx,
 		"journal.truncate",

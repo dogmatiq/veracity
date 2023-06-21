@@ -157,7 +157,7 @@ type journ struct {
 	deleteRequest      dynamodb.DeleteItemInput
 }
 
-func (j *journ) Bounds(ctx context.Context) (begin, end uint64, err error) {
+func (j *journ) Bounds(ctx context.Context) (begin, end journal.Offset, err error) {
 	*j.boundsQueryRequest.ScanIndexForward = true
 	out, err := awsx.Do(
 		ctx,
@@ -193,8 +193,8 @@ func (j *journ) Bounds(ctx context.Context) (begin, end uint64, err error) {
 	return begin, end + 1, nil
 }
 
-func (j *journ) Get(ctx context.Context, offset uint64) ([]byte, bool, error) {
-	j.offset.Value = strconv.FormatUint(offset, 10)
+func (j *journ) Get(ctx context.Context, off journal.Offset) ([]byte, bool, error) {
+	j.offset.Value = formatOffset(off)
 
 	out, err := awsx.Do(
 		ctx,
@@ -216,7 +216,7 @@ func (j *journ) Get(ctx context.Context, offset uint64) ([]byte, bool, error) {
 
 func (j *journ) Range(
 	ctx context.Context,
-	begin uint64,
+	begin journal.Offset,
 	fn journal.RangeFunc,
 ) error {
 	checkOffset := true
@@ -226,17 +226,17 @@ func (j *journ) Range(
 		begin,
 		func(
 			ctx context.Context,
-			offset uint64,
+			off journal.Offset,
 			rec []byte,
 		) (bool, error) {
 			if checkOffset {
-				if offset != begin {
+				if off != begin {
 					return false, errors.New("cannot range over truncated records")
 				}
 				checkOffset = false
 			}
 
-			return fn(ctx, offset, rec)
+			return fn(ctx, off, rec)
 		},
 	)
 }
@@ -250,13 +250,13 @@ func (j *journ) RangeAll(
 
 func (j *journ) rangeQuery(
 	ctx context.Context,
-	begin uint64,
-	fn func(context.Context, uint64, []byte) (bool, error),
+	begin journal.Offset,
+	fn func(context.Context, journal.Offset, []byte) (bool, error),
 ) error {
 	j.rangeQueryRequest.ExclusiveStartKey = nil
-	j.offset.Value = strconv.FormatUint(begin, 10)
+	j.offset.Value = formatOffset(begin)
 
-	var expectOffset uint64
+	var expectOffset journal.Offset
 
 	for {
 		out, err := awsx.Do(
@@ -270,28 +270,28 @@ func (j *journ) rangeQuery(
 		}
 
 		for _, item := range out.Items {
-			offset, err := parseOffset(item)
+			off, err := parseOffset(item)
 			if err != nil {
 				return err
 			}
 
-			if expectOffset != 0 && offset != expectOffset {
+			if expectOffset != 0 && off != expectOffset {
 				return fmt.Errorf(
 					"item is corrupt: %q attribute should be %d not %d",
 					journalOffsetAttr,
 					expectOffset,
-					offset,
+					off,
 				)
 			}
 
-			expectOffset = offset + 1
+			expectOffset = off + 1
 
 			rec, err := getAttr[*types.AttributeValueMemberB](item, journalRecordAttr)
 			if err != nil {
 				return err
 			}
 
-			ok, err := fn(ctx, offset, rec.Value)
+			ok, err := fn(ctx, off, rec.Value)
 			if !ok || err != nil {
 				return err
 			}
@@ -305,8 +305,8 @@ func (j *journ) rangeQuery(
 	}
 }
 
-func (j *journ) Append(ctx context.Context, offset uint64, rec []byte) error {
-	j.offset.Value = strconv.FormatUint(offset, 10)
+func (j *journ) Append(ctx context.Context, end journal.Offset, rec []byte) error {
+	j.offset.Value = formatOffset(end)
 	j.record.Value = rec
 
 	_, err := awsx.Do(
@@ -323,15 +323,15 @@ func (j *journ) Append(ctx context.Context, offset uint64, rec []byte) error {
 	return err
 }
 
-func (j *journ) Truncate(ctx context.Context, end uint64) error {
+func (j *journ) Truncate(ctx context.Context, end journal.Offset) error {
 	return j.RangeAll(
 		ctx,
-		func(ctx context.Context, offset uint64, _ []byte) (bool, error) {
-			if offset >= end {
+		func(ctx context.Context, off journal.Offset, _ []byte) (bool, error) {
+			if off >= end {
 				return false, nil
 			}
 
-			j.offset.Value = strconv.FormatUint(offset, 10)
+			j.offset.Value = formatOffset(off)
 
 			_, err := awsx.Do(
 				ctx,
@@ -401,16 +401,20 @@ func CreateJournalStoreTable(
 }
 
 // parseOffset parses the offset attribute in the given item.
-func parseOffset(item map[string]types.AttributeValue) (uint64, error) {
+func parseOffset(item map[string]types.AttributeValue) (journal.Offset, error) {
 	attr, err := getAttr[*types.AttributeValueMemberN](item, journalOffsetAttr)
 	if err != nil {
 		return 0, err
 	}
 
-	offset, err := strconv.ParseUint(attr.Value, 10, 64)
+	off, err := strconv.ParseUint(attr.Value, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("item is corrupt: invalid offset: %w", err)
 	}
 
-	return offset, nil
+	return journal.Offset(off), nil
+}
+
+func formatOffset(off journal.Offset) string {
+	return strconv.FormatUint(uint64(off), 10)
 }

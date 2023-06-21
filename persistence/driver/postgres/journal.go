@@ -30,7 +30,7 @@ type journ struct {
 	DB   *sql.DB
 }
 
-func (j *journ) Bounds(ctx context.Context) (begin, end uint64, err error) {
+func (j *journ) Bounds(ctx context.Context) (begin, end journal.Offset, err error) {
 	row := j.DB.QueryRowContext(
 		ctx,
 		`SELECT
@@ -45,7 +45,7 @@ func (j *journ) Bounds(ctx context.Context) (begin, end uint64, err error) {
 	return begin, end, err
 }
 
-func (j *journ) Get(ctx context.Context, offset uint64) ([]byte, bool, error) {
+func (j *journ) Get(ctx context.Context, off journal.Offset) ([]byte, bool, error) {
 	row := j.DB.QueryRowContext(
 		ctx,
 		`SELECT record
@@ -53,7 +53,7 @@ func (j *journ) Get(ctx context.Context, offset uint64) ([]byte, bool, error) {
 		WHERE name = $1
 		AND "offset" = $2`,
 		j.Name,
-		offset,
+		off,
 	)
 
 	var rec []byte
@@ -67,7 +67,7 @@ func (j *journ) Get(ctx context.Context, offset uint64) ([]byte, bool, error) {
 
 func (j *journ) Range(
 	ctx context.Context,
-	begin uint64,
+	begin journal.Offset,
 	fn journal.RangeFunc,
 ) error {
 	// TODO: use a limit and offset to "page" through records
@@ -90,18 +90,18 @@ func (j *journ) Range(
 
 	for rows.Next() {
 		var (
-			offset uint64
-			rec    []byte
+			off journal.Offset
+			rec []byte
 		)
-		if err = rows.Scan(&offset, &rec); err != nil {
+		if err = rows.Scan(&off, &rec); err != nil {
 			return err
 		}
-		if offset != expectedOffset {
+		if off != expectedOffset {
 			return errors.New("cannot range over truncated records")
 		}
 		expectedOffset++
 
-		ok, err := fn(ctx, offset, rec)
+		ok, err := fn(ctx, off, rec)
 		if !ok || err != nil {
 			return err
 		}
@@ -130,27 +130,27 @@ func (j *journ) RangeAll(
 
 	var (
 		firstIteration = true
-		expectedOffset uint64
+		expectedOffset journal.Offset
 	)
 	for rows.Next() {
 		var (
-			offset uint64
-			rec    []byte
+			off journal.Offset
+			rec []byte
 		)
-		if err = rows.Scan(&offset, &rec); err != nil {
+		if err = rows.Scan(&off, &rec); err != nil {
 			return err
 		}
 
 		if firstIteration {
-			expectedOffset = offset
+			expectedOffset = off
 			firstIteration = false
-		} else if offset != expectedOffset {
+		} else if off != expectedOffset {
 			return errors.New("cannot range over truncated records")
 		}
 
 		expectedOffset++
 
-		ok, err := fn(ctx, offset, rec)
+		ok, err := fn(ctx, off, rec)
 		if !ok || err != nil {
 			return err
 		}
@@ -159,14 +159,14 @@ func (j *journ) RangeAll(
 	return rows.Err()
 }
 
-func (j *journ) Append(ctx context.Context, offset uint64, rec []byte) error {
+func (j *journ) Append(ctx context.Context, end journal.Offset, rec []byte) error {
 	res, err := j.DB.ExecContext(
 		ctx,
 		`INSERT INTO veracity.journal
 		(name, "offset", record) VALUES ($1, $2, $3)
 		ON CONFLICT (name, "offset") DO NOTHING`,
 		j.Name,
-		offset,
+		end,
 		rec,
 	)
 	if err != nil {
@@ -185,7 +185,7 @@ func (j *journ) Append(ctx context.Context, offset uint64, rec []byte) error {
 	return nil
 }
 
-func (j *journ) Truncate(ctx context.Context, end uint64) error {
+func (j *journ) Truncate(ctx context.Context, end journal.Offset) error {
 	_, err := j.DB.ExecContext(
 		ctx,
 		`DELETE FROM veracity.journal

@@ -43,9 +43,8 @@ func NewJournal() journal.Journal {
 type journalState struct {
 	sync.RWMutex
 
-	Begin   uint64
-	End     uint64
-	Records [][]byte
+	Begin, End journal.Offset
+	Records    [][]byte
 
 	BeforeAppend func([]byte) error
 	AfterAppend  func([]byte) error
@@ -57,7 +56,7 @@ type journalHandle struct {
 	state *journalState
 }
 
-func (h *journalHandle) Bounds(ctx context.Context) (begin, end uint64, err error) {
+func (h *journalHandle) Bounds(ctx context.Context) (begin, end journal.Offset, err error) {
 	if h.state == nil {
 		panic("journal is closed")
 	}
@@ -68,7 +67,7 @@ func (h *journalHandle) Bounds(ctx context.Context) (begin, end uint64, err erro
 	return h.state.Begin, h.state.End, ctx.Err()
 }
 
-func (h *journalHandle) Get(ctx context.Context, offset uint64) ([]byte, bool, error) {
+func (h *journalHandle) Get(ctx context.Context, off journal.Offset) ([]byte, bool, error) {
 	if h.state == nil {
 		panic("journal is closed")
 	}
@@ -76,16 +75,16 @@ func (h *journalHandle) Get(ctx context.Context, offset uint64) ([]byte, bool, e
 	h.state.RLock()
 	defer h.state.RUnlock()
 
-	if offset < h.state.Begin || offset >= h.state.End {
+	if off < h.state.Begin || off >= h.state.End {
 		return nil, false, nil
 	}
 
-	return slices.Clone(h.state.Records[offset-h.state.Begin]), true, ctx.Err()
+	return slices.Clone(h.state.Records[off-h.state.Begin]), true, ctx.Err()
 }
 
 func (h *journalHandle) Range(
 	ctx context.Context,
-	begin uint64,
+	begin journal.Offset,
 	fn journal.RangeFunc,
 ) error {
 	if h.state == nil {
@@ -103,7 +102,7 @@ func (h *journalHandle) Range(
 
 	start := begin - first
 	for i, rec := range records[start:] {
-		v := start + uint64(i)
+		v := start + journal.Offset(i)
 		ok, err := fn(ctx, v, slices.Clone(rec))
 		if !ok || err != nil {
 			return err
@@ -123,22 +122,22 @@ func (h *journalHandle) RangeAll(
 	}
 
 	h.state.RLock()
-	offset := h.state.Begin
+	off := h.state.Begin
 	records := h.state.Records
 	h.state.RUnlock()
 
 	for _, rec := range records {
-		ok, err := fn(ctx, offset, slices.Clone(rec))
+		ok, err := fn(ctx, off, slices.Clone(rec))
 		if !ok || err != nil {
 			return err
 		}
-		offset++
+		off++
 	}
 
 	return ctx.Err()
 }
 
-func (h *journalHandle) Append(ctx context.Context, offset uint64, rec []byte) error {
+func (h *journalHandle) Append(ctx context.Context, end journal.Offset, rec []byte) error {
 	if h.state == nil {
 		panic("journal is closed")
 	}
@@ -155,9 +154,9 @@ func (h *journalHandle) Append(ctx context.Context, offset uint64, rec []byte) e
 	}
 
 	switch {
-	case offset < h.state.End:
+	case end < h.state.End:
 		return journal.ErrConflict
-	case offset == h.state.End:
+	case end == h.state.End:
 		h.state.Records = append(h.state.Records, rec)
 		h.state.End++
 	default:
@@ -173,7 +172,7 @@ func (h *journalHandle) Append(ctx context.Context, offset uint64, rec []byte) e
 	return ctx.Err()
 }
 
-func (h *journalHandle) Truncate(ctx context.Context, end uint64) error {
+func (h *journalHandle) Truncate(ctx context.Context, end journal.Offset) error {
 	if h.state == nil {
 		panic("journal is closed")
 	}
