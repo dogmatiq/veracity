@@ -12,7 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Packer puts messages into parcels.
+// A Packer puts messages into envelopes.
 type Packer struct {
 	// Site is the (optional) identity of the site that the source application
 	// is running within.
