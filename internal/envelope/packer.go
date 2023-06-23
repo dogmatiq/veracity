@@ -51,7 +51,7 @@ func (p *Packer) Pack(
 		SourceSite:        p.Site,
 		SourceApplication: p.Application,
 		CreatedAt:         timestamppb.Now(),
-		Description:       dogma.DescribeMessage(m),
+		Description:       m.MessageDescription(),
 		PortableName:      name,
 		MediaType:         packet.MediaType,
 		Data:              packet.Data,
