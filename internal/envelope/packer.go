@@ -93,8 +93,8 @@ type PackOption func(*envelopepb.Envelope)
 // WithCause sets env as the "cause" of the message being packed.
 func WithCause(env *envelopepb.Envelope) PackOption {
 	return func(e *envelopepb.Envelope) {
-		e.CausationId = env.GetMessageId()
-		e.CorrelationId = env.GetCorrelationId()
+		e.CausationId = env.MessageId
+		e.CorrelationId = env.CorrelationId
 	}
 }
 

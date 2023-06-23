@@ -20,21 +20,19 @@ type Transcoder struct {
 
 // Transcode re-encodes the message in env to one of the supported media-types.
 func (t *Transcoder) Transcode(env *envelopepb.Envelope) (*envelopepb.Envelope, bool, error) {
-	name := env.GetPortableName()
-	current := env.GetMediaType()
-	candidates := t.MediaTypes[name]
+	candidates := t.MediaTypes[env.PortableName]
 
 	// If the existing encoding is supported by the consumer use the envelope
 	// without any re-encoding.
 	for _, candidate := range candidates {
-		if strings.EqualFold(current, candidate) {
+		if strings.EqualFold(env.MediaType, candidate) {
 			return env, true, nil
 		}
 	}
 
 	packet := marshalkit.Packet{
-		MediaType: current,
-		Data:      env.GetData(),
+		MediaType: env.MediaType,
+		Data:      env.Data,
 	}
 
 	m, err := t.Marshaler.Unmarshal(packet)
