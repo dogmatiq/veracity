@@ -20,7 +20,7 @@ type Supervisor struct {
 	Journals       journal.Store
 	Packer         *envelope.Packer
 
-	offset uint64
+	pos journal.Position
 }
 
 func (s *Supervisor) Run(ctx context.Context) error {
@@ -29,13 +29,19 @@ func (s *Supervisor) Run(ctx context.Context) error {
 		return err
 	}
 	defer j.Close()
-	s.offset = 0
+	s.pos = 0
 	pendingCmds := []*envelopepb.Envelope{}
+
 	if err := protojournal.RangeAll(
 		ctx,
 		j,
-		func(ctx context.Context, offset uint64, record *journalpb.Record) (ok bool, err error) {
-			s.offset = offset + 1
+		func(
+			ctx context.Context,
+			pos journal.Position,
+			record *journalpb.Record,
+		) (ok bool, err error) {
+			s.pos = pos + 1
+
 			if rec := record.GetCommandEnqueued(); rec != nil {
 				cmd := rec.GetCommand()
 				pendingCmds = append(pendingCmds, cmd)
@@ -77,11 +83,11 @@ func (s *Supervisor) Run(ctx context.Context) error {
 				},
 			}
 
-			if err := protojournal.Append(ctx, j, s.offset, rec); err != nil {
+			if err := protojournal.Append(ctx, j, s.pos, rec); err != nil {
 				return err
 			}
 
-			s.offset++
+			s.pos++
 			close(ex.Done)
 
 			if err := s.handleCommand(ctx, ex.Command, j); err != nil {
@@ -116,11 +122,11 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 		}
 	}
 
-	if err := protojournal.Append(ctx, j, s.offset, rec); err != nil {
+	if err := protojournal.Append(ctx, j, s.pos, rec); err != nil {
 		return err
 	}
 
-	s.offset++
+	s.pos++
 
 	return handlerErr
 }
