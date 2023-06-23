@@ -10,18 +10,18 @@ import (
 )
 
 // A RangeFunc is a function used to range over the records in a [Journal].
-type RangeFunc[T proto.Message] func(context.Context, journal.Offset, T) (ok bool, err error)
+type RangeFunc[T proto.Message] func(context.Context, journal.Position, T) (ok bool, err error)
 
-// Get returns the record at the given offset.
+// Get returns the record at the given position.
 func Get[
 	T typedproto.Message[S],
 	S typedproto.MessageStruct,
 ](
 	ctx context.Context,
 	j journal.Journal,
-	off journal.Offset,
+	pos journal.Position,
 ) (T, bool, error) {
-	data, ok, err := j.Get(ctx, off)
+	data, ok, err := j.Get(ctx, pos)
 	if !ok || err != nil {
 		return nil, ok, err
 	}
@@ -35,25 +35,25 @@ func Get[
 }
 
 // Range invokes fn for each record in the journal, in order, beginning at the
-// given offset.
+// given position.
 func Range[
 	T typedproto.Message[S],
 	S typedproto.MessageStruct,
 ](
 	ctx context.Context,
 	j journal.Journal,
-	begin journal.Offset,
+	begin journal.Position,
 	fn RangeFunc[T],
 ) error {
 	return j.Range(
 		ctx,
 		begin,
-		func(ctx context.Context, off journal.Offset, data []byte) (bool, error) {
+		func(ctx context.Context, pos journal.Position, data []byte) (bool, error) {
 			rec, err := typedproto.Unmarshal[T](data)
 			if err != nil {
 				return false, fmt.Errorf("unable to unmarshal record: %w", err)
 			}
-			return fn(ctx, off, rec)
+			return fn(ctx, pos, rec)
 		},
 	)
 }
@@ -69,12 +69,12 @@ func RangeAll[
 ) error {
 	return j.RangeAll(
 		ctx,
-		func(ctx context.Context, off journal.Offset, data []byte) (bool, error) {
+		func(ctx context.Context, pos journal.Position, data []byte) (bool, error) {
 			rec, err := typedproto.Unmarshal[T](data)
 			if err != nil {
 				return false, fmt.Errorf("unable to unmarshal record: %w", err)
 			}
-			return fn(ctx, off, rec)
+			return fn(ctx, pos, rec)
 		},
 	)
 }
@@ -86,7 +86,7 @@ func Append[
 ](
 	ctx context.Context,
 	j journal.Journal,
-	end journal.Offset,
+	end journal.Position,
 	rec T,
 ) error {
 	data, err := typedproto.Marshal(rec)

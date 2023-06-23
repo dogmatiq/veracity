@@ -52,9 +52,9 @@ type JournalStore struct {
 }
 
 const (
-	journalNameAttr   = "Name"
-	journalOffsetAttr = "Offset"
-	journalRecordAttr = "Record"
+	journalNameAttr     = "Name"
+	journalPositionAttr = "Position"
+	journalRecordAttr   = "Record"
 )
 
 // Open returns the journal with the given name.
@@ -66,9 +66,9 @@ func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, 
 		DecoratePutItem:    s.DecoratePutItem,
 		DecorateDeleteItem: s.DecorateDeleteItem,
 
-		name:   &types.AttributeValueMemberS{Value: name},
-		offset: &types.AttributeValueMemberN{},
-		record: &types.AttributeValueMemberB{},
+		name:     &types.AttributeValueMemberS{Value: name},
+		position: &types.AttributeValueMemberN{},
+		record:   &types.AttributeValueMemberB{},
 	}
 
 	j.boundsQueryRequest = dynamodb.QueryInput{
@@ -77,7 +77,7 @@ func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, 
 		ProjectionExpression:   aws.String("#O"),
 		ExpressionAttributeNames: map[string]string{
 			"#N": journalNameAttr,
-			"#O": journalOffsetAttr,
+			"#O": journalPositionAttr,
 		},
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":N": j.name,
@@ -89,8 +89,8 @@ func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, 
 	j.getRequest = dynamodb.GetItemInput{
 		TableName: aws.String(s.Table),
 		Key: map[string]types.AttributeValue{
-			journalNameAttr:   j.name,
-			journalOffsetAttr: j.offset,
+			journalNameAttr:     j.name,
+			journalPositionAttr: j.position,
 		},
 		ProjectionExpression: aws.String(`#R`),
 		ExpressionAttributeNames: map[string]string{
@@ -104,12 +104,12 @@ func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, 
 		ProjectionExpression:   aws.String("#O, #R"),
 		ExpressionAttributeNames: map[string]string{
 			"#N": journalNameAttr,
-			"#O": journalOffsetAttr,
+			"#O": journalPositionAttr,
 			"#R": journalRecordAttr,
 		},
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":N": j.name,
-			":O": j.offset,
+			":O": j.position,
 		},
 	}
 
@@ -120,17 +120,17 @@ func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, 
 			"#N": journalNameAttr,
 		},
 		Item: map[string]types.AttributeValue{
-			journalNameAttr:   j.name,
-			journalOffsetAttr: j.offset,
-			journalRecordAttr: j.record,
+			journalNameAttr:     j.name,
+			journalPositionAttr: j.position,
+			journalRecordAttr:   j.record,
 		},
 	}
 
 	j.deleteRequest = dynamodb.DeleteItemInput{
 		TableName: aws.String(s.Table),
 		Key: map[string]types.AttributeValue{
-			journalNameAttr:   j.name,
-			journalOffsetAttr: j.offset,
+			journalNameAttr:     j.name,
+			journalPositionAttr: j.position,
 		},
 	}
 
@@ -146,9 +146,9 @@ type journ struct {
 	DecoratePutItem    func(*dynamodb.PutItemInput) []func(*dynamodb.Options)
 	DecorateDeleteItem func(*dynamodb.DeleteItemInput) []func(*dynamodb.Options)
 
-	name   *types.AttributeValueMemberS
-	offset *types.AttributeValueMemberN
-	record *types.AttributeValueMemberB
+	name     *types.AttributeValueMemberS
+	position *types.AttributeValueMemberN
+	record   *types.AttributeValueMemberB
 
 	boundsQueryRequest dynamodb.QueryInput
 	getRequest         dynamodb.GetItemInput
@@ -157,7 +157,7 @@ type journ struct {
 	deleteRequest      dynamodb.DeleteItemInput
 }
 
-func (j *journ) Bounds(ctx context.Context) (begin, end journal.Offset, err error) {
+func (j *journ) Bounds(ctx context.Context) (begin, end journal.Position, err error) {
 	*j.boundsQueryRequest.ScanIndexForward = true
 	out, err := awsx.Do(
 		ctx,
@@ -169,7 +169,7 @@ func (j *journ) Bounds(ctx context.Context) (begin, end journal.Offset, err erro
 		return 0, 0, err
 	}
 
-	begin, err = parseOffset(out.Items[0])
+	begin, err = parsePosition(out.Items[0])
 	if err != nil {
 		return 0, 0, err
 	}
@@ -185,7 +185,7 @@ func (j *journ) Bounds(ctx context.Context) (begin, end journal.Offset, err erro
 		return 0, 0, err
 	}
 
-	end, err = parseOffset(out.Items[0])
+	end, err = parsePosition(out.Items[0])
 	if err != nil {
 		return 0, 0, err
 	}
@@ -193,8 +193,8 @@ func (j *journ) Bounds(ctx context.Context) (begin, end journal.Offset, err erro
 	return begin, end + 1, nil
 }
 
-func (j *journ) Get(ctx context.Context, off journal.Offset) ([]byte, bool, error) {
-	j.offset.Value = formatOffset(off)
+func (j *journ) Get(ctx context.Context, pos journal.Position) ([]byte, bool, error) {
+	j.position.Value = formatPosition(pos)
 
 	out, err := awsx.Do(
 		ctx,
@@ -216,27 +216,27 @@ func (j *journ) Get(ctx context.Context, off journal.Offset) ([]byte, bool, erro
 
 func (j *journ) Range(
 	ctx context.Context,
-	begin journal.Offset,
+	begin journal.Position,
 	fn journal.RangeFunc,
 ) error {
-	checkOffset := true
+	validatePos := true
 
 	return j.rangeQuery(
 		ctx,
 		begin,
 		func(
 			ctx context.Context,
-			off journal.Offset,
+			pos journal.Position,
 			rec []byte,
 		) (bool, error) {
-			if checkOffset {
-				if off != begin {
+			if validatePos {
+				if pos != begin {
 					return false, errors.New("cannot range over truncated records")
 				}
-				checkOffset = false
+				validatePos = false
 			}
 
-			return fn(ctx, off, rec)
+			return fn(ctx, pos, rec)
 		},
 	)
 }
@@ -250,13 +250,13 @@ func (j *journ) RangeAll(
 
 func (j *journ) rangeQuery(
 	ctx context.Context,
-	begin journal.Offset,
-	fn func(context.Context, journal.Offset, []byte) (bool, error),
+	begin journal.Position,
+	fn func(context.Context, journal.Position, []byte) (bool, error),
 ) error {
 	j.rangeQueryRequest.ExclusiveStartKey = nil
-	j.offset.Value = formatOffset(begin)
+	j.position.Value = formatPosition(begin)
 
-	var expectOffset journal.Offset
+	var expectPos journal.Position
 
 	for {
 		out, err := awsx.Do(
@@ -270,28 +270,28 @@ func (j *journ) rangeQuery(
 		}
 
 		for _, item := range out.Items {
-			off, err := parseOffset(item)
+			pos, err := parsePosition(item)
 			if err != nil {
 				return err
 			}
 
-			if expectOffset != 0 && off != expectOffset {
+			if expectPos != 0 && pos != expectPos {
 				return fmt.Errorf(
 					"item is corrupt: %q attribute should be %d not %d",
-					journalOffsetAttr,
-					expectOffset,
-					off,
+					journalPositionAttr,
+					expectPos,
+					pos,
 				)
 			}
 
-			expectOffset = off + 1
+			expectPos = pos + 1
 
 			rec, err := getAttr[*types.AttributeValueMemberB](item, journalRecordAttr)
 			if err != nil {
 				return err
 			}
 
-			ok, err := fn(ctx, off, rec.Value)
+			ok, err := fn(ctx, pos, rec.Value)
 			if !ok || err != nil {
 				return err
 			}
@@ -305,8 +305,8 @@ func (j *journ) rangeQuery(
 	}
 }
 
-func (j *journ) Append(ctx context.Context, end journal.Offset, rec []byte) error {
-	j.offset.Value = formatOffset(end)
+func (j *journ) Append(ctx context.Context, end journal.Position, rec []byte) error {
+	j.position.Value = formatPosition(end)
 	j.record.Value = rec
 
 	_, err := awsx.Do(
@@ -323,15 +323,15 @@ func (j *journ) Append(ctx context.Context, end journal.Offset, rec []byte) erro
 	return err
 }
 
-func (j *journ) Truncate(ctx context.Context, end journal.Offset) error {
+func (j *journ) Truncate(ctx context.Context, end journal.Position) error {
 	return j.RangeAll(
 		ctx,
-		func(ctx context.Context, off journal.Offset, _ []byte) (bool, error) {
-			if off >= end {
+		func(ctx context.Context, pos journal.Position, _ []byte) (bool, error) {
+			if pos >= end {
 				return false, nil
 			}
 
-			j.offset.Value = formatOffset(off)
+			j.position.Value = formatPosition(pos)
 
 			_, err := awsx.Do(
 				ctx,
@@ -375,7 +375,7 @@ func CreateJournalStoreTable(
 					AttributeType: types.ScalarAttributeTypeS,
 				},
 				{
-					AttributeName: aws.String(journalOffsetAttr),
+					AttributeName: aws.String(journalPositionAttr),
 					AttributeType: types.ScalarAttributeTypeN,
 				},
 			},
@@ -385,7 +385,7 @@ func CreateJournalStoreTable(
 					KeyType:       types.KeyTypeHash,
 				},
 				{
-					AttributeName: aws.String(journalOffsetAttr),
+					AttributeName: aws.String(journalPositionAttr),
 					KeyType:       types.KeyTypeRange,
 				},
 			},
@@ -400,21 +400,21 @@ func CreateJournalStoreTable(
 	return err
 }
 
-// parseOffset parses the offset attribute in the given item.
-func parseOffset(item map[string]types.AttributeValue) (journal.Offset, error) {
-	attr, err := getAttr[*types.AttributeValueMemberN](item, journalOffsetAttr)
+// parsePosition parses the position attribute in the given item.
+func parsePosition(item map[string]types.AttributeValue) (journal.Position, error) {
+	attr, err := getAttr[*types.AttributeValueMemberN](item, journalPositionAttr)
 	if err != nil {
 		return 0, err
 	}
 
-	off, err := strconv.ParseUint(attr.Value, 10, 64)
+	pos, err := strconv.ParseUint(attr.Value, 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("item is corrupt: invalid offset: %w", err)
+		return 0, fmt.Errorf("item is corrupt: invalid position: %w", err)
 	}
 
-	return journal.Offset(off), nil
+	return journal.Position(pos), nil
 }
 
-func formatOffset(off journal.Offset) string {
-	return strconv.FormatUint(uint64(off), 10)
+func formatPosition(pos journal.Position) string {
+	return strconv.FormatUint(uint64(pos), 10)
 }

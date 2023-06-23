@@ -30,12 +30,12 @@ type journ struct {
 	DB   *sql.DB
 }
 
-func (j *journ) Bounds(ctx context.Context) (begin, end journal.Offset, err error) {
+func (j *journ) Bounds(ctx context.Context) (begin, end journal.Position, err error) {
 	row := j.DB.QueryRowContext(
 		ctx,
 		`SELECT
-			COALESCE(MIN("offset"),     0),
-			COALESCE(MAX("offset") + 1, 0)
+			COALESCE(MIN(position),     0),
+			COALESCE(MAX(position) + 1, 0)
 		FROM veracity.journal
 		WHERE name = $1`,
 		j.Name,
@@ -45,15 +45,15 @@ func (j *journ) Bounds(ctx context.Context) (begin, end journal.Offset, err erro
 	return begin, end, err
 }
 
-func (j *journ) Get(ctx context.Context, off journal.Offset) ([]byte, bool, error) {
+func (j *journ) Get(ctx context.Context, pos journal.Position) ([]byte, bool, error) {
 	row := j.DB.QueryRowContext(
 		ctx,
 		`SELECT record
 		FROM veracity.journal
 		WHERE name = $1
-		AND "offset" = $2`,
+		AND position = $2`,
 		j.Name,
-		off,
+		pos,
 	)
 
 	var rec []byte
@@ -67,17 +67,18 @@ func (j *journ) Get(ctx context.Context, off journal.Offset) ([]byte, bool, erro
 
 func (j *journ) Range(
 	ctx context.Context,
-	begin journal.Offset,
+	begin journal.Position,
 	fn journal.RangeFunc,
 ) error {
-	// TODO: use a limit and offset to "page" through records
+	// TODO: "paginate" results across multiple queries to avoid loading
+	// everything into memory at once.
 	rows, err := j.DB.QueryContext(
 		ctx,
-		`SELECT "offset", record
+		`SELECT position, record
 		FROM veracity.journal
 		WHERE name = $1
-		AND "offset" >= $2
-		ORDER BY "offset"`,
+		AND position >= $2
+		ORDER BY position`,
 		j.Name,
 		begin,
 	)
@@ -86,22 +87,22 @@ func (j *journ) Range(
 	}
 	defer rows.Close()
 
-	expectedOffset := begin
+	expectPos := begin
 
 	for rows.Next() {
 		var (
-			off journal.Offset
+			pos journal.Position
 			rec []byte
 		)
-		if err = rows.Scan(&off, &rec); err != nil {
+		if err = rows.Scan(&pos, &rec); err != nil {
 			return err
 		}
-		if off != expectedOffset {
+		if pos != expectPos {
 			return errors.New("cannot range over truncated records")
 		}
-		expectedOffset++
+		expectPos++
 
-		ok, err := fn(ctx, off, rec)
+		ok, err := fn(ctx, pos, rec)
 		if !ok || err != nil {
 			return err
 		}
@@ -114,13 +115,14 @@ func (j *journ) RangeAll(
 	ctx context.Context,
 	fn journal.RangeFunc,
 ) error {
-	// TODO: use a limit and offset to "page" through records
+	// TODO: "paginate" results across multiple queries to avoid loading
+	// everything into memory at once.
 	rows, err := j.DB.QueryContext(
 		ctx,
-		`SELECT "offset", record
+		`SELECT position, record
 		FROM veracity.journal
 		WHERE name = $1
-		ORDER BY "offset"`,
+		ORDER BY position`,
 		j.Name,
 	)
 	if err != nil {
@@ -129,28 +131,30 @@ func (j *journ) RangeAll(
 	defer rows.Close()
 
 	var (
-		firstIteration = true
-		expectedOffset journal.Offset
+		first     = true
+		expectPos journal.Position
 	)
+
 	for rows.Next() {
 		var (
-			off journal.Offset
+			pos journal.Position
 			rec []byte
 		)
-		if err = rows.Scan(&off, &rec); err != nil {
+
+		if err = rows.Scan(&pos, &rec); err != nil {
 			return err
 		}
 
-		if firstIteration {
-			expectedOffset = off
-			firstIteration = false
-		} else if off != expectedOffset {
+		if first {
+			expectPos = pos
+			first = false
+		} else if pos != expectPos {
 			return errors.New("cannot range over truncated records")
 		}
 
-		expectedOffset++
+		expectPos++
 
-		ok, err := fn(ctx, off, rec)
+		ok, err := fn(ctx, pos, rec)
 		if !ok || err != nil {
 			return err
 		}
@@ -159,12 +163,12 @@ func (j *journ) RangeAll(
 	return rows.Err()
 }
 
-func (j *journ) Append(ctx context.Context, end journal.Offset, rec []byte) error {
+func (j *journ) Append(ctx context.Context, end journal.Position, rec []byte) error {
 	res, err := j.DB.ExecContext(
 		ctx,
 		`INSERT INTO veracity.journal
-		(name, "offset", record) VALUES ($1, $2, $3)
-		ON CONFLICT (name, "offset") DO NOTHING`,
+		(name, position, record) VALUES ($1, $2, $3)
+		ON CONFLICT (name, position) DO NOTHING`,
 		j.Name,
 		end,
 		rec,
@@ -185,12 +189,12 @@ func (j *journ) Append(ctx context.Context, end journal.Offset, rec []byte) erro
 	return nil
 }
 
-func (j *journ) Truncate(ctx context.Context, end journal.Offset) error {
+func (j *journ) Truncate(ctx context.Context, end journal.Position) error {
 	_, err := j.DB.ExecContext(
 		ctx,
 		`DELETE FROM veracity.journal
 		WHERE name = $1
-		AND "offset" < $2`,
+		AND position < $2`,
 		j.Name,
 		end,
 	)
@@ -222,10 +226,10 @@ func CreateJournalStoreSchema(
 		ctx,
 		`CREATE TABLE IF NOT EXISTS veracity.journal (
 			name     TEXT NOT NULL,
-			"offset" BIGINT NOT NULL,
+			position BIGINT NOT NULL,
 			record   BYTEA NOT NULL,
 
-			PRIMARY KEY (name, "offset")
+			PRIMARY KEY (name, position)
 		)`,
 	); err != nil {
 		return err

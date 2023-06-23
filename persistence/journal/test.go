@@ -74,7 +74,7 @@ func RunTests(
 			t.Run("it returns the expected bounds", func(t *testing.T) {
 				cases := []struct {
 					Desc                   string
-					ExpectBegin, ExpectEnd Offset
+					ExpectBegin, ExpectEnd Position
 					Setup                  func(ctx context.Context, t *testing.T, j Journal)
 				}{
 					{
@@ -115,11 +115,11 @@ func RunTests(
 						}
 
 						if begin != c.ExpectBegin {
-							t.Fatalf("unexpected begin offset, want %d, got %d", c.ExpectBegin, begin)
+							t.Fatalf("unexpected begin position, want %d, got %d", c.ExpectBegin, begin)
 						}
 
 						if end != c.ExpectEnd {
-							t.Fatalf("unexpected end offset, want %d, got %d", c.ExpectEnd, end)
+							t.Fatalf("unexpected end position, want %d, got %d", c.ExpectEnd, end)
 						}
 					})
 				}
@@ -129,7 +129,7 @@ func RunTests(
 		t.Run("func Get()", func(t *testing.T) {
 			t.Parallel()
 
-			t.Run("it returns false if there is no record at the given offset", func(t *testing.T) {
+			t.Run("it returns false if there is no record at the given position", func(t *testing.T) {
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
@@ -148,13 +148,12 @@ func RunTests(
 
 				ctx, j := setup(t, newStore)
 
-				// Ensure we test with an offset that becomes 2 digits long to
-				// confirm that the implementation is not using a lexical sort
-				// on the offset.
+				// Ensure we test with a position that becomes 2 digits long to
+				// confirm that the implementation is not using a lexical sort.
 				expect := appendRecords(ctx, t, j, 15)
 
-				for off, rec := range expect {
-					actual, ok, err := j.Get(ctx, Offset(off))
+				for i, rec := range expect {
+					actual, ok, err := j.Get(ctx, Position(i))
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -216,19 +215,19 @@ func RunTests(
 				expect := appendRecords(ctx, t, j, 15)
 
 				var actual [][]byte
-				expectOffset := Offset(10)
-				expect = expect[expectOffset:]
+				expectPos := Position(10)
+				expect = expect[expectPos:]
 
 				if err := j.Range(
 					ctx,
-					expectOffset,
-					func(ctx context.Context, off Offset, rec []byte) (bool, error) {
-						if off != expectOffset {
-							t.Fatalf("unexpected offset: want %d, got %d", expectOffset, off)
+					expectPos,
+					func(ctx context.Context, pos Position, rec []byte) (bool, error) {
+						if pos != expectPos {
+							t.Fatalf("unexpected position: want %d, got %d", expectPos, pos)
 						}
 
 						actual = append(actual, rec)
-						expectOffset++
+						expectPos++
 
 						return true, nil
 					},
@@ -251,7 +250,7 @@ func RunTests(
 				if err := j.Range(
 					ctx,
 					0,
-					func(ctx context.Context, off Offset, rec []byte) (bool, error) {
+					func(ctx context.Context, pos Position, rec []byte) (bool, error) {
 						if called {
 							return false, errors.New("unexpected call")
 						}
@@ -269,9 +268,9 @@ func RunTests(
 
 				ctx, j := setup(t, newStore)
 				records := appendRecords(ctx, t, j, 5)
-				retainOffset := Offset(len(records) - 1)
+				retainPos := Position(len(records) - 1)
 
-				err := j.Truncate(ctx, retainOffset)
+				err := j.Truncate(ctx, retainPos)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -279,7 +278,7 @@ func RunTests(
 				err = j.Range(
 					ctx,
 					1,
-					func(ctx context.Context, off Offset, rec []byte) (bool, error) {
+					func(ctx context.Context, pos Position, rec []byte) (bool, error) {
 						panic("unexpected call")
 					},
 				)
@@ -302,7 +301,7 @@ func RunTests(
 				if err := j.Range(
 					ctx,
 					0,
-					func(ctx context.Context, off Offset, rec []byte) (bool, error) {
+					func(ctx context.Context, pos Position, rec []byte) (bool, error) {
 						rec[0] = 'X'
 
 						return true, nil
@@ -339,17 +338,17 @@ func RunTests(
 				expect := appendRecords(ctx, t, j, 15)
 
 				var actual [][]byte
-				var expectOffset Offset
+				var expectPos Position
 
 				if err := j.RangeAll(
 					ctx,
-					func(ctx context.Context, off Offset, rec []byte) (bool, error) {
-						if off != expectOffset {
-							t.Fatalf("unexpected offset: want %d, got %d", expectOffset, off)
+					func(ctx context.Context, pos Position, rec []byte) (bool, error) {
+						if pos != expectPos {
+							t.Fatalf("unexpected position: want %d, got %d", expectPos, pos)
 						}
 
 						actual = append(actual, rec)
-						expectOffset++
+						expectPos++
 
 						return true, nil
 					},
@@ -371,7 +370,7 @@ func RunTests(
 				called := false
 				if err := j.RangeAll(
 					ctx,
-					func(ctx context.Context, off Offset, rec []byte) (bool, error) {
+					func(ctx context.Context, pos Position, rec []byte) (bool, error) {
 						if called {
 							return false, errors.New("unexpected call")
 						}
@@ -390,21 +389,21 @@ func RunTests(
 				ctx, j := setup(t, newStore)
 				records := appendRecords(ctx, t, j, 5)
 
-				retainOffset := Offset(len(records) - 1)
-				err := j.Truncate(ctx, retainOffset)
+				retainPos := Position(len(records) - 1)
+				err := j.Truncate(ctx, retainPos)
 				if err != nil {
 					t.Fatal(err)
 				}
 
 				if err := j.RangeAll(
 					ctx,
-					func(ctx context.Context, off Offset, rec []byte) (bool, error) {
-						if off != retainOffset {
-							t.Fatalf("unexpected offset: want %d, got %d", retainOffset, off)
+					func(ctx context.Context, pos Position, rec []byte) (bool, error) {
+						if pos != retainPos {
+							t.Fatalf("unexpected position: want %d, got %d", retainPos, pos)
 						}
 
-						if !bytes.Equal(rec, records[retainOffset]) {
-							t.Fatalf("unexpected record: want %q, got %q", records[retainOffset], rec)
+						if !bytes.Equal(rec, records[retainPos]) {
+							t.Fatalf("unexpected record: want %q, got %q", records[retainPos], rec)
 						}
 
 						return false, nil
@@ -422,7 +421,7 @@ func RunTests(
 
 				if err := j.RangeAll(
 					ctx,
-					func(ctx context.Context, _ Offset, rec []byte) (bool, error) {
+					func(ctx context.Context, _ Position, rec []byte) (bool, error) {
 						rec[0] = 'X'
 
 						return true, nil
@@ -452,7 +451,7 @@ func RunTests(
 		t.Run("func Append()", func(t *testing.T) {
 			t.Parallel()
 
-			t.Run("it does not return an error if there is no record at the given offset", func(t *testing.T) {
+			t.Run("it does not return an error if there is no record at the given position", func(t *testing.T) {
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
@@ -462,7 +461,7 @@ func RunTests(
 				}
 			})
 
-			t.Run("it returns ErrConflict there is already a record at the given offset", func(t *testing.T) {
+			t.Run("it returns ErrConflict there is already a record at the given position", func(t *testing.T) {
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
@@ -552,7 +551,7 @@ func RunTests(
 
 				const expect = 1
 				if begin != expect {
-					t.Fatalf("unexpected begin offset, want %d, got %d", expect, begin)
+					t.Fatalf("unexpected begin position, want %d, got %d", expect, begin)
 				}
 			})
 
@@ -577,7 +576,7 @@ func RunTests(
 
 				const expect = 2
 				if begin != expect {
-					t.Fatalf("unexpected begin offset, want %d, got %d", expect, begin)
+					t.Fatalf("unexpected begin position, want %d, got %d", expect, begin)
 				}
 			})
 		})
@@ -619,14 +618,14 @@ func appendRecords(
 ) [][]byte {
 	var records [][]byte
 
-	for off := Offset(0); off < Offset(n); off++ {
+	for pos := Position(0); pos < Position(n); pos++ {
 		rec := []byte(
-			fmt.Sprintf("<record-%d>", off),
+			fmt.Sprintf("<record-%d>", pos),
 		)
 
 		records = append(records, rec)
 
-		if err := j.Append(ctx, off, rec); err != nil {
+		if err := j.Append(ctx, pos, rec); err != nil {
 			t.Fatal(err)
 		}
 	}
