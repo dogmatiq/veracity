@@ -63,11 +63,11 @@ func (c applicationVisitor) VisitRichIntegration(ctx context.Context, cfg config
 	ch := make(chan *integration.EnqueueCommandExchange)
 
 	sup := &integration.Supervisor{
-		EnqueueCommand: ch,
-		Handler:        cfg.Handler(),
-		HandlerKey:     cfg.Identity().Key,
-		Journals:       c.Persistence.Journals,
-		Packer:         c.packer,
+		EnqueueCommand:  ch,
+		Handler:         cfg.Handler(),
+		HandlerIdentity: marshalIdentity(cfg.Identity()),
+		Journals:        c.Persistence.Journals,
+		Packer:          c.packer,
 	}
 
 	exec := &integration.CommandExecutor{

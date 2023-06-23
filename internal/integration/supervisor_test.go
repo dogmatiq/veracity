@@ -10,12 +10,16 @@ import (
 
 	"github.com/dogmatiq/dogma"
 	. "github.com/dogmatiq/dogma/fixtures"
+	"github.com/dogmatiq/enginekit/protobuf/envelopepb"
 	"github.com/dogmatiq/enginekit/protobuf/identitypb"
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	. "github.com/dogmatiq/marshalkit/fixtures"
 	"github.com/dogmatiq/veracity/internal/envelope"
-	"github.com/dogmatiq/veracity/internal/integration"
+	. "github.com/dogmatiq/veracity/internal/integration"
 	"github.com/dogmatiq/veracity/persistence/driver/memory"
+	"github.com/google/go-cmp/cmp"
+	"google.golang.org/protobuf/testing/protocmp"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // - [x] Record command in inbox
@@ -31,35 +35,126 @@ import (
 // - [ ] Remove integration from a dirty list.
 
 func TestSupervisor(t *testing.T) {
-	packer := &envelope.Packer{
-		Application: identitypb.New("<app>", uuidpb.Generate()),
-		Marshaler:   Marshaler,
-	}
-
-	newSupervisor := func() (*integration.Supervisor, *IntegrationMessageHandler, chan *integration.EnqueueCommandExchange) {
-		exchanges := make(chan *integration.EnqueueCommandExchange)
-		handler := &IntegrationMessageHandler{}
-
-		s := &integration.Supervisor{
-			EnqueueCommand: exchanges,
-			HandlerKey:     "faf5be87-e753-407c-a044-e72e4c5bf082",
-			Journals:       &memory.JournalStore{},
-			Packer:         packer,
-			Handler:        handler,
+	setup := func(t *testing.T) (result struct {
+		ctx           context.Context
+		cancel        context.CancelFunc
+		packer        *envelope.Packer
+		supervisor    *Supervisor
+		handler       *IntegrationMessageHandler
+		exchanges     chan *EnqueueCommandExchange
+		eventRecorder *eventRecorderStub
+		executor      *CommandExecutor
+	}) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		t.Cleanup(cancel)
+		result.ctx = ctx
+		result.cancel = cancel
+		result.packer = newPacker()
+		result.exchanges = make(chan *EnqueueCommandExchange)
+		result.handler = &IntegrationMessageHandler{}
+		result.eventRecorder = &eventRecorderStub{}
+		result.executor = &CommandExecutor{
+			EnqueueCommands: result.exchanges,
+			Packer:          result.packer,
 		}
-		return s, handler, exchanges
+
+		result.supervisor = &Supervisor{
+			EnqueueCommand:  result.exchanges,
+			HandlerIdentity: identitypb.New("<handler>", uuidpb.Generate()),
+			Journals:        &memory.JournalStore{},
+			Packer:          result.packer,
+			Handler:         result.handler,
+			EventRecorder:   result.eventRecorder,
+		}
+
+		return result
 	}
+	t.Run("it records events to the event stream", func(t *testing.T) {
+		deps := setup(t)
+
+		deps.handler.HandleCommandFunc = func(
+			_ context.Context,
+			s dogma.IntegrationCommandScope,
+			c dogma.Command,
+		) error {
+			s.RecordEvent(MessageE1)
+			s.RecordEvent(MessageE2)
+			s.RecordEvent(MessageE3)
+
+			return nil
+		}
+
+		var actual atomic.Value
+		deps.eventRecorder.RecordEventsFunc = func(envs []*envelopepb.Envelope) {
+			actual.Store(envs)
+			deps.cancel()
+		}
+
+		result := make(chan error, 1)
+		go func() {
+			result <- deps.supervisor.Run(deps.ctx)
+		}()
+
+		if err := deps.executor.ExecuteCommand(deps.ctx, MessageC1); err != nil {
+			t.Fatal(err)
+		}
+
+		err := <-result
+		if !errors.Is(err, context.Canceled) {
+			t.Fatal(err)
+		}
+
+		if diff := cmp.Diff(
+			actual.Load(),
+			[]*envelopepb.Envelope{
+				{
+					MessageId:         deterministicUUID(2),
+					CausationId:       deterministicUUID(1),
+					CorrelationId:     deterministicUUID(1),
+					SourceApplication: deps.packer.Application,
+					SourceHandler:     deps.supervisor.HandlerIdentity,
+					CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
+					Description:       MessageE1.MessageDescription(),
+					PortableName:      MessageEPortableName,
+					MediaType:         MessageE1Packet.MediaType,
+					Data:              MessageE1Packet.Data,
+				},
+				{
+					MessageId:         deterministicUUID(3),
+					CausationId:       deterministicUUID(1),
+					CorrelationId:     deterministicUUID(1),
+					SourceApplication: deps.packer.Application,
+					SourceHandler:     deps.supervisor.HandlerIdentity,
+					CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
+					Description:       MessageE2.MessageDescription(),
+					PortableName:      MessageEPortableName,
+					MediaType:         MessageE2Packet.MediaType,
+					Data:              MessageE2Packet.Data,
+				},
+				{
+					MessageId:         deterministicUUID(4),
+					CausationId:       deterministicUUID(1),
+					CorrelationId:     deterministicUUID(1),
+					SourceApplication: deps.packer.Application,
+					SourceHandler:     deps.supervisor.HandlerIdentity,
+					CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
+					Description:       MessageE3.MessageDescription(),
+					PortableName:      MessageEPortableName,
+					MediaType:         MessageE3Packet.MediaType,
+					Data:              MessageE3Packet.Data,
+				},
+			},
+			protocmp.Transform(),
+		); diff != "" {
+
+			t.Fatal(diff)
+		}
+	})
 	t.Run("it does not re-handle successful commands after restart", func(t *testing.T) {
-		env := packer.Pack(MessageC1)
+		deps := setup(t)
 
-		enqueued := make(chan struct{})
-		ex := &integration.EnqueueCommandExchange{
-			Command: env,
-			Done:    enqueued,
-		}
 		var handledCount atomic.Uint64
-		s, handler, exchanges := newSupervisor()
-		handler.HandleCommandFunc = func(
+		deps.handler.HandleCommandFunc = func(
 			_ context.Context,
 			_ dogma.IntegrationCommandScope,
 			c dogma.Command,
@@ -68,40 +163,29 @@ func TestSupervisor(t *testing.T) {
 			return nil
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
 		result := make(chan error, 1)
 		go func() {
-			result <- s.Run(ctx)
+			result <- deps.supervisor.Run(deps.ctx)
 		}()
 
-		select {
-		case err := <-result:
-			t.Fatal(err)
-		case exchanges <- ex:
-		}
-
-		select {
-		case err := <-result:
-			t.Fatal(err)
-		case <-enqueued:
-			cancel()
-		}
-
-		err := <-result
-		if !errors.Is(err, context.Canceled) {
+		if err := deps.executor.ExecuteCommand(deps.ctx, MessageC1); err != nil {
 			t.Fatal(err)
 		}
 
-		ctx, cancel = context.WithTimeout(context.Background(), time.Millisecond*250)
+		deps.cancel()
+
+		if err := <-result; !errors.Is(err, context.Canceled) {
+			t.Fatal(err)
+		}
+
+		secondRunCtx, cancel := context.WithTimeout(context.Background(), time.Millisecond*250)
 		defer cancel()
 
 		go func() {
-			result <- s.Run(ctx)
+			result <- deps.supervisor.Run(secondRunCtx)
 		}()
 
-		err = <-result
-		if !errors.Is(err, context.DeadlineExceeded) {
+		if err := <-result; !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatal(err)
 		}
 
@@ -112,18 +196,12 @@ func TestSupervisor(t *testing.T) {
 	})
 
 	t.Run("it recovers from a handler error", func(t *testing.T) {
-		expectedErr := errors.New("<error>")
-		env := packer.Pack(MessageC1)
+		deps := setup(t)
 
-		enqueued := make(chan struct{})
-		ex := &integration.EnqueueCommandExchange{
-			Command: env,
-			Done:    enqueued,
-		}
+		expectedErr := errors.New("<error>")
 		handled := make(chan struct{})
 
-		s, handler, exchanges := newSupervisor()
-		handler.HandleCommandFunc = func(
+		deps.handler.HandleCommandFunc = func(
 			_ context.Context,
 			_ dogma.IntegrationCommandScope,
 			c dogma.Command,
@@ -131,64 +209,45 @@ func TestSupervisor(t *testing.T) {
 			return expectedErr
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
 		result := make(chan error, 1)
 		go func() {
-			result <- s.Run(ctx)
+			result <- deps.supervisor.Run(deps.ctx)
 		}()
 
-		select {
-		case err := <-result:
-			t.Fatal(err)
-		case exchanges <- ex:
-		}
-
-		//TODO: fix race condition
-		select {
-		case err := <-result:
-			t.Fatal(err)
-		case <-enqueued:
-		}
-
-		err := <-result
-		if !errors.Is(err, expectedErr) {
+		if err := deps.executor.ExecuteCommand(deps.ctx, MessageC1); err != nil {
 			t.Fatal(err)
 		}
 
-		handler.HandleCommandFunc = func(ctx context.Context, ics dogma.IntegrationCommandScope, c dogma.Command) error {
+		if err := <-result; !errors.Is(err, expectedErr) {
+			t.Fatal(err)
+		}
+
+		deps.handler.HandleCommandFunc = func(ctx context.Context, ics dogma.IntegrationCommandScope, c dogma.Command) error {
 			close(handled)
 			return nil
 		}
 		go func() {
-			result <- s.Run(ctx)
+			result <- deps.supervisor.Run(deps.ctx)
 		}()
 
 		select {
 		case err := <-result:
 			t.Fatal(err)
 		case <-handled:
-			cancel()
+			deps.cancel()
 		}
-		err = <-result
-		if !errors.Is(err, context.Canceled) {
+
+		if err := <-result; !errors.Is(err, context.Canceled) {
 			t.Fatal(err)
 		}
 	})
 
 	t.Run("it passes the command to the handler", func(t *testing.T) {
-		env := packer.Pack(MessageC1)
-
-		enqueued := make(chan struct{})
-		ex := &integration.EnqueueCommandExchange{
-			Command: env,
-			Done:    enqueued,
-		}
+		deps := setup(t)
 
 		handled := make(chan struct{})
 
-		s, handler, exchanges := newSupervisor()
-		handler.HandleCommandFunc = func(
+		deps.handler.HandleCommandFunc = func(
 			_ context.Context,
 			_ dogma.IntegrationCommandScope,
 			c dogma.Command,
@@ -202,30 +261,20 @@ func TestSupervisor(t *testing.T) {
 			return nil
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
 		result := make(chan error, 1)
 		go func() {
-			result <- s.Run(ctx)
+			result <- deps.supervisor.Run(deps.ctx)
 		}()
 
-		select {
-		case err := <-result:
+		if err := deps.executor.ExecuteCommand(deps.ctx, MessageC1); err != nil {
 			t.Fatal(err)
-		case exchanges <- ex:
-		}
-
-		select {
-		case err := <-result:
-			t.Fatal(err)
-		case <-enqueued:
 		}
 
 		select {
 		case err := <-result:
 			t.Fatal(err)
 		case <-handled:
-			cancel()
+			deps.cancel()
 		}
 
 		err := <-result
