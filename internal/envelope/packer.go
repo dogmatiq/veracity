@@ -27,6 +27,14 @@ type Packer struct {
 
 	// Marshaler is used to marshal messages into envelopes.
 	Marshaler marshalkit.ValueMarshaler
+
+	// GenerateID is a function used to generate new message IDs. If it is nil,
+	// a UUID is generated.
+	GenerateID func() *uuidpb.UUID
+
+	// Now is a function used to get the current time. If it is nil, time.Now()
+	// is used.
+	Now func() time.Time
 }
 
 // Pack returns an envelope containing the given message.
@@ -42,7 +50,7 @@ func (p *Packer) Pack(
 		panic(err)
 	}
 
-	id := uuidpb.Generate()
+	id := p.generateID()
 
 	env := &envelopepb.Envelope{
 		MessageId:         id,
@@ -50,7 +58,7 @@ func (p *Packer) Pack(
 		CausationId:       id,
 		SourceSite:        p.Site,
 		SourceApplication: p.Application,
-		CreatedAt:         timestamppb.Now(),
+		CreatedAt:         p.now(),
 		Description:       m.MessageDescription(),
 		PortableName:      name,
 		MediaType:         packet.MediaType,
@@ -85,6 +93,24 @@ func (p *Packer) Unpack(env *envelopepb.Envelope) (dogma.Message, error) {
 	}
 
 	return nil, fmt.Errorf("'%T' is not a dogma message", m)
+}
+
+// now returns the current time.
+func (p *Packer) now() *timestamppb.Timestamp {
+	if p.Now == nil {
+		return timestamppb.Now()
+	}
+
+	return timestamppb.New(p.Now())
+}
+
+// generateID generates a new message ID.
+func (p *Packer) generateID() *uuidpb.UUID {
+	if p.GenerateID != nil {
+		return p.GenerateID()
+	}
+
+	return uuidpb.Generate()
 }
 
 // PackOption is an option that alters the behavior of a Pack operation.
