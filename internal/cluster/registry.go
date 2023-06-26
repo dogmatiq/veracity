@@ -130,7 +130,7 @@ func (r *Registry) Heartbeat(ctx context.Context, id uuid.UUID) (time.Duration, 
 	r.Logger.DebugCtx(
 		ctx,
 		"member node expiry extended",
-		slog.String("node_id", n.GetId().AsString()),
+		slog.String("node_id", n.Id.AsString()),
 		slog.Duration("heartbeat_interval", interval),
 		slog.Time("expires_at", expiresAt),
 	)
@@ -237,13 +237,13 @@ func (r *Registry) deleteIfExpired(
 	ctx context.Context,
 	n *registrypb.Node,
 ) (bool, error) {
-	if n.GetExpiresAt().AsTime().After(time.Now()) {
+	if n.ExpiresAt.AsTime().After(time.Now()) {
 		return false, nil
 	}
 
 	return true, r.Keyspace.Set(
 		ctx,
-		n.GetId().AsBytes(),
+		n.Id.AsBytes(),
 		nil,
 	)
 }
@@ -280,7 +280,7 @@ func marshalNode(n Node, expiresAt time.Time) *registrypb.Node {
 // unmarshalNode converts a Node from its protocol buffer representation.
 func unmarshalNode(n *registrypb.Node) Node {
 	return Node{
-		ID:        uuidpb.AsByteArray[uuid.UUID](n.GetId()),
-		Addresses: n.GetAddresses(),
+		ID:        uuidpb.AsByteArray[uuid.UUID](n.Id),
+		Addresses: n.Addresses,
 	}
 }
