@@ -5,8 +5,8 @@ import "context"
 // State is a function that implements the logic for a single state.
 type State func(context.Context) (Action, error)
 
-// Run runs the state machine until it is stopped or an error occurs.
-func Run(ctx context.Context, initial State) error {
+// Start runs the state machine until it is stopped or an error occurs.
+func Start(ctx context.Context, initial State) error {
 	m := &fsm{initial, nil}
 
 	for m.current != nil {
@@ -30,46 +30,50 @@ type Action func(*fsm)
 
 // Stay is an action that stays in the current state.
 func Stay() Action {
-	return stay
+	return func(*fsm) {}
 }
 
-func stay(m *fsm) {}
-
-// Exit is an action that stops the state machine.
-func Exit() Action {
-	return exit
-}
-
-func exit(m *fsm) {
-	m.current = nil
+// Stop is an action that stops the state machine.
+func Stop() Action {
+	return func(m *fsm) {
+		m.current = nil
+	}
 }
 
 // Back is an action that transitions to the previous state.
 func Back() Action {
-	return toPrevious
+	return func(m *fsm) {
+		m.current, m.previous = m.previous, m.current
+	}
 }
 
-func toPrevious(m *fsm) {
-	m.current, m.previous = m.previous, m.current
-}
-
-// Transition returns an action that transitions to a new state.
-func Transition(s State) Action {
+// EnterState returns an action that transitions to a new state.
+func EnterState(s State) Action {
 	return func(m *fsm) {
 		m.previous = m.current
 		m.current = s
 	}
 }
 
-// TransitionWith1 returns an action that transitions to a state that requires 1
+// EnterStateWith1Arg returns an action that transitions to a state that requires 1
 // parameter.
-func TransitionWith1[T1 any](
+func EnterStateWith1Arg[T1 any](
 	s func(context.Context, T1) (Action, error),
 	v1 T1,
 ) Action {
-	return func(m *fsm) {
-		m.current = func(ctx context.Context) (Action, error) {
-			return s(ctx, v1)
-		}
-	}
+	return EnterState(func(ctx context.Context) (Action, error) {
+		return s(ctx, v1)
+	})
+}
+
+// EnterStateWith2Args returns an action that transitions to a state that
+// requires 2 parameters.
+func EnterStateWith2Args[T1, T2 any](
+	s func(context.Context, T1, T2) (Action, error),
+	v1 T1,
+	v2 T2,
+) Action {
+	return EnterState(func(ctx context.Context) (Action, error) {
+		return s(ctx, v1, v2)
+	})
 }
