@@ -96,3 +96,32 @@ func Append[
 
 	return j.Append(ctx, end, data)
 }
+
+// LatestRecord returns the latest record in the journal.
+func LatestRecord[
+	T typedproto.Message[S],
+	S typedproto.MessageStruct,
+](
+	ctx context.Context,
+	j journal.Journal,
+) (journal.Position, T, bool, error) {
+	for {
+		_, end, err := j.Bounds(ctx)
+		if end == 0 || err != nil {
+			return 0, nil, false, err
+		}
+
+		rec, ok, err := Get[T, S](ctx, j, end)
+		if err != nil {
+			return 0, nil, false, err
+		}
+
+		if ok {
+			return end, rec, true, nil
+		}
+
+		// We didn't find the record, assuming the journal is not corrupted,
+		// that means that it was truncated after the call to Bounds() but
+		// before the call to Get().
+	}
+}
