@@ -1,4 +1,4 @@
-package tlog
+package testutil
 
 import (
 	"context"
@@ -10,8 +10,8 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-// New returns a logger that writes to the test's log.
-func New(t testing.TB) *slog.Logger {
+// NewLogger returns a logger that writes to the test's log.
+func NewLogger(t testing.TB) *slog.Logger {
 	return slog.New(
 		&handler{T: t},
 	)

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	. "github.com/dogmatiq/veracity/internal/cluster"
-	"github.com/dogmatiq/veracity/internal/tlog"
+	"github.com/dogmatiq/veracity/internal/testutil"
 	"github.com/dogmatiq/veracity/persistence/driver/memory"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
@@ -40,7 +40,7 @@ func TestRegistry(t *testing.T) {
 			PollInterval:      10 * time.Millisecond,
 			HeartbeatInterval: 50 * time.Millisecond,
 
-			Logger: tlog.New(t),
+			Logger: testutil.NewLogger(t),
 		}
 	}
 
