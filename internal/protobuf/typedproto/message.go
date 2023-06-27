@@ -49,3 +49,11 @@ func Marshal[
 ](m T) ([]byte, error) {
 	return proto.Marshal(m)
 }
+
+// Clone returns a deep copy of m.
+func Clone[
+	T Message[S],
+	S MessageStruct,
+](m T) T {
+	return proto.Clone(m).(T)
+}
