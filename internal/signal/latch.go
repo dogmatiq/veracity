@@ -36,7 +36,6 @@ func (s *Latch) Watch(watcher chan<- struct{}) CancelFunc {
 	if s.watchers == nil {
 		s.watchers = map[chan<- struct{}]struct{}{}
 	}
-
 	s.watchers[watcher] = struct{}{}
 
 	return func() {

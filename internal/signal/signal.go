@@ -2,9 +2,6 @@ package signal
 
 import "context"
 
-// CancelFunc is a function that cancels a watcher from receiving signals.
-type CancelFunc func()
-
 // Signal is an interface for a signal that can notify "watcher channels".
 type Signal interface {
 	Watch(chan<- struct{}) CancelFunc
@@ -29,3 +26,6 @@ func Wait(
 		return ctx.Err()
 	}
 }
+
+// CancelFunc is a function that cancels a watcher from receiving signals.
+type CancelFunc func()
