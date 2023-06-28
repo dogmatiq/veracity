@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/dogmatiq/veracity/internal/future"
+	"github.com/dogmatiq/veracity/internal/fsm"
 )
 
 // Go calls run in its own goroutine.
@@ -14,10 +14,10 @@ import (
 func Go(
 	t *testing.T,
 	run func(ctx context.Context) error,
-) future.Future[error] {
+) *fsm.Future[error] {
 	t.Helper()
 
-	err, resolver := future.New[error]()
+	var err fsm.Future[error]
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(func() {
@@ -26,9 +26,8 @@ func Go(
 	})
 
 	go func() {
-		err := run(ctx)
-		resolver.Set(err)
+		err.Set(run(ctx))
 	}()
 
-	return err
+	return &err
 }
