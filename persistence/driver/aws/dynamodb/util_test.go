@@ -32,8 +32,8 @@ func newClient(t *testing.T) *dynamodb.Client {
 		config.WithCredentialsProvider(
 			credentials.StaticCredentialsProvider{
 				Value: aws.Credentials{
-					AccessKeyID:     "<id>",
-					SecretAccessKey: "<secret>",
+					AccessKeyID:     "id",
+					SecretAccessKey: "secret",
 					SessionToken:    "",
 				},
 			},
