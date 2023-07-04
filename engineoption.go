@@ -1,10 +1,10 @@
 package veracity
 
 import (
+	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/veracity/internal/engineconfig"
 	"github.com/dogmatiq/veracity/persistence/journal"
 	"github.com/dogmatiq/veracity/persistence/kv"
-	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/exp/slog"
@@ -31,9 +31,9 @@ func WithOptionsFromEnvironment() EngineOption {
 }
 
 // WithNodeID is an [EngineOption] that sets the node ID of the engine.
-func WithNodeID(id uuid.UUID) EngineOption {
-	if id == uuid.Nil {
-		panic("node ID must not be the nil UUID")
+func WithNodeID(id *uuidpb.UUID) EngineOption {
+	if err := id.Validate(); err != nil {
+		panic(err)
 	}
 
 	return func(cfg *engineconfig.Config) {

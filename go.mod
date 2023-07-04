@@ -17,7 +17,6 @@ require (
 	github.com/dogmatiq/marshalkit v0.7.3
 	github.com/dogmatiq/sqltest v0.3.0
 	github.com/google/go-cmp v0.5.9
-	github.com/google/uuid v1.3.0
 	go.opentelemetry.io/otel v1.16.0
 	go.opentelemetry.io/otel/metric v1.16.0
 	go.opentelemetry.io/otel/trace v1.16.0
@@ -25,7 +24,6 @@ require (
 	golang.org/x/sync v0.3.0
 	google.golang.org/grpc v1.56.1
 	google.golang.org/protobuf v1.31.0
-	pgregory.net/rapid v1.0.0
 )
 
 require (
@@ -49,6 +47,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-sql-driver/mysql v1.5.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
+	github.com/google/uuid v1.3.0 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
 	github.com/jackc/pgconn v1.8.0 // indirect
 	github.com/jackc/pgio v1.0.0 // indirect

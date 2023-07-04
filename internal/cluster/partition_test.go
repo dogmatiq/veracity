@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	. "github.com/dogmatiq/veracity/internal/cluster"
-	"github.com/google/uuid"
 )
 
 func TestPartitioner(t *testing.T) {
@@ -39,12 +39,12 @@ func TestPartitioner(t *testing.T) {
 			t.Parallel()
 
 			p := &Partitioner{}
-			remaining := map[uuid.UUID]struct{}{}
+			remaining := uuidpb.Set{}
 
 			for i := 0; i < 10; i++ {
-				id := uuid.New()
+				id := uuidpb.Generate()
 				p.AddNode(id)
-				remaining[id] = struct{}{}
+				remaining.Add(id)
 			}
 
 			start := time.Now()
@@ -55,10 +55,10 @@ func TestPartitioner(t *testing.T) {
 					t.Fatal("timed-out waiting for workloads to be distributed")
 				}
 
-				workload := uuid.NewString()
+				workload := uuidpb.Generate().String()
 				id := p.Route(workload)
 
-				delete(remaining, id)
+				remaining.Delete(id)
 			}
 		})
 
@@ -67,14 +67,14 @@ func TestPartitioner(t *testing.T) {
 
 			p := &Partitioner{}
 			for i := 0; i < 10; i++ {
-				p.AddNode(uuid.New())
+				p.AddNode(uuidpb.Generate())
 			}
 
 			expect := p.Route("<workload>")
 
 			for i := 0; i < 10; i++ {
 				actual := p.Route("<workload>")
-				if actual != expect {
+				if !actual.Equal(expect) {
 					t.Fatalf("got %q, want %q", actual, expect)
 				}
 			}
@@ -85,7 +85,7 @@ func TestPartitioner(t *testing.T) {
 
 			p := &Partitioner{}
 			for i := 0; i < 10; i++ {
-				p.AddNode(uuid.New())
+				p.AddNode(uuidpb.Generate())
 			}
 
 			removed := p.Route("<workload>")

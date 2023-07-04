@@ -1,8 +1,8 @@
 package engineconfig
 
 import (
+	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/ferrite"
-	"github.com/google/uuid"
 )
 
 var nodeID = ferrite.
@@ -10,23 +10,31 @@ var nodeID = ferrite.
 	WithConstraint(
 		"must be a UUID",
 		func(v string) bool {
-			id, err := uuid.Parse(v)
-			return err != nil && id != uuid.Nil
+			id, err := uuidpb.FromString(v)
+			if err != nil {
+				return false
+			}
+
+			return id.Validate() == nil
 		},
 	).
 	Optional(ferrite.WithRegistry(FerriteRegistry))
 
 func (c *Config) finalizeNodeID() {
-	if c.NodeID != uuid.Nil {
+	if c.NodeID != nil {
 		return
 	}
 
 	if c.UseEnv {
-		if id, ok := nodeID.Value(); ok {
-			c.NodeID = uuid.MustParse(id)
+		if v, ok := nodeID.Value(); ok {
+			id, err := uuidpb.FromString(v)
+			if err != nil {
+				panic(err)
+			}
+			c.NodeID = id
 			return
 		}
 	}
 
-	c.NodeID = uuid.New()
+	c.NodeID = uuidpb.Generate()
 }

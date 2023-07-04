@@ -9,7 +9,6 @@ import (
 	"github.com/dogmatiq/veracity/internal/cluster/internal/registrypb"
 	"github.com/dogmatiq/veracity/internal/protobuf/protokv"
 	"github.com/dogmatiq/veracity/persistence/kv"
-	"github.com/google/uuid"
 	"golang.org/x/exp/slog"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -56,7 +55,7 @@ func (r *Registry) Register(ctx context.Context, n Node) (time.Duration, error) 
 	if err := protokv.Set(
 		ctx,
 		r.Keyspace,
-		n.ID[:],
+		n.ID.AsBytes(),
 		marshalNode(n, expiresAt),
 	); err != nil {
 		return 0, fmt.Errorf("unable to register node: %w", err)
@@ -74,8 +73,8 @@ func (r *Registry) Register(ctx context.Context, n Node) (time.Duration, error) 
 }
 
 // Deregister removes the node with the given ID from the registry.
-func (r *Registry) Deregister(ctx context.Context, id uuid.UUID) error {
-	if err := r.Keyspace.Set(ctx, id[:], nil); err != nil {
+func (r *Registry) Deregister(ctx context.Context, id *uuidpb.UUID) error {
+	if err := r.Keyspace.Set(ctx, id.AsBytes(), nil); err != nil {
 		return fmt.Errorf("unable to deregister node: %w", err)
 	}
 
@@ -91,11 +90,11 @@ func (r *Registry) Deregister(ctx context.Context, id uuid.UUID) error {
 // Heartbeat updates the expiry time of the node with the given ID.
 //
 // It returns the delay before the node should send its next heartbeat.
-func (r *Registry) Heartbeat(ctx context.Context, id uuid.UUID) (time.Duration, error) {
+func (r *Registry) Heartbeat(ctx context.Context, id *uuidpb.UUID) (time.Duration, error) {
 	n, ok, err := protokv.Get[*registrypb.Node](
 		ctx,
 		r.Keyspace,
-		id[:],
+		id.AsBytes(),
 	)
 	if err != nil {
 		return 0, fmt.Errorf("unable to update heartbeat: %w", err)
@@ -121,7 +120,7 @@ func (r *Registry) Heartbeat(ctx context.Context, id uuid.UUID) (time.Duration, 
 	if err := protokv.Set(
 		ctx,
 		r.Keyspace,
-		id[:],
+		id.AsBytes(),
 		n,
 	); err != nil {
 		return 0, fmt.Errorf("unable to register node: %w", err)
@@ -158,7 +157,7 @@ func (r *Registry) Watch(
 	poll := time.NewTicker(interval)
 	defer poll.Stop()
 
-	var before map[uuid.UUID]Node
+	var before uuidpb.Map[Node]
 
 	for {
 		after, err := r.members(ctx)
@@ -200,7 +199,7 @@ func (r *Registry) Watch(
 }
 
 // members returns a map of the nodes that are currently members of the cluster.
-func (r *Registry) members(ctx context.Context) (map[uuid.UUID]Node, error) {
+func (r *Registry) members(ctx context.Context) (uuidpb.Map[Node], error) {
 	// Don't allow the query to consume the entire poll interval.
 	timeout := r.PollInterval / 2
 	if timeout <= 0 {
@@ -210,7 +209,7 @@ func (r *Registry) members(ctx context.Context) (map[uuid.UUID]Node, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	members := map[uuid.UUID]Node{}
+	members := uuidpb.Map[Node]{}
 
 	return members, protokv.RangeAll(
 		ctx,
@@ -225,7 +224,7 @@ func (r *Registry) members(ctx context.Context) (map[uuid.UUID]Node, error) {
 			}
 
 			nn := unmarshalNode(n)
-			members[nn.ID] = nn
+			members.Set(nn.ID, nn)
 
 			return true, nil
 		},
@@ -250,7 +249,7 @@ func (r *Registry) deleteIfExpired(
 
 // membershipDiff returns the changes to membership since the last notification
 // was sent.
-func membershipDiff(before, after map[uuid.UUID]Node) MembershipChange {
+func membershipDiff(before, after uuidpb.Map[Node]) MembershipChange {
 	var change MembershipChange
 
 	for id, n := range after {
@@ -271,7 +270,7 @@ func membershipDiff(before, after map[uuid.UUID]Node) MembershipChange {
 // marshalNode converts a Node to its protocol buffer representation.
 func marshalNode(n Node, expiresAt time.Time) *registrypb.Node {
 	return &registrypb.Node{
-		Id:        uuidpb.FromByteArray(n.ID),
+		Id:        n.ID,
 		ExpiresAt: timestamppb.New(expiresAt),
 		Addresses: n.Addresses,
 	}
@@ -280,7 +279,7 @@ func marshalNode(n Node, expiresAt time.Time) *registrypb.Node {
 // unmarshalNode converts a Node from its protocol buffer representation.
 func unmarshalNode(n *registrypb.Node) Node {
 	return Node{
-		ID:        uuidpb.AsByteArray[uuid.UUID](n.Id),
+		ID:        n.Id,
 		Addresses: n.Addresses,
 	}
 }

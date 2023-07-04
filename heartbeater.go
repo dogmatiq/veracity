@@ -5,15 +5,15 @@ import (
 	"net"
 	"time"
 
+	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/veracity/internal/cluster"
 	"github.com/dogmatiq/veracity/internal/engineconfig"
 	"github.com/dogmatiq/veracity/persistence/kv"
-	"github.com/google/uuid"
 	"golang.org/x/exp/slog"
 )
 
 type heartbeater struct {
-	NodeID         uuid.UUID
+	NodeID         *uuidpb.UUID
 	Keyspaces      kv.Store
 	ListenAddr     string
 	AdvertiseAddrs []string

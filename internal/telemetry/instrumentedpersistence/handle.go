@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/google/uuid"
+	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 )
 
 var handleCounter atomic.Uint64
@@ -18,6 +18,6 @@ func handleID() string {
 	return fmt.Sprintf(
 		"#%d %s",
 		handleCounter.Add(1),
-		uuid.NewString(),
+		uuidpb.Generate().String(),
 	)
 }

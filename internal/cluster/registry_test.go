@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	. "github.com/dogmatiq/veracity/internal/cluster"
 	"github.com/dogmatiq/veracity/internal/testutil"
 	"github.com/dogmatiq/veracity/persistence/driver/memory"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/uuid"
 )
 
 func TestRegistry(t *testing.T) {
@@ -67,7 +67,7 @@ func TestRegistry(t *testing.T) {
 	}
 
 	node := Node{
-		ID: uuid.New(),
+		ID: uuidpb.Generate(),
 		Addresses: []string{
 			"10.0.0.1:50555",
 			"129.168.0.1:50555",

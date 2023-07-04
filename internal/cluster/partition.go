@@ -4,39 +4,39 @@ import (
 	"sync"
 
 	"github.com/cespare/xxhash/v2"
-	"github.com/google/uuid"
+	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 )
 
 // Partitioner determines which node is responsible for handling a specific
 // workload.
 type Partitioner struct {
 	m     sync.RWMutex
-	nodes map[uuid.UUID]struct{}
+	nodes uuidpb.Set
 }
 
 // AddNode adds a node to the partitioner.
-func (p *Partitioner) AddNode(id uuid.UUID) {
+func (p *Partitioner) AddNode(id *uuidpb.UUID) {
 	p.m.Lock()
 	defer p.m.Unlock()
 
 	if p.nodes == nil {
-		p.nodes = map[uuid.UUID]struct{}{}
+		p.nodes = uuidpb.Set{}
 	}
 
-	p.nodes[id] = struct{}{}
+	p.nodes.Add(id)
 }
 
 // RemoveNode removes a node from the partitioner.
-func (p *Partitioner) RemoveNode(id uuid.UUID) {
+func (p *Partitioner) RemoveNode(id *uuidpb.UUID) {
 	p.m.Lock()
 	defer p.m.Unlock()
 
-	delete(p.nodes, id)
+	p.nodes.Delete(id)
 }
 
 // Route returns the ID of the node that should handle the workload identified
 // by the given string.
-func (p *Partitioner) Route(workload string) uuid.UUID {
+func (p *Partitioner) Route(workload string) *uuidpb.UUID {
 	p.m.RLock()
 	defer p.m.RUnlock()
 
@@ -45,13 +45,14 @@ func (p *Partitioner) Route(workload string) uuid.UUID {
 	}
 
 	var (
-		bestID    uuid.UUID
+		bestID    *uuidpb.UUID
 		bestScore uint64
 		hash      xxhash.Digest
 	)
 
 	for id := range p.nodes {
-		hash.Write(id[:])
+		id := id.AsUUID()
+		hash.Write(id.AsBytes())
 		hash.WriteString(workload)
 		score := hash.Sum64()
 		hash.Reset()
