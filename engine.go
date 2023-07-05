@@ -3,18 +3,18 @@ package veracity
 import (
 	"context"
 	"fmt"
+	"net"
 	"reflect"
 
 	"github.com/dogmatiq/dogma"
+	"github.com/dogmatiq/veracity/internal/cluster"
 	"github.com/dogmatiq/veracity/internal/engineconfig"
 	"golang.org/x/sync/errgroup"
 )
 
 // Engine hosts a Dogma application.
 type Engine struct {
-	executors   map[reflect.Type]dogma.CommandExecutor
-	heartbeater *heartbeater
-	tasks       []func(context.Context) error
+	config engineconfig.Config
 }
 
 // New returns an engine that hosts the given application.
@@ -23,17 +23,8 @@ func New(app dogma.Application, options ...EngineOption) *Engine {
 		panic("application must not be nil")
 	}
 
-	return newEngine(
-		engineconfig.New(app, options),
-	)
-}
-
-func newEngine(cfg engineconfig.Config) *Engine {
-	return &Engine{
-		executors:   cfg.Application.Executors,
-		heartbeater: newHeartbeater(cfg),
-		tasks:       cfg.Tasks,
-	}
+	cfg := engineconfig.New(app, options)
+	return &Engine{cfg}
 }
 
 // ExecuteCommand enqueues a command for execution.
@@ -46,7 +37,7 @@ func (e *Engine) ExecuteCommand(ctx context.Context, c dogma.Command) error {
 		panic(fmt.Sprintf("command is invalid: %s", err))
 	}
 
-	x, ok := e.executors[reflect.TypeOf(c)]
+	x, ok := e.config.Application.Executors[reflect.TypeOf(c)]
 	if !ok {
 		panic(fmt.Sprintf("command is unrecognized: %T", c))
 	}
@@ -64,14 +55,34 @@ func (e *Engine) ExecuteCommand(ctx context.Context, c dogma.Command) error {
 func (e *Engine) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
+	lis, err := net.Listen("tcp", e.config.GRPC.ListenAddress)
+	if err != nil {
+		return err
+	}
+	defer lis.Close()
+
+	addresses := e.config.GRPC.AdvertiseAddresses
+	if len(addresses) == 0 {
+		// TODO: cross-product of this port with non-loopback IP addresses
+		addresses = []string{lis.Addr().String()}
+	}
+
 	g.Go(func() error {
-		return e.heartbeater.Run(ctx)
+		registrar := &cluster.Registrar{
+			Keyspaces: e.config.Persistence.Keyspaces,
+			Node: cluster.Node{
+				ID:        e.config.NodeID,
+				Addresses: addresses,
+			},
+			Logger: e.config.Telemetry.Logger,
+		}
+		return registrar.Run(ctx)
 	})
 
-	for _, t := range e.tasks {
-		t := t // capture loop variable
+	for _, task := range e.config.Tasks {
+		task := task // capture loop variable
 		g.Go(func() error {
-			return t(ctx)
+			return task(ctx)
 		})
 	}
 

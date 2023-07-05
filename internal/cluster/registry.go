@@ -2,11 +2,13 @@ package cluster
 
 import (
 	"context"
-	"fmt"
+	"errors"
+	"strings"
 	"time"
 
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/veracity/internal/cluster/internal/registrypb"
+	"github.com/dogmatiq/veracity/internal/fsm"
 	"github.com/dogmatiq/veracity/internal/protobuf/protokv"
 	"github.com/dogmatiq/veracity/persistence/kv"
 	"golang.org/x/exp/slog"
@@ -14,272 +16,295 @@ import (
 )
 
 const (
-	// DefaultRegistryPollInterval is the default interval at which the registry polls
-	// the underlying key-value store for changes.
-	DefaultRegistryPollInterval = 3 * time.Second
-
-	// DefaultHeartbeatInterval is the default interval at which nodes send
-	// heartbeats to the registry.
-	DefaultHeartbeatInterval = 10 * time.Second
+	// DefaultRenewInterval is the default interval at which a [Registrar]
+	// renews a node's registration.
+	//
+	// The registration period is always set to 2 * DefaultRenewInterval.
+	DefaultRenewInterval = 10 * time.Second
 
 	// RegistryKeyspace is the name of the keyspace that contains registry data.
 	RegistryKeyspace = "cluster.registry"
+
+	// DefaultRegistryPollInterval is the default interval at which the registry
+	// polls the underlying key-value store for changes.
+	DefaultRegistryPollInterval = 3 * time.Second
 )
 
-// MembershipChange is an event that indicates a change in membership to the
-// cluster.
-type MembershipChange struct {
-	Joins  []Node
-	Leaves []Node
+// Registrar registers and periodically renews a node's registration with the
+// registry.
+type Registrar struct {
+	Keyspaces     kv.Store
+	Node          Node
+	RenewInterval time.Duration
+	Shutdown      fsm.Latch
+	Logger        *slog.Logger
+
+	keyspace kv.Keyspace
+	interval time.Duration
 }
 
-// A Registry tracks the nodes that are members of the cluster.
-type Registry struct {
-	Keyspace          kv.Keyspace
-	PollInterval      time.Duration
-	HeartbeatInterval time.Duration
-	Logger            *slog.Logger
-}
+// Run starts the registrar.
+func (r *Registrar) Run(ctx context.Context) error {
+	var err error
+	r.keyspace, err = r.Keyspaces.Open(ctx, RegistryKeyspace)
+	if err != nil {
+		return err
+	}
+	defer r.keyspace.Close()
 
-// Register adds a node to the registry.
-//
-// It returns the delay before the node should send a heartbeat.
-func (r *Registry) Register(ctx context.Context, n Node) (time.Duration, error) {
-	interval := r.HeartbeatInterval
-	if interval <= 0 {
-		interval = DefaultHeartbeatInterval
+	r.interval = r.RenewInterval
+	if r.interval <= 0 {
+		r.interval = DefaultRenewInterval
 	}
 
-	expiresAt := time.Now().Add(interval * 2)
+	ticker := time.NewTicker(r.interval)
+	defer ticker.Stop()
 
-	if err := protokv.Set(
-		ctx,
-		r.Keyspace,
-		n.ID.AsBytes(),
-		marshalNode(n, expiresAt),
-	); err != nil {
-		return 0, fmt.Errorf("unable to register node: %w", err)
+	err = r.register(ctx)
+
+	for err == nil {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-r.Shutdown.Latched():
+			return r.deregister(ctx)
+		case <-ticker.C:
+			err = r.renew(ctx)
+		}
+	}
+
+	return err
+}
+
+// register adds a node to the registry.
+func (r *Registrar) register(ctx context.Context) error {
+	expiresAt, err := r.saveRegistration(ctx)
+	if err != nil {
+		return err
 	}
 
 	r.Logger.DebugCtx(
 		ctx,
-		"member node registered",
-		slog.String("node_id", n.ID.String()),
-		slog.Duration("heartbeat_interval", interval),
+		"cluster node registered",
+		slog.String("node_id", r.Node.ID.AsString()),
+		slog.String("addresses", strings.Join(r.Node.Addresses, ", ")),
 		slog.Time("expires_at", expiresAt),
-	)
-
-	return interval, nil
-}
-
-// Deregister removes the node with the given ID from the registry.
-func (r *Registry) Deregister(ctx context.Context, id *uuidpb.UUID) error {
-	if err := r.Keyspace.Set(ctx, id.AsBytes(), nil); err != nil {
-		return fmt.Errorf("unable to deregister node: %w", err)
-	}
-
-	r.Logger.DebugCtx(
-		ctx,
-		"member node deregistered",
-		slog.String("node_id", id.String()),
+		slog.Duration("renew_interval", r.interval),
 	)
 
 	return nil
 }
 
-// Heartbeat updates the expiry time of the node with the given ID.
-//
-// It returns the delay before the node should send its next heartbeat.
-func (r *Registry) Heartbeat(ctx context.Context, id *uuidpb.UUID) (time.Duration, error) {
-	n, ok, err := protokv.Get[*registrypb.Node](
+// deregister removes a node from the registry.
+func (r *Registrar) deregister(ctx context.Context) error {
+	if err := r.deleteRegistration(ctx); err != nil {
+		return err
+	}
+
+	r.Logger.DebugCtx(
 		ctx,
-		r.Keyspace,
-		id.AsBytes(),
+		"cluster node deregistered",
+		slog.String("node_id", r.Node.ID.AsString()),
+	)
+
+	return nil
+}
+
+// renew updates a node's registration expiry time.
+func (r *Registrar) renew(ctx context.Context) error {
+	reg, ok, err := protokv.Get[*registrypb.Registration](
+		ctx,
+		r.keyspace,
+		r.Node.ID.AsBytes(),
 	)
 	if err != nil {
-		return 0, fmt.Errorf("unable to update heartbeat: %w", err)
+		return err
 	}
 	if !ok {
-		return 0, fmt.Errorf("node not registered")
+		return errors.New("cluster node not registered")
 	}
-	if expired, err := r.deleteIfExpired(ctx, n); expired {
-		if err != nil {
-			return 0, fmt.Errorf("unable to update heartbeat: %w", err)
+
+	if reg.ExpiresAt.AsTime().Before(time.Now()) {
+		if err := r.deleteRegistration(ctx); err != nil {
+			return err
 		}
-		return 0, fmt.Errorf("node has expired")
+		return errors.New("cluster node registration expired")
 	}
 
-	interval := r.HeartbeatInterval
-	if interval <= 0 {
-		interval = DefaultHeartbeatInterval
-	}
-
-	expiresAt := time.Now().Add(interval * 2)
-	n.ExpiresAt = timestamppb.New(expiresAt)
-
-	if err := protokv.Set(
-		ctx,
-		r.Keyspace,
-		id.AsBytes(),
-		n,
-	); err != nil {
-		return 0, fmt.Errorf("unable to register node: %w", err)
+	expiresAt, err := r.saveRegistration(ctx)
+	if err != nil {
+		return err
 	}
 
 	r.Logger.DebugCtx(
 		ctx,
-		"member node expiry extended",
-		slog.String("node_id", n.Id.AsString()),
-		slog.Duration("heartbeat_interval", interval),
+		"cluster node registration renewed",
+		slog.String("node_id", r.Node.ID.AsString()),
 		slog.Time("expires_at", expiresAt),
+		slog.Duration("renew_interval", r.interval),
 	)
 
-	return interval, nil
+	return nil
 }
 
-// Watch sends notifications about changes to the cluster's membership to the
-// given channel.
-func (r *Registry) Watch(
+// saveRegistration saves the node's registration information to the registry.
+func (r *Registrar) saveRegistration(
 	ctx context.Context,
-	ch chan<- MembershipChange,
-) error {
-	interval := r.PollInterval
-	if interval <= 0 {
-		interval = DefaultRegistryPollInterval
-	}
-
-	r.Logger.DebugCtx(
+) (time.Time, error) {
+	expiresAt := time.Now().Add(r.interval * 2)
+	err := protokv.Set(
 		ctx,
-		"watching registry for membership changes",
-		slog.Duration("poll_interval", interval),
-	)
-
-	poll := time.NewTicker(interval)
-	defer poll.Stop()
-
-	var before uuidpb.Map[Node]
-
-	for {
-		after, err := r.members(ctx)
-		if err != nil {
-			return fmt.Errorf("unable to query cluster membership: %w", err)
-		}
-
-		change := membershipDiff(before, after)
-
-		// Setup a channel to notify, but leave it nil if there are no changes
-		// (write to a nil channel blocks forever).
-		var notify chan<- MembershipChange
-		if len(change.Joins) > 0 || len(change.Leaves) > 0 {
-			notify = ch
-
-			r.Logger.DebugCtx(
-				ctx,
-				"cluster membership has changed",
-				slog.Int("nodes_before", len(before)),
-				slog.Int("nodes_after", len(after)),
-			)
-		}
-
-		select {
-		case <-poll.C:
-			continue
-		case <-ctx.Done():
-			return ctx.Err()
-		case notify <- change:
-			r.Logger.DebugCtx(
-				ctx,
-				"membership notification delivered",
-				slog.Int("nodes_before", len(before)),
-				slog.Int("nodes_after", len(after)),
-			)
-			before = after
-		}
-	}
-}
-
-// members returns a map of the nodes that are currently members of the cluster.
-func (r *Registry) members(ctx context.Context) (uuidpb.Map[Node], error) {
-	// Don't allow the query to consume the entire poll interval.
-	timeout := r.PollInterval / 2
-	if timeout <= 0 {
-		timeout = DefaultRegistryPollInterval / 2
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	members := uuidpb.Map[Node]{}
-
-	return members, protokv.RangeAll(
-		ctx,
-		r.Keyspace,
-		func(
-			ctx context.Context,
-			k []byte,
-			n *registrypb.Node,
-		) (bool, error) {
-			if expired, err := r.deleteIfExpired(ctx, n); expired {
-				return true, err
-			}
-
-			nn := unmarshalNode(n)
-			members.Set(nn.ID, nn)
-
-			return true, nil
+		r.keyspace,
+		r.Node.ID.AsBytes(),
+		&registrypb.Registration{
+			Node: &registrypb.Node{
+				Id:        r.Node.ID,
+				Addresses: r.Node.Addresses,
+			},
+			ExpiresAt: timestamppb.New(expiresAt),
 		},
 	)
+
+	return expiresAt, err
 }
 
-// deleteIfExpired deletes the node with the given ID if it has expired.
-func (r *Registry) deleteIfExpired(
+// deleteRegistration removes a registration from the registry.
+func (r *Registrar) deleteRegistration(
 	ctx context.Context,
-	n *registrypb.Node,
-) (bool, error) {
-	if n.ExpiresAt.AsTime().After(time.Now()) {
-		return false, nil
-	}
-
-	return true, r.Keyspace.Set(
+) error {
+	return r.keyspace.Set(
 		ctx,
-		n.Id.AsBytes(),
+		r.Node.ID.AsBytes(),
 		nil,
 	)
 }
 
-// membershipDiff returns the changes to membership since the last notification
-// was sent.
-func membershipDiff(before, after uuidpb.Map[Node]) MembershipChange {
-	var change MembershipChange
+// MembershipChange is an event that indicates a change in membership to the
+// cluster.
+type MembershipChange struct {
+	Registered, Deregistered []Node
+}
 
-	for id, n := range after {
-		if _, ok := before[id]; !ok {
-			change.Joins = append(change.Joins, n)
+// RegistryObserver emits events about changes to the nodes in the registry.
+type RegistryObserver struct {
+	Keyspaces         kv.Store
+	MembershipChanged chan<- MembershipChange
+	Shutdown          fsm.Latch
+	PollInterval      time.Duration
+
+	keyspace kv.Keyspace
+	ticker   *time.Ticker
+	nodes    uuidpb.Map[Node]
+}
+
+func (o *RegistryObserver) Run(ctx context.Context) error {
+	var err error
+	o.keyspace, err = o.Keyspaces.Open(ctx, RegistryKeyspace)
+	if err != nil {
+		return err
+	}
+	defer o.keyspace.Close()
+
+	interval := o.PollInterval
+	if interval <= 0 {
+		interval = DefaultRegistryPollInterval
+	}
+
+	o.ticker = time.NewTicker(interval)
+	defer o.ticker.Stop()
+
+	return fsm.Start(ctx, o.pollState)
+}
+
+func (o *RegistryObserver) idleState(ctx context.Context) (fsm.Action, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-o.Shutdown.Latched():
+		return fsm.Stop()
+	case <-o.ticker.C:
+		return fsm.Enter(o.pollState)
+	}
+}
+
+func (o *RegistryObserver) pollState(ctx context.Context) (fsm.Action, error) {
+	nodes, err := o.loadNodes(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	event := MembershipChange{}
+
+	for id, node := range o.nodes {
+		if _, ok := nodes[id]; !ok {
+			event.Deregistered = append(event.Deregistered, node)
 		}
 	}
 
-	for id, n := range before {
-		if _, ok := after[id]; !ok {
-			change.Leaves = append(change.Leaves, n)
+	for id, node := range nodes {
+		if _, ok := o.nodes[id]; !ok {
+			event.Registered = append(event.Registered, node)
 		}
 	}
 
-	return change
+	if len(event.Registered) == 0 && len(event.Deregistered) == 0 {
+		return fsm.Enter(o.idleState)
+	}
+
+	return fsm.With(event).Enter(o.publishState)
 }
 
-// marshalNode converts a Node to its protocol buffer representation.
-func marshalNode(n Node, expiresAt time.Time) *registrypb.Node {
-	return &registrypb.Node{
-		Id:        n.ID,
-		ExpiresAt: timestamppb.New(expiresAt),
-		Addresses: n.Addresses,
+func (o *RegistryObserver) publishState(
+	ctx context.Context,
+	event MembershipChange,
+) (fsm.Action, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-o.ticker.C:
+		return fsm.Enter(o.pollState)
+	case o.MembershipChanged <- event:
 	}
+
+	if o.nodes == nil {
+		o.nodes = uuidpb.Map[Node]{}
+	}
+
+	for _, node := range event.Registered {
+		o.nodes.Set(node.ID, node)
+	}
+
+	for _, node := range event.Deregistered {
+		o.nodes.Delete(node.ID)
+	}
+
+	return fsm.Enter(o.idleState)
 }
 
-// unmarshalNode converts a Node from its protocol buffer representation.
-func unmarshalNode(n *registrypb.Node) Node {
-	return Node{
-		ID:        n.Id,
-		Addresses: n.Addresses,
-	}
+func (o *RegistryObserver) loadNodes(ctx context.Context) (uuidpb.Map[Node], error) {
+	nodes := uuidpb.Map[Node]{}
+
+	return nodes, protokv.RangeAll(
+		ctx,
+		o.keyspace,
+		func(
+			ctx context.Context,
+			k []byte,
+			reg *registrypb.Registration,
+		) (bool, error) {
+			if reg.ExpiresAt.AsTime().After(time.Now()) {
+				nodes.Set(
+					reg.Node.Id,
+					Node{
+						ID:        reg.Node.Id,
+						Addresses: reg.Node.Addresses,
+					},
+				)
+			} else if err := o.keyspace.Set(ctx, k, nil); err != nil {
+				return false, err
+			}
+
+			return true, nil
+		},
+	)
 }

@@ -55,7 +55,7 @@ func TestPartitioner(t *testing.T) {
 					t.Fatal("timed-out waiting for workloads to be distributed")
 				}
 
-				workload := uuidpb.Generate().String()
+				workload := uuidpb.Generate().AsString()
 				id := p.Route(workload)
 
 				remaining.Delete(id)

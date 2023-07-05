@@ -4,21 +4,26 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"testing"
 
 	"golang.org/x/exp/slices"
 	"golang.org/x/exp/slog"
 )
 
+// TestingT is the subset of the [testing.TB] interface that is used by this
+// package.
+type TestingT interface {
+	Log(...any)
+}
+
 // NewLogger returns a logger that writes to the test's log.
-func NewLogger(t testing.TB) *slog.Logger {
+func NewLogger(t TestingT) *slog.Logger {
 	return slog.New(
 		&handler{T: t},
 	)
 }
 
 type handler struct {
-	T      testing.TB
+	T      TestingT
 	attrs  []slog.Attr
 	groups []string
 }
