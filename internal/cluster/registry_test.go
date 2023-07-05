@@ -47,10 +47,11 @@ func TestRegistry(t *testing.T) {
 		}
 
 		x.Observer = &RegistryObserver{
-			Keyspaces:         keyspaces,
-			MembershipChanged: x.MembershipChanges,
-			PollInterval:      50 * time.Millisecond,
+			Keyspaces:    keyspaces,
+			PollInterval: 50 * time.Millisecond,
 		}
+
+		x.Observer.MembershipChanged.Subscribe(x.MembershipChanges)
 
 		return x
 	}

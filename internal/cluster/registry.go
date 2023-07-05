@@ -188,7 +188,7 @@ type MembershipChange struct {
 // RegistryObserver emits events about changes to the nodes in the registry.
 type RegistryObserver struct {
 	Keyspaces         kv.Store
-	MembershipChanged chan<- MembershipChange
+	MembershipChanged fsm.Topic[MembershipChange]
 	Shutdown          fsm.Latch
 	PollInterval      time.Duration
 
@@ -197,7 +197,10 @@ type RegistryObserver struct {
 	nodes    uuidpb.Map[Node]
 }
 
+// Run starts the observer.
 func (o *RegistryObserver) Run(ctx context.Context) error {
+	defer o.MembershipChanged.Close()
+
 	var err error
 	o.keyspace, err = o.Keyspaces.Open(ctx, RegistryKeyspace)
 	if err != nil {
@@ -263,7 +266,7 @@ func (o *RegistryObserver) publishState(
 		return nil, ctx.Err()
 	case <-o.ticker.C:
 		return fsm.Enter(o.pollState)
-	case o.MembershipChanged <- event:
+	case o.MembershipChanged.Publish() <- event:
 	}
 
 	if o.nodes == nil {
