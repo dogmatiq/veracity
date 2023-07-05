@@ -28,6 +28,9 @@ func New(app dogma.Application, options ...EngineOption) *Engine {
 }
 
 // ExecuteCommand enqueues a command for execution.
+//
+// It may be called without calling [Engine.Run]. In this mode of operation, the
+// engine acts solely as a router that forwards messages to worker nodes.
 func (e *Engine) ExecuteCommand(ctx context.Context, c dogma.Command) error {
 	if c == nil {
 		panic("command must not be nil")
@@ -46,10 +49,6 @@ func (e *Engine) ExecuteCommand(ctx context.Context, c dogma.Command) error {
 }
 
 // Run joins the cluster as a worker that handles the application's messages.
-//
-// [Engine.ExecuteCommand] may be called without calling [Engine.Run]. In this
-// mode of operation, the engine acts solely as a router that forwards messages
-// to worker nodes.
 //
 // It blocks until ctx is canceled or an error occurs.
 func (e *Engine) Run(ctx context.Context) error {
