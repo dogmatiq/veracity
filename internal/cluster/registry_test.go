@@ -7,8 +7,7 @@ import (
 
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	. "github.com/dogmatiq/veracity/internal/cluster"
-	"github.com/dogmatiq/veracity/internal/testutil"
-	. "github.com/dogmatiq/veracity/internal/testutil"
+	"github.com/dogmatiq/veracity/internal/test"
 	"github.com/dogmatiq/veracity/persistence/driver/memory"
 )
 
@@ -27,7 +26,7 @@ func TestRegistry(t *testing.T) {
 
 		keyspaces := &memory.KeyValueStore{}
 
-		x.Context, x.Cancel = ContextWithTimeout(t, 1*time.Second)
+		x.Context, x.Cancel = test.ContextWithTimeout(t, 1*time.Second)
 
 		x.Node = Node{
 			ID: uuidpb.Generate(),
@@ -43,7 +42,7 @@ func TestRegistry(t *testing.T) {
 			Keyspaces:     keyspaces,
 			Node:          x.Node,
 			RenewInterval: 10 * time.Millisecond,
-			Logger:        testutil.NewLogger(t),
+			Logger:        test.NewLogger(t),
 		}
 
 		x.Observer = &RegistryObserver{
@@ -59,10 +58,10 @@ func TestRegistry(t *testing.T) {
 	t.Run("it observes registration and deregistration", func(t *testing.T) {
 		x := setup(t)
 
-		testutil.RunBeforeTestEnds(t, x.Registrar.Run)
-		testutil.RunUntilTestEnds(t, x.Observer.Run)
+		test.RunBeforeTestEnds(t, x.Registrar.Run)
+		test.RunUntilTestEnds(t, x.Observer.Run)
 
-		ExpectToReceive(
+		test.ExpectToReceive(
 			x.Context,
 			t,
 			x.MembershipChanges,
@@ -86,7 +85,7 @@ func TestRegistry(t *testing.T) {
 
 		x.Registrar.Shutdown.Latch()
 
-		ExpectToReceive(
+		test.ExpectToReceive(
 			x.Context,
 			t,
 			x.MembershipChanges,
@@ -101,7 +100,7 @@ func TestRegistry(t *testing.T) {
 	t.Run("it observes nodes that are registered before the observer starts", func(t *testing.T) {
 		x := setup(t)
 
-		testutil.RunUntilTestEnds(t, x.Registrar.Run)
+		test.RunUntilTestEnds(t, x.Registrar.Run)
 
 		select {
 		case <-x.Context.Done():
@@ -111,9 +110,9 @@ func TestRegistry(t *testing.T) {
 		case <-time.After(2 * x.Observer.PollInterval):
 		}
 
-		testutil.RunUntilTestEnds(t, x.Observer.Run)
+		test.RunUntilTestEnds(t, x.Observer.Run)
 
-		ExpectToReceive(
+		test.ExpectToReceive(
 			x.Context,
 			t,
 			x.MembershipChanges,
@@ -128,10 +127,10 @@ func TestRegistry(t *testing.T) {
 	t.Run("it does observe nodes that are deregistered before the observer starts", func(t *testing.T) {
 		x := setup(t)
 
-		testutil.RunBeforeTestEnds(t, x.Registrar.Run)
+		test.RunBeforeTestEnds(t, x.Registrar.Run)
 		x.Registrar.Shutdown.Latch()
 
-		testutil.RunUntilTestEnds(t, x.Observer.Run)
+		test.RunUntilTestEnds(t, x.Observer.Run)
 
 		select {
 		case <-x.Context.Done():
@@ -147,10 +146,10 @@ func TestRegistry(t *testing.T) {
 	t.Run("it observes nodes that leave the cluster due to registration expiry", func(t *testing.T) {
 		x := setup(t)
 
-		_, stopRegistrar := testutil.Run(t, x.Registrar.Run)
-		testutil.RunUntilTestEnds(t, x.Observer.Run)
+		_, stopRegistrar := test.Run(t, x.Registrar.Run)
+		test.RunUntilTestEnds(t, x.Observer.Run)
 
-		ExpectToReceive(
+		test.ExpectToReceive(
 			x.Context,
 			t,
 			x.MembershipChanges,
@@ -163,7 +162,7 @@ func TestRegistry(t *testing.T) {
 
 		stopRegistrar()
 
-		ExpectToReceive(
+		test.ExpectToReceive(
 			x.Context,
 			t,
 			x.MembershipChanges,

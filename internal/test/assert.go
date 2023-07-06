@@ -1,8 +1,7 @@
-package testutil
+package test
 
 import (
 	"context"
-	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -10,7 +9,7 @@ import (
 
 // Expect compares two values and fails the test if they are different.
 func Expect[T any](
-	t *testing.T,
+	t TestingT,
 	got, want T,
 	normalizers ...func(T),
 ) {
@@ -34,7 +33,7 @@ func Expect[T any](
 // compares it to the expected value.
 func ExpectToReceive[T any](
 	ctx context.Context,
-	t *testing.T,
+	t TestingT,
 	got <-chan T,
 	want T,
 	normalizers ...func(T),

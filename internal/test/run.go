@@ -1,41 +1,40 @@
-package testutil
+package test
 
 import (
 	"context"
-	"testing"
 	"time"
-
-	"github.com/dogmatiq/veracity/internal/fsm"
 )
 
 // Run calls fn in its own goroutine.
 //
 // ctx is canceled when the test ends, at which point the function must return.
 func Run(
-	t *testing.T,
+	t TestingT,
 	fn func(ctx context.Context) error,
-) (*fsm.Future[error], context.CancelFunc) {
+) (<-chan error, context.CancelFunc) {
 	t.Helper()
 
-	var err fsm.Future[error]
-
 	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	done := make(chan struct{})
+
 	t.Cleanup(func() {
 		cancel()
-		<-err.Ready()
+		<-done
 	})
 
 	go func() {
-		err.Set(fn(ctx))
+		result <- fn(ctx)
+		close(done)
 	}()
 
-	return &err, cancel
+	return result, cancel
 }
 
 // RunBeforeTestEnds calls fn in its own goroutine. fn must retun nil before the
 // test ends, otherwise the test fails.
 func RunBeforeTestEnds(
-	t *testing.T,
+	t TestingT,
 	fn func(ctx context.Context) error,
 ) {
 	t.Helper()
@@ -61,39 +60,39 @@ func RunBeforeTestEnds(
 	}()
 }
 
-// RunUntilTestEnds runs a function in its own goroutine for the entire duration
-// of a test.
+// RunUntilTestEnds calls fn in its own goroutine for the entire duration of a
+// test.
 //
 // ctx is canceled when the test ends, at which point the function must return
 // [context.Canceled]. The test is marked as failed if the function returns
 // before the test ends.
 func RunUntilTestEnds(
-	t *testing.T,
-	run func(ctx context.Context) error,
+	t TestingT,
+	fn func(ctx context.Context) error,
 ) {
 	t.Helper()
 
-	var result fsm.Future[error]
 	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
 
 	t.Cleanup(func() {
+		var err error
+
 		select {
-		case <-result.Ready():
+		case err = <-result:
 			t.Error("function returned before the test completed")
 		default:
+			cancel()
+			err = <-result
 		}
 
-		cancel()
-		<-result.Ready()
-
-		expect := context.Canceled
-		if err := result.Get(); err != expect {
-			t.Errorf("unexpected error: got %q, want %q", err, expect)
+		if err != context.Canceled {
+			t.Errorf("unexpected error: got %q, want %q", err, context.Canceled)
 		}
 	})
 
 	go func() {
-		result.Set(run(ctx))
+		result <- fn(ctx)
 	}()
 }
 
@@ -101,7 +100,7 @@ func RunUntilTestEnds(
 //
 // fn must retun nil before the test ends, otherwise the test fails.
 func RunAfterDelay(
-	t *testing.T,
+	t TestingT,
 	delay time.Duration,
 	fn func(ctx context.Context) error,
 ) {

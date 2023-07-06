@@ -1,14 +1,13 @@
-package testutil
+package test
 
 import (
 	"context"
-	"testing"
 	"time"
 )
 
 // ContextWithTimeout returns a context that is cancelled when the test completes.
 func ContextWithTimeout(
-	t *testing.T,
+	t TestingT,
 	timeout time.Duration,
 ) (context.Context, context.CancelFunc) {
 	t.Helper()

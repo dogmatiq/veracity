@@ -1,4 +1,4 @@
-package testutil
+package test
 
 import (
 	"context"
@@ -8,12 +8,6 @@ import (
 	"golang.org/x/exp/slices"
 	"golang.org/x/exp/slog"
 )
-
-// TestingT is the subset of the [testing.TB] interface that is used by this
-// package.
-type TestingT interface {
-	Log(...any)
-}
 
 // NewLogger returns a logger that writes to the test's log.
 func NewLogger(t TestingT) *slog.Logger {
