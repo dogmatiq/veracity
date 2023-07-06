@@ -8,10 +8,11 @@ import (
 // Run calls fn in its own goroutine.
 //
 // ctx is canceled when the test ends, at which point the function must return.
+// The return value of fn does not affect the status of the test.
 func Run(
 	t TestingT,
 	fn func(ctx context.Context) error,
-) (<-chan error, context.CancelFunc) {
+) (err <-chan error, cancel context.CancelFunc) {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -31,41 +32,8 @@ func Run(
 	return result, cancel
 }
 
-// RunBeforeTestEnds calls fn in its own goroutine. fn must retun nil before the
-// test ends, otherwise the test fails.
-func RunBeforeTestEnds(
-	t TestingT,
-	fn func(ctx context.Context) error,
-) {
-	t.Helper()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	result := make(chan error, 1)
-
-	t.Cleanup(func() {
-		select {
-		case err := <-result:
-			if err != nil {
-				t.Errorf("unexpected error: %q", err)
-			}
-		default:
-			t.Error("function did not return before the test completed")
-		}
-
-		cancel()
-	})
-
-	go func() {
-		result <- fn(ctx)
-	}()
-}
-
-// RunUntilTestEnds calls fn in its own goroutine for the entire duration of a
-// test.
-//
-// ctx is canceled when the test ends, at which point the function must return
-// [context.Canceled]. The test is marked as failed if the function returns
-// before the test ends.
+// RunUntilTestEnds calls fn in its own goroutine. If fn returns before the test
+// ends then the test fails.
 func RunUntilTestEnds(
 	t TestingT,
 	fn func(ctx context.Context) error,
@@ -96,17 +64,45 @@ func RunUntilTestEnds(
 	}()
 }
 
-// RunAfterDelay runs a function in its own goroutine after a delay.
-//
-// fn must retun nil before the test ends, otherwise the test fails.
-func RunAfterDelay(
+// CompleteBeforeTestEnds calls fn in its own goroutine. fn must return nil
+// before the test ends, otherwise the test fails.
+func CompleteBeforeTestEnds(
+	t TestingT,
+	fn func(ctx context.Context) error,
+) {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+
+	t.Cleanup(func() {
+		select {
+		case err := <-result:
+			if err != nil {
+				t.Errorf("unexpected error: %q", err)
+			}
+		default:
+			t.Error("function did not return before the test completed")
+		}
+
+		cancel()
+	})
+
+	go func() {
+		result <- fn(ctx)
+	}()
+}
+
+// CompleteAfterDelay calls fn in its own goroutine after a delay. fn must
+// return nil before the test ends, otherwise the test fails.
+func CompleteAfterDelay(
 	t TestingT,
 	delay time.Duration,
 	fn func(ctx context.Context) error,
 ) {
 	t.Helper()
 
-	RunBeforeTestEnds(
+	CompleteBeforeTestEnds(
 		t,
 		func(ctx context.Context) error {
 			select {

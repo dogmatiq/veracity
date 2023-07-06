@@ -58,7 +58,7 @@ func TestRegistry(t *testing.T) {
 	t.Run("it observes registration and deregistration", func(t *testing.T) {
 		x := setup(t)
 
-		test.RunBeforeTestEnds(t, x.Registrar.Run)
+		test.CompleteBeforeTestEnds(t, x.Registrar.Run)
 		test.RunUntilTestEnds(t, x.Observer.Run)
 
 		test.ExpectToReceive(
@@ -127,7 +127,7 @@ func TestRegistry(t *testing.T) {
 	t.Run("it does observe nodes that are deregistered before the observer starts", func(t *testing.T) {
 		x := setup(t)
 
-		test.RunBeforeTestEnds(t, x.Registrar.Run)
+		test.CompleteBeforeTestEnds(t, x.Registrar.Run)
 		x.Registrar.Shutdown.Latch()
 
 		test.RunUntilTestEnds(t, x.Observer.Run)
