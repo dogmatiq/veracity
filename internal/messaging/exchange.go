@@ -12,6 +12,16 @@ type Exchange[Request, Response any] struct {
 	Response chan<- Failable[Response]
 }
 
+// Ok sends a successful response.
+func (x Exchange[Request, Response]) Ok(res Response) {
+	x.Response <- Failable[Response]{value: res}
+}
+
+// Err sends an error response.
+func (x Exchange[Request, Response]) Err(err error) {
+	x.Response <- Failable[Response]{err: err}
+}
+
 // ExchangeQueue is a queue of request/response exchanges.
 type ExchangeQueue[Request, Response any] struct {
 	init sync.Once
