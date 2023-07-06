@@ -28,7 +28,7 @@ func TestPartitioner(t *testing.T) {
 			}()
 
 			p := &Partitioner{}
-			p.Route("<workload>")
+			p.Route(uuidpb.Generate())
 		})
 	})
 
@@ -55,9 +55,7 @@ func TestPartitioner(t *testing.T) {
 					t.Fatal("timed-out waiting for workloads to be distributed")
 				}
 
-				workload := uuidpb.Generate().AsString()
-				id := p.Route(workload)
-
+				id := p.Route(uuidpb.Generate())
 				remaining.Delete(id)
 			}
 		})
@@ -70,12 +68,13 @@ func TestPartitioner(t *testing.T) {
 				p.AddNode(uuidpb.Generate())
 			}
 
-			expect := p.Route("<workload>")
+			workload := uuidpb.Generate()
+			expect := p.Route(workload)
 
 			for i := 0; i < 10; i++ {
-				actual := p.Route("<workload>")
+				actual := p.Route(workload)
 				if !actual.Equal(expect) {
-					t.Fatalf("got %q, want %q", actual, expect)
+					t.Fatalf("attempt #%d: got %q, want %q", i+1, actual, expect)
 				}
 			}
 		})
@@ -88,10 +87,11 @@ func TestPartitioner(t *testing.T) {
 				p.AddNode(uuidpb.Generate())
 			}
 
-			removed := p.Route("<workload>")
+			workload := uuidpb.Generate()
+			removed := p.Route(workload)
 			p.RemoveNode(removed)
 
-			id := p.Route("<workload>")
+			id := p.Route(workload)
 			if id == removed {
 				t.Fatalf("got %q, expected a different node", id)
 			}
