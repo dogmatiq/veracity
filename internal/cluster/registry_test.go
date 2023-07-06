@@ -83,7 +83,7 @@ func TestRegistry(t *testing.T) {
 			// period as the [Registrar] renews the node's registration.
 		}
 
-		x.Registrar.Shutdown.Latch()
+		x.Registrar.Shutdown.Signal()
 
 		test.ExpectToReceive(
 			x.Context,
@@ -128,7 +128,7 @@ func TestRegistry(t *testing.T) {
 		x := setup(t)
 
 		test.CompleteBeforeTestEnds(t, x.Registrar.Run)
-		x.Registrar.Shutdown.Latch()
+		x.Registrar.Shutdown.Signal()
 
 		test.RunUntilTestEnds(t, x.Observer.Run)
 

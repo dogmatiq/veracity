@@ -9,7 +9,9 @@ import (
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/veracity/internal/cluster/internal/registrypb"
 	"github.com/dogmatiq/veracity/internal/fsm"
+	"github.com/dogmatiq/veracity/internal/messaging"
 	"github.com/dogmatiq/veracity/internal/protobuf/protokv"
+	"github.com/dogmatiq/veracity/internal/signaling"
 	"github.com/dogmatiq/veracity/persistence/kv"
 	"golang.org/x/exp/slog"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -36,7 +38,7 @@ type Registrar struct {
 	Keyspaces     kv.Store
 	Node          Node
 	RenewInterval time.Duration
-	Shutdown      fsm.Latch
+	Shutdown      signaling.Latch
 	Logger        *slog.Logger
 
 	keyspace kv.Keyspace
@@ -66,7 +68,7 @@ func (r *Registrar) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-r.Shutdown.Latched():
+		case <-r.Shutdown.Signaled():
 			return r.deregister(ctx)
 		case <-ticker.C:
 			err = r.renew(ctx)
@@ -188,8 +190,8 @@ type MembershipChange struct {
 // RegistryObserver emits events about changes to the nodes in the registry.
 type RegistryObserver struct {
 	Keyspaces         kv.Store
-	MembershipChanged fsm.Topic[MembershipChange]
-	Shutdown          fsm.Latch
+	MembershipChanged messaging.Topic[MembershipChange]
+	Shutdown          signaling.Latch
 	PollInterval      time.Duration
 
 	keyspace kv.Keyspace
@@ -223,7 +225,7 @@ func (o *RegistryObserver) idleState(ctx context.Context) (fsm.Action, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case <-o.Shutdown.Latched():
+	case <-o.Shutdown.Signaled():
 		return fsm.Stop()
 	case <-o.ticker.C:
 		return fsm.Enter(o.pollState)
