@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,9 +15,8 @@ import (
 	. "github.com/dogmatiq/marshalkit/fixtures"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	. "github.com/dogmatiq/veracity/internal/integration"
+	"github.com/dogmatiq/veracity/internal/test"
 	"github.com/dogmatiq/veracity/persistence/driver/memory"
-	"github.com/google/go-cmp/cmp"
-	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -84,28 +82,21 @@ func TestSupervisor(t *testing.T) {
 			return nil
 		}
 
-		var actual atomic.Value
+		events := make(chan []*envelopepb.Envelope, 1)
 		deps.eventRecorder.RecordEventsFunc = func(envs []*envelopepb.Envelope) {
-			actual.Store(envs)
-			deps.cancel()
+			events <- envs
 		}
 
-		result := make(chan error, 1)
-		go func() {
-			result <- deps.supervisor.Run(deps.ctx)
-		}()
+		test.RunUntilTestEnds(t, deps.supervisor.Run)
 
 		if err := deps.executor.ExecuteCommand(deps.ctx, MessageC1); err != nil {
 			t.Fatal(err)
 		}
 
-		err := <-result
-		if !errors.Is(err, context.Canceled) {
-			t.Fatal(err)
-		}
-
-		if diff := cmp.Diff(
-			actual.Load(),
+		test.ExpectToReceive(
+			deps.ctx,
+			t,
+			events,
 			[]*envelopepb.Envelope{
 				{
 					MessageId:         deterministicUUID(2),
@@ -144,54 +135,34 @@ func TestSupervisor(t *testing.T) {
 					Data:              MessageE3Packet.Data,
 				},
 			},
-			protocmp.Transform(),
-		); diff != "" {
-
-			t.Fatal(diff)
-		}
+		)
 	})
 	t.Run("it does not re-handle successful commands after restart", func(t *testing.T) {
 		deps := setup(t)
 
-		var handledCount atomic.Uint64
-		deps.handler.HandleCommandFunc = func(
-			_ context.Context,
-			_ dogma.IntegrationCommandScope,
-			c dogma.Command,
-		) error {
-			handledCount.Add(1)
-			return nil
-		}
-
-		result := make(chan error, 1)
-		go func() {
-			result <- deps.supervisor.Run(deps.ctx)
-		}()
+		result, cancel := test.Run(t, deps.supervisor.Run)
 
 		if err := deps.executor.ExecuteCommand(deps.ctx, MessageC1); err != nil {
 			t.Fatal(err)
 		}
 
-		deps.cancel()
+		cancel()
 
-		if err := <-result; !errors.Is(err, context.Canceled) {
-			t.Fatal(err)
+		test.ExpectToReceive(deps.ctx, t, result, context.Canceled)
+
+		handled := make(chan struct{})
+		deps.handler.HandleCommandFunc = func(ctx context.Context, ics dogma.IntegrationCommandScope, c dogma.Command) error {
+			close(handled)
+			return nil
 		}
 
-		secondRunCtx, cancel := context.WithTimeout(context.Background(), time.Millisecond*250)
-		defer cancel()
+		test.RunUntilTestEnds(t, deps.supervisor.Run)
 
-		go func() {
-			result <- deps.supervisor.Run(secondRunCtx)
-		}()
-
-		if err := <-result; !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatal(err)
-		}
-
-		const expectedCalls = 1
-		if handledCount.Load() != expectedCalls {
-			t.Fatalf("unexpected number of calls to handler: got %d, want %d", handledCount.Load(), expectedCalls)
+		select {
+		case <-handled:
+			t.Fatal("handled command that was already handled successfully")
+		case <-deps.ctx.Done():
+			// all good
 		}
 	})
 
@@ -199,7 +170,6 @@ func TestSupervisor(t *testing.T) {
 		deps := setup(t)
 
 		expectedErr := errors.New("<error>")
-		handled := make(chan struct{})
 
 		deps.handler.HandleCommandFunc = func(
 			_ context.Context,
@@ -209,37 +179,23 @@ func TestSupervisor(t *testing.T) {
 			return expectedErr
 		}
 
-		result := make(chan error, 1)
-		go func() {
-			result <- deps.supervisor.Run(deps.ctx)
-		}()
+		result, _ := test.Run(t, deps.supervisor.Run)
 
 		if err := deps.executor.ExecuteCommand(deps.ctx, MessageC1); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := <-result; !errors.Is(err, expectedErr) {
-			t.Fatal(err)
-		}
+		test.ExpectToReceive(deps.ctx, t, result, expectedErr)
 
+		handled := make(chan struct{})
 		deps.handler.HandleCommandFunc = func(ctx context.Context, ics dogma.IntegrationCommandScope, c dogma.Command) error {
 			close(handled)
 			return nil
 		}
-		go func() {
-			result <- deps.supervisor.Run(deps.ctx)
-		}()
 
-		select {
-		case err := <-result:
-			t.Fatal(err)
-		case <-handled:
-			deps.cancel()
-		}
+		test.RunUntilTestEnds(t, deps.supervisor.Run)
 
-		if err := <-result; !errors.Is(err, context.Canceled) {
-			t.Fatal(err)
-		}
+		test.ExpectToClose(deps.ctx, t, handled)
 	})
 
 	t.Run("it passes the command to the handler", func(t *testing.T) {
@@ -261,25 +217,12 @@ func TestSupervisor(t *testing.T) {
 			return nil
 		}
 
-		result := make(chan error, 1)
-		go func() {
-			result <- deps.supervisor.Run(deps.ctx)
-		}()
+		test.RunUntilTestEnds(t, deps.supervisor.Run)
 
 		if err := deps.executor.ExecuteCommand(deps.ctx, MessageC1); err != nil {
 			t.Fatal(err)
 		}
 
-		select {
-		case err := <-result:
-			t.Fatal(err)
-		case <-handled:
-			deps.cancel()
-		}
-
-		err := <-result
-		if !errors.Is(err, context.Canceled) {
-			t.Fatal(err)
-		}
+		test.ExpectToClose(deps.ctx, t, handled)
 	})
 }
