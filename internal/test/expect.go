@@ -26,6 +26,7 @@ func Expect[T any](
 		got,
 		protocmp.Transform(),
 		cmpopts.EquateEmpty(),
+		cmpopts.EquateErrors(),
 	); diff != "" {
 		t.Fatal(diff)
 	}
