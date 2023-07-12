@@ -4,26 +4,31 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 )
 
 // Expect compares two values and fails the test if they are different.
 func Expect[T any](
-	t TestingT,
+	t interface {
+		Helper()
+		Fatal(...any)
+	},
 	got, want T,
-	transforms ...func(T),
+	transforms ...func(T) T,
 ) {
 	t.Helper()
 
 	for _, fn := range transforms {
-		fn(got)
-		fn(want)
+		got = fn(got)
+		want = fn(want)
 	}
 
 	if diff := cmp.Diff(
-		got,
 		want,
+		got,
 		protocmp.Transform(),
+		cmpopts.EquateEmpty(),
 	); diff != "" {
 		t.Fatal(diff)
 	}
@@ -35,7 +40,7 @@ func ExpectChannelToReceive[T any](
 	t TestingT,
 	ch <-chan T,
 	want T,
-	transforms ...func(T),
+	transforms ...func(T) T,
 ) {
 	t.Helper()
 
@@ -57,7 +62,7 @@ func ExpectChannelToReceive[T any](
 func ExpectChannelToClose[T any](
 	t TestingT,
 	ch <-chan T,
-	transforms ...func(T),
+	transforms ...func(T) T,
 ) {
 	t.Helper()
 
@@ -81,7 +86,7 @@ func ExpectChannelToBlock[T any](
 	t TestingT,
 	d time.Duration,
 	ch <-chan T,
-	transforms ...func(T),
+	transforms ...func(T) T,
 ) {
 	t.Helper()
 
