@@ -48,8 +48,8 @@ github.com/dogmatiq/discoverkit v0.1.2 h1:NFgFe151bINH3/mNrIS6w0fiEWToSVwIHrjCDi
 github.com/dogmatiq/discoverkit v0.1.2/go.mod h1:mUFlbosF4i5papOkUa+OfTLv09AU/1cAU7GvN0Qd+VI=
 github.com/dogmatiq/dogma v0.12.1 h1:mWIzmi3jio9ZnHJeJKNS5D19O2S4x4SLSxGXXn3IQiQ=
 github.com/dogmatiq/dogma v0.12.1/go.mod h1:op4IjAGC593ONvvUPhh2xNyk/3Ezv9HkCPRlzdbkX9Y=
-github.com/dogmatiq/enginekit v0.0.0-20230627002432-c280d95100ae h1:Bqyx7eb9R71DovH1LYUBJuTOKe9H9FfPM8s+Tf7VE/Q=
-github.com/dogmatiq/enginekit v0.0.0-20230627002432-c280d95100ae/go.mod h1:rpbH0PHDUCNejAbuhsTiUvoW0cnubsDYihy9pCwsKS0=
+github.com/dogmatiq/enginekit v0.0.0-20230712032934-6245c6af8850 h1:DURDpFrsfBgtJjhFCFybeotpxwdHTCTMtKGVfH7LeF0=
+github.com/dogmatiq/enginekit v0.0.0-20230712032934-6245c6af8850/go.mod h1:NbhJbYi/weu5Cu42lGE3mO0Q10GBCY9na3/CyJSgb/w=
 github.com/dogmatiq/example v0.0.0-20230606031437-2bd84c72050b h1:vRJWjMJA6MIKe8IaEv9Z/3AXdCHDXsvBqmMoKyMCcTU=
 github.com/dogmatiq/example v0.0.0-20230606031437-2bd84c72050b/go.mod h1:d8HZas5KOk53VdrditUtsAab4OTAN3JPI48+Od14o5U=
 github.com/dogmatiq/ferrite v1.2.0 h1:JJt94m85bArcr1JoInbp9t7K7Jnc+i8SkaQNCUwaiEc=

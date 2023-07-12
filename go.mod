@@ -11,7 +11,7 @@ require (
 	github.com/dogmatiq/configkit v0.12.1
 	github.com/dogmatiq/discoverkit v0.1.2
 	github.com/dogmatiq/dogma v0.12.1
-	github.com/dogmatiq/enginekit v0.0.0-20230627002432-c280d95100ae
+	github.com/dogmatiq/enginekit v0.0.0-20230712032934-6245c6af8850
 	github.com/dogmatiq/example v0.0.0-20230606031437-2bd84c72050b
 	github.com/dogmatiq/ferrite v1.2.0
 	github.com/dogmatiq/marshalkit v0.7.3
