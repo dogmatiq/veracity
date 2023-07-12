@@ -33,44 +33,45 @@ import (
 // - [ ] Remove integration from a dirty list.
 
 func TestSupervisor(t *testing.T) {
-	setup := func(t *testing.T) (result struct {
-		ctx           context.Context
-		cancel        context.CancelFunc
-		packer        *envelope.Packer
-		supervisor    *Supervisor
-		handler       *IntegrationMessageHandler
-		exchanges     chan *EnqueueCommandExchange
-		eventRecorder *eventRecorderStub
-		executor      *CommandExecutor
+	setup := func(t test.TestingT) (deps struct {
+		Packer        *envelope.Packer
+		Supervisor    *Supervisor
+		Handler       *IntegrationMessageHandler
+		Exchanges     chan *EnqueueCommandExchange
+		EventRecorder *eventRecorderStub
+		Executor      *CommandExecutor
 	}) {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		t.Cleanup(cancel)
-		result.ctx = ctx
-		result.cancel = cancel
-		result.packer = newPacker()
-		result.exchanges = make(chan *EnqueueCommandExchange)
-		result.handler = &IntegrationMessageHandler{}
-		result.eventRecorder = &eventRecorderStub{}
-		result.executor = &CommandExecutor{
-			EnqueueCommands: result.exchanges,
-			Packer:          result.packer,
+		deps.Packer = newPacker()
+
+		deps.Exchanges = make(chan *EnqueueCommandExchange)
+
+		deps.Handler = &IntegrationMessageHandler{}
+
+		deps.EventRecorder = &eventRecorderStub{}
+
+		deps.Executor = &CommandExecutor{
+			EnqueueCommands: deps.Exchanges,
+			Packer:          deps.Packer,
 		}
 
-		result.supervisor = &Supervisor{
-			EnqueueCommand:  result.exchanges,
+		deps.Supervisor = &Supervisor{
+			EnqueueCommand:  deps.Exchanges,
 			HandlerIdentity: identitypb.New("<handler>", uuidpb.Generate()),
 			Journals:        &memory.JournalStore{},
-			Packer:          result.packer,
-			Handler:         result.handler,
-			EventRecorder:   result.eventRecorder,
+			Packer:          deps.Packer,
+			Handler:         deps.Handler,
+			EventRecorder:   deps.EventRecorder,
 		}
 
-		return result
+		return deps
 	}
 	t.Run("it records events to the event stream", func(t *testing.T) {
-		deps := setup(t)
+		t.Parallel()
 
-		deps.handler.HandleCommandFunc = func(
+		tctx := test.WithContext(t)
+		deps := setup(tctx)
+
+		deps.Handler.HandleCommandFunc = func(
 			_ context.Context,
 			s dogma.IntegrationCommandScope,
 			c dogma.Command,
@@ -83,127 +84,159 @@ func TestSupervisor(t *testing.T) {
 		}
 
 		events := make(chan []*envelopepb.Envelope, 1)
-		deps.eventRecorder.RecordEventsFunc = func(envs []*envelopepb.Envelope) {
+		deps.EventRecorder.RecordEventsFunc = func(envs []*envelopepb.Envelope) {
 			events <- envs
 		}
 
-		test.RunUntilTestEnds(t, deps.supervisor.Run)
+		test.
+			RunInBackground(t, "supervisor", deps.Supervisor.Run).
+			UntilTestEnds()
 
-		if err := deps.executor.ExecuteCommand(deps.ctx, MessageC1); err != nil {
+		if err := deps.Executor.ExecuteCommand(tctx, MessageC1); err != nil {
 			t.Fatal(err)
 		}
 
-		test.ExpectToReceive(
-			deps.ctx,
-			t,
-			events,
-			[]*envelopepb.Envelope{
-				{
-					MessageId:         deterministicUUID(2),
-					CausationId:       deterministicUUID(1),
-					CorrelationId:     deterministicUUID(1),
-					SourceApplication: deps.packer.Application,
-					SourceHandler:     deps.supervisor.HandlerIdentity,
-					CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
-					Description:       MessageE1.MessageDescription(),
-					PortableName:      MessageEPortableName,
-					MediaType:         MessageE1Packet.MediaType,
-					Data:              MessageE1Packet.Data,
+		test.
+			ExpectChannelToReceive(
+				tctx,
+				events,
+				[]*envelopepb.Envelope{
+					{
+						MessageId:         deterministicUUID(2),
+						CausationId:       deterministicUUID(1),
+						CorrelationId:     deterministicUUID(1),
+						SourceApplication: deps.Packer.Application,
+						SourceHandler:     deps.Supervisor.HandlerIdentity,
+						CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
+						Description:       MessageE1.MessageDescription(),
+						PortableName:      MessageEPortableName,
+						MediaType:         MessageE1Packet.MediaType,
+						Data:              MessageE1Packet.Data,
+					},
+					{
+						MessageId:         deterministicUUID(3),
+						CausationId:       deterministicUUID(1),
+						CorrelationId:     deterministicUUID(1),
+						SourceApplication: deps.Packer.Application,
+						SourceHandler:     deps.Supervisor.HandlerIdentity,
+						CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
+						Description:       MessageE2.MessageDescription(),
+						PortableName:      MessageEPortableName,
+						MediaType:         MessageE2Packet.MediaType,
+						Data:              MessageE2Packet.Data,
+					},
+					{
+						MessageId:         deterministicUUID(4),
+						CausationId:       deterministicUUID(1),
+						CorrelationId:     deterministicUUID(1),
+						SourceApplication: deps.Packer.Application,
+						SourceHandler:     deps.Supervisor.HandlerIdentity,
+						CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
+						Description:       MessageE3.MessageDescription(),
+						PortableName:      MessageEPortableName,
+						MediaType:         MessageE3Packet.MediaType,
+						Data:              MessageE3Packet.Data,
+					},
 				},
-				{
-					MessageId:         deterministicUUID(3),
-					CausationId:       deterministicUUID(1),
-					CorrelationId:     deterministicUUID(1),
-					SourceApplication: deps.packer.Application,
-					SourceHandler:     deps.supervisor.HandlerIdentity,
-					CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
-					Description:       MessageE2.MessageDescription(),
-					PortableName:      MessageEPortableName,
-					MediaType:         MessageE2Packet.MediaType,
-					Data:              MessageE2Packet.Data,
-				},
-				{
-					MessageId:         deterministicUUID(4),
-					CausationId:       deterministicUUID(1),
-					CorrelationId:     deterministicUUID(1),
-					SourceApplication: deps.packer.Application,
-					SourceHandler:     deps.supervisor.HandlerIdentity,
-					CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
-					Description:       MessageE3.MessageDescription(),
-					PortableName:      MessageEPortableName,
-					MediaType:         MessageE3Packet.MediaType,
-					Data:              MessageE3Packet.Data,
-				},
-			},
-		)
+			)
 	})
+
 	t.Run("it does not re-handle successful commands after restart", func(t *testing.T) {
-		deps := setup(t)
+		t.Parallel()
 
-		result, cancel := test.Run(t, deps.supervisor.Run)
+		tctx := test.WithContext(t)
+		deps := setup(tctx)
 
-		if err := deps.executor.ExecuteCommand(deps.ctx, MessageC1); err != nil {
+		supervisor := test.
+			RunInBackground(t, "supervisor", deps.Supervisor.Run).
+			UntilStopped()
+
+		if err := deps.Executor.ExecuteCommand(tctx, MessageC1); err != nil {
 			t.Fatal(err)
 		}
 
-		cancel()
-
-		test.ExpectToReceive(deps.ctx, t, result, context.Canceled)
+		supervisor.StopAndWait()
 
 		handled := make(chan struct{})
-		deps.handler.HandleCommandFunc = func(ctx context.Context, ics dogma.IntegrationCommandScope, c dogma.Command) error {
+		deps.Handler.HandleCommandFunc = func(
+			context.Context,
+			dogma.IntegrationCommandScope,
+			dogma.Command,
+		) error {
 			close(handled)
 			return nil
 		}
 
-		test.RunUntilTestEnds(t, deps.supervisor.Run)
+		test.
+			RunInBackground(t, "supervisor", deps.Supervisor.Run).
+			UntilTestEnds()
 
-		select {
-		case <-handled:
-			t.Fatal("handled command that was already handled successfully")
-		case <-deps.ctx.Done():
-			// all good
-		}
+		test.
+			ExpectChannelToBlockForDuration(
+				tctx,
+				10*time.Second,
+				handled,
+			)
 	})
 
 	t.Run("it recovers from a handler error", func(t *testing.T) {
-		deps := setup(t)
+		t.Parallel()
 
-		expectedErr := errors.New("<error>")
+		tctx := test.WithContext(t)
+		deps := setup(tctx)
 
-		deps.handler.HandleCommandFunc = func(
+		handlerErr := errors.New("<error>")
+		deps.Handler.HandleCommandFunc = func(
 			_ context.Context,
 			_ dogma.IntegrationCommandScope,
 			c dogma.Command,
 		) error {
-			return expectedErr
+			return handlerErr
 		}
 
-		result, _ := test.Run(t, deps.supervisor.Run)
+		supervisor := test.
+			RunInBackground(t, "supervisor", deps.Supervisor.Run).
+			FailBeforeTestEnds()
 
-		if err := deps.executor.ExecuteCommand(deps.ctx, MessageC1); err != nil {
+		if err := deps.Executor.ExecuteCommand(tctx, MessageC1); err != nil {
 			t.Fatal(err)
 		}
 
-		test.ExpectToReceive(deps.ctx, t, result, expectedErr)
+		test.
+			ExpectChannelToClose(
+				tctx,
+				supervisor.Done(),
+			)
+
+		if err := supervisor.Err(); err != handlerErr {
+			t.Fatalf("unexpected error: %s", err)
+		}
 
 		handled := make(chan struct{})
-		deps.handler.HandleCommandFunc = func(ctx context.Context, ics dogma.IntegrationCommandScope, c dogma.Command) error {
+		deps.Handler.HandleCommandFunc = func(ctx context.Context, ics dogma.IntegrationCommandScope, c dogma.Command) error {
 			close(handled)
 			return nil
 		}
 
-		test.RunUntilTestEnds(t, deps.supervisor.Run)
+		test.
+			RunInBackground(t, "supervisor", deps.Supervisor.Run).
+			UntilTestEnds()
 
-		test.ExpectToClose(deps.ctx, t, handled)
+		test.
+			ExpectChannelToClose(
+				tctx,
+				handled,
+			)
 	})
 
 	t.Run("it passes the command to the handler", func(t *testing.T) {
-		deps := setup(t)
+		t.Parallel()
+
+		tctx := test.WithContext(t)
+		deps := setup(tctx)
 
 		handled := make(chan struct{})
-
-		deps.handler.HandleCommandFunc = func(
+		deps.Handler.HandleCommandFunc = func(
 			_ context.Context,
 			_ dogma.IntegrationCommandScope,
 			c dogma.Command,
@@ -217,12 +250,18 @@ func TestSupervisor(t *testing.T) {
 			return nil
 		}
 
-		test.RunUntilTestEnds(t, deps.supervisor.Run)
+		test.
+			RunInBackground(t, "supervisor", deps.Supervisor.Run).
+			UntilTestEnds()
 
-		if err := deps.executor.ExecuteCommand(deps.ctx, MessageC1); err != nil {
+		if err := deps.Executor.ExecuteCommand(tctx, MessageC1); err != nil {
 			t.Fatal(err)
 		}
 
-		test.ExpectToClose(deps.ctx, t, handled)
+		test.
+			ExpectChannelToClose(
+				tctx,
+				handled,
+			)
 	})
 }
