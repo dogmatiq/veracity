@@ -10,10 +10,7 @@ import (
 
 // Expect compares two values and fails the test if they are different.
 func Expect[T any](
-	t interface {
-		Helper()
-		Fatal(...any)
-	},
+	t FatalT,
 	got, want T,
 	transforms ...func(T) T,
 ) {

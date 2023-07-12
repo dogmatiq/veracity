@@ -3,18 +3,19 @@ package test
 import (
 	"context"
 	"errors"
+	"testing"
 	"time"
 )
 
 // TaskRunner launches a task in the background.
 type TaskRunner struct {
-	t  TestingT
+	t  *testing.T
 	fn func(ctx context.Context) error
 }
 
 // RunInBackground returns a [TaskRunner] that executes fn in its own goroutine.
 func RunInBackground(
-	t TestingT,
+	t *testing.T,
 	fn func(ctx context.Context) error,
 ) TaskRunner {
 	t.Helper()
@@ -37,6 +38,8 @@ func (r TaskRunner) BeforeTestEnds() *Task {
 	task := r.run()
 
 	r.t.Cleanup(func() {
+		r.t.Helper()
+
 		select {
 		case <-task.Done():
 			if task.Err() != nil {
@@ -59,6 +62,8 @@ func (r TaskRunner) UntilTestEnds() *Task {
 	task := r.run()
 
 	r.t.Cleanup(func() {
+		r.t.Helper()
+
 		select {
 		case <-task.Done():
 			switch task.Err() {
@@ -85,10 +90,10 @@ func (r TaskRunner) UntilTestEnds() *Task {
 func (r TaskRunner) run() *Task {
 	r.t.Helper()
 
-	ctx := contextOf(r.t)
-	ctx, cancel := context.WithCancelCause(ctx)
+	ctx, cancel := context.WithCancelCause(context.Background())
 
 	task := &Task{
+		t:      r.t,
 		cancel: cancel,
 		done:   make(chan struct{}),
 	}
@@ -106,6 +111,8 @@ func (r TaskRunner) run() *Task {
 	}()
 
 	r.t.Cleanup(func() {
+		r.t.Helper()
+
 		cancel(nil)
 
 		select {
@@ -135,6 +142,25 @@ func (t *Task) Stop() {
 	t.cancel(errStopped)
 }
 
+// StopAndWait cancels the context passed to the function and waits for it to
+// return.
+//
+// If it returns an error, the test fails.
+func (t *Task) StopAndWait() {
+	t.t.Helper()
+
+	t.cancel(errStopped)
+
+	select {
+	case <-t.done:
+		if t.err != errStopped {
+			t.t.Fatalf("background task returned an unexpected error: %s", t.err)
+		}
+	case <-time.After(shutdownTimeout):
+		t.t.Fatalf("background task was canceled but did not return within %s", shutdownTimeout)
+	}
+}
+
 // Done returns a channel that is closed when the function returns.
 func (t *Task) Done() <-chan struct{} {
 	return t.done
@@ -144,24 +170,13 @@ func (t *Task) Done() <-chan struct{} {
 //
 // It panics if the function has not yet returned.
 func (t *Task) Err() error {
-	select {
-	case <-t.done:
-		return t.err
-	default:
-		panic("background task has not returned")
-	}
-}
+	t.t.Helper()
 
-// ExpectCompletion waits for the background task to return successfully.
-//
-// It can be used after a call to t.Stop() to wait for the function to return.
-func (t *Task) ExpectCompletion() {
 	select {
 	case <-t.done:
-		if t.err != nil {
-			t.t.Fatalf("background task returned an unexpected error: %s", t.err)
-		}
-	case <-time.After(shutdownTimeout):
-		t.t.Fatalf("background task was canceled but did not return within %s", shutdownTimeout)
+	default:
+		t.t.Fatal("background task has not returned")
 	}
+
+	return t.err
 }

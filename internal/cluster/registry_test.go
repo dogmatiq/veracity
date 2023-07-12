@@ -52,15 +52,17 @@ func TestRegistry(t *testing.T) {
 	t.Run("it observes registration and deregistration", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := test.WithContext(t)
-		deps := setup(ctx)
+		tctx := test.WithContext(t)
+		deps := setup(tctx)
 
 		t.Log("start the observer before the registrar")
+
 		test.
-			RunInBackground(ctx, deps.Observer.Run).
+			RunInBackground(t, deps.Observer.Run).
 			UntilTestEnds()
 
 		t.Log("wait several poll intervals to ensure that the observer is running")
+
 		test.ExpectChannelToBlock(
 			t,
 			3*deps.Observer.PollInterval,
@@ -68,12 +70,14 @@ func TestRegistry(t *testing.T) {
 		)
 
 		t.Log("start the registrar and await notification of registration")
+
 		test.
-			RunInBackground(ctx, deps.Registrar.Run).
+			RunInBackground(t, deps.Registrar.Run).
 			BeforeTestEnds()
+
 		test.
 			ExpectChannelToReceive(
-				ctx,
+				tctx,
 				deps.MembershipChanges,
 				MembershipChange{
 					Registered: []Node{
@@ -83,18 +87,21 @@ func TestRegistry(t *testing.T) {
 			)
 
 		t.Log("wait several renew/poll intervals to ensure that the node's registration is renewed properly")
+
 		test.
 			ExpectChannelToBlock(
-				t,
+				tctx,
 				3*(deps.Registrar.RenewInterval+deps.Observer.PollInterval),
 				deps.MembershipChanges,
 			)
 
-		t.Log("shutdown the registrar and await notification deregistration")
+		t.Log("shutdown the registrar and await notification of deregistration")
+
 		deps.Registrar.Shutdown.Signal()
+
 		test.
 			ExpectChannelToReceive(
-				t,
+				tctx,
 				deps.MembershipChanges,
 				MembershipChange{
 					Deregistered: []Node{
@@ -107,29 +114,32 @@ func TestRegistry(t *testing.T) {
 	t.Run("it observes nodes that are registered before the observer starts", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := test.WithContext(t)
-		deps := setup(ctx)
+		tctx := test.WithContext(t)
+		deps := setup(tctx)
 
 		t.Log("start the registrar before the observer")
+
 		test.
-			RunInBackground(ctx, deps.Registrar.Run).
+			RunInBackground(t, deps.Registrar.Run).
 			UntilTestEnds()
 
 		t.Log("wait several renew intervals to ensure that the node is registered")
+
 		test.
 			ExpectChannelToBlock(
-				t,
+				tctx,
 				3*deps.Registrar.RenewInterval,
 				deps.MembershipChanges,
 			)
 
 		t.Log("start an observer and await notification of registration")
+
 		test.
-			RunInBackground(ctx, deps.Observer.Run).
+			RunInBackground(t, deps.Observer.Run).
 			UntilTestEnds()
 		test.
 			ExpectChannelToReceive(
-				ctx,
+				tctx,
 				deps.MembershipChanges,
 				MembershipChange{
 					Registered: []Node{
@@ -142,24 +152,31 @@ func TestRegistry(t *testing.T) {
 	t.Run("it does not observe nodes that are deregistered before the observer starts", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := test.WithContext(t)
-		deps := setup(ctx)
+		tctx := test.WithContext(t)
+		deps := setup(tctx)
 
 		t.Log("start the registrar and shut it down immediately")
+
 		task := test.
 			RunInBackground(t, deps.Registrar.Run).
 			UntilStopped()
 
 		deps.Registrar.Shutdown.Signal()
-		task.ExpectCompletion()
+		test.
+			ExpectChannelToClose(
+				tctx,
+				task.Done(),
+			)
 
 		t.Log("start an observer and ensure it is never notified")
+
 		test.
-			RunInBackground(ctx, deps.Observer.Run).
+			RunInBackground(t, deps.Observer.Run).
 			UntilTestEnds()
+
 		test.
 			ExpectChannelToBlock(
-				t,
+				tctx,
 				3*deps.Observer.PollInterval,
 				deps.MembershipChanges,
 			)
@@ -168,19 +185,21 @@ func TestRegistry(t *testing.T) {
 	t.Run("it observes nodes that leave the cluster due to registration expiry", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := test.WithContext(t)
-		deps := setup(ctx)
+		tctx := test.WithContext(t)
+		deps := setup(tctx)
+
+		t.Log("start the registrar and observer and await notification of registration")
 
 		registrar := test.
 			RunInBackground(t, deps.Registrar.Run).
 			UntilTestEnds()
 
 		test.
-			RunInBackground(ctx, deps.Observer.Run).
+			RunInBackground(t, deps.Observer.Run).
 			UntilTestEnds()
 
 		test.ExpectChannelToReceive(
-			t,
+			tctx,
 			deps.MembershipChanges,
 			MembershipChange{
 				Registered: []Node{
@@ -189,10 +208,12 @@ func TestRegistry(t *testing.T) {
 			},
 		)
 
+		t.Log("stop the registrary forcefully and await notification of deregistration")
+
 		registrar.Stop()
 
 		test.ExpectChannelToReceive(
-			t,
+			tctx,
 			deps.MembershipChanges,
 			MembershipChange{
 				Deregistered: []Node{

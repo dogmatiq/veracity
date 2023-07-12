@@ -16,4 +16,11 @@ type TestingT interface {
 	Cleanup(func())
 }
 
+// FatalT is the subset of the [testing.TB] interface that is used by parts of
+// this package that only need to cause tests to fail fatally.
+type FatalT interface {
+	Helper()
+	Fatal(...any)
+}
+
 var _ TestingT = (testing.TB)(nil)
