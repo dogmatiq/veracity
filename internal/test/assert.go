@@ -1,7 +1,7 @@
 package test
 
 import (
-	"context"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -11,11 +11,11 @@ import (
 func Expect[T any](
 	t TestingT,
 	got, want T,
-	normalizers ...func(T),
+	transforms ...func(T),
 ) {
 	t.Helper()
 
-	for _, fn := range normalizers {
+	for _, fn := range transforms {
 		fn(got)
 		fn(want)
 	}
@@ -29,21 +29,72 @@ func Expect[T any](
 	}
 }
 
-// ExpectToReceive waits until a value is received from a channel and then
-// compares it to the expected value.
-func ExpectToReceive[T any](
-	ctx context.Context,
+// ExpectChannelToReceive waits until a value is received from a channel and
+// then compares it to the expected value.
+func ExpectChannelToReceive[T any](
 	t TestingT,
-	got <-chan T,
+	ch <-chan T,
 	want T,
-	normalizers ...func(T),
+	transforms ...func(T),
+) {
+	t.Helper()
+
+	ctx := contextOf(t)
+
+	select {
+	case <-ctx.Done():
+		t.Fatalf("no value received on channel: %s", ctx.Err())
+	case got, ok := <-ch:
+		if ok {
+			Expect(t, got, want, transforms...)
+		} else {
+			t.Error("channel closed while expecting to receive a value")
+		}
+	}
+}
+
+// ExpectChannelToClose waits until a channel is closed.
+func ExpectChannelToClose[T any](
+	t TestingT,
+	ch <-chan T,
+	transforms ...func(T),
+) {
+	t.Helper()
+
+	ctx := contextOf(t)
+
+	select {
+	case <-ctx.Done():
+		t.Fatalf("cannot was not closed: %s", ctx.Err())
+	case got, ok := <-ch:
+		if ok {
+			t.Error("received a value while expecting channel to be closed")
+			var want T // zero value
+			Expect(t, got, want, transforms...)
+		}
+	}
+}
+
+// ExpectChannelToBlock expects reading from the channel to block until the
+// given duration elapses.
+func ExpectChannelToBlock[T any](
+	t TestingT,
+	d time.Duration,
+	ch <-chan T,
+	transforms ...func(T),
 ) {
 	t.Helper()
 
 	select {
-	case <-ctx.Done():
-		t.Fatal(ctx.Err())
-	case actual := <-got:
-		Expect(t, actual, want, normalizers...)
+	case <-time.After(d):
+		// success! duration elapsed without receiving a value
+	case got, ok := <-ch:
+		if ok {
+			t.Error("received a value while expecting channel to block")
+			var want T // zero value
+			Expect(t, got, want, transforms...)
+		} else {
+			t.Error("channel closed while expecting channel to block")
+		}
 	}
 }

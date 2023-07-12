@@ -1,7 +1,6 @@
 package cluster_test
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -14,21 +13,17 @@ import (
 func TestRegistry(t *testing.T) {
 	t.Parallel()
 
-	setup := func(t *testing.T) (x struct {
-		Context           context.Context
-		Cancel            context.CancelFunc
-		Node              Node
-		MembershipChanges chan MembershipChange
-		Registrar         *Registrar
-		Observer          *RegistryObserver
-	}) {
-		t.Parallel()
-
+	setup := func(t test.TestingT) (
+		deps struct {
+			Node              Node
+			Registrar         *Registrar
+			Observer          *RegistryObserver
+			MembershipChanges chan MembershipChange
+		},
+	) {
 		keyspaces := &memory.KeyValueStore{}
 
-		x.Context, x.Cancel = test.ContextWithTimeout(t, 1*time.Second)
-
-		x.Node = Node{
+		deps.Node = Node{
 			ID: uuidpb.Generate(),
 			Addresses: []string{
 				"10.0.0.1:50555",
@@ -36,139 +31,172 @@ func TestRegistry(t *testing.T) {
 			},
 		}
 
-		x.MembershipChanges = make(chan MembershipChange)
-
-		x.Registrar = &Registrar{
+		deps.Registrar = &Registrar{
 			Keyspaces:     keyspaces,
-			Node:          x.Node,
+			Node:          deps.Node,
 			RenewInterval: 10 * time.Millisecond,
 			Logger:        test.NewLogger(t),
 		}
 
-		x.Observer = &RegistryObserver{
+		deps.Observer = &RegistryObserver{
 			Keyspaces:    keyspaces,
 			PollInterval: 50 * time.Millisecond,
 		}
 
-		x.Observer.MembershipChanged.Subscribe(x.MembershipChanges)
+		deps.MembershipChanges = make(chan MembershipChange)
+		deps.Observer.MembershipChanged.Subscribe(deps.MembershipChanges)
 
-		return x
+		return deps
 	}
 
 	t.Run("it observes registration and deregistration", func(t *testing.T) {
-		x := setup(t)
+		t.Parallel()
 
-		test.CompleteBeforeTestEnds(t, x.Registrar.Run)
-		test.RunUntilTestEnds(t, x.Observer.Run)
+		ctx := test.WithContext(t)
+		deps := setup(ctx)
 
-		test.ExpectToReceive(
-			x.Context,
+		t.Log("start the observer before the registrar")
+		test.
+			RunInBackground(ctx, deps.Observer.Run).
+			UntilTestEnds()
+
+		t.Log("wait several poll intervals to ensure that the observer is running")
+		test.ExpectChannelToBlock(
 			t,
-			x.MembershipChanges,
-			MembershipChange{
-				Registered: []Node{
-					x.Node,
-				},
-			},
+			3*deps.Observer.PollInterval,
+			deps.MembershipChanges,
 		)
 
-		select {
-		case <-x.Context.Done():
-			t.Fatal(x.Context.Err())
-		case <-x.MembershipChanges:
-			t.Fatal("unexpected membership change")
-		case <-time.After(2 * (x.Registrar.RenewInterval + x.Observer.PollInterval)):
-			// We've waited long enough for a couple of renewals and a couple of
-			// polls to occur. We don't expect any membership change during this
-			// period as the [Registrar] renews the node's registration.
-		}
-
-		x.Registrar.Shutdown.Signal()
-
-		test.ExpectToReceive(
-			x.Context,
-			t,
-			x.MembershipChanges,
-			MembershipChange{
-				Deregistered: []Node{
-					x.Node,
+		t.Log("start the registrar and await notification of registration")
+		test.
+			RunInBackground(ctx, deps.Registrar.Run).
+			BeforeTestEnds()
+		test.
+			ExpectChannelToReceive(
+				ctx,
+				deps.MembershipChanges,
+				MembershipChange{
+					Registered: []Node{
+						deps.Node,
+					},
 				},
-			},
-		)
+			)
+
+		t.Log("wait several renew/poll intervals to ensure that the node's registration is renewed properly")
+		test.
+			ExpectChannelToBlock(
+				t,
+				3*(deps.Registrar.RenewInterval+deps.Observer.PollInterval),
+				deps.MembershipChanges,
+			)
+
+		t.Log("shutdown the registrar and await notification deregistration")
+		deps.Registrar.Shutdown.Signal()
+		test.
+			ExpectChannelToReceive(
+				t,
+				deps.MembershipChanges,
+				MembershipChange{
+					Deregistered: []Node{
+						deps.Node,
+					},
+				},
+			)
 	})
 
 	t.Run("it observes nodes that are registered before the observer starts", func(t *testing.T) {
-		x := setup(t)
+		t.Parallel()
 
-		test.RunUntilTestEnds(t, x.Registrar.Run)
+		ctx := test.WithContext(t)
+		deps := setup(ctx)
 
-		select {
-		case <-x.Context.Done():
-			t.Fatal(x.Context.Err())
-		case <-x.MembershipChanges:
-			t.Fatal("unexpected membership change")
-		case <-time.After(2 * x.Observer.PollInterval):
-		}
+		t.Log("start the registrar before the observer")
+		test.
+			RunInBackground(ctx, deps.Registrar.Run).
+			UntilTestEnds()
 
-		test.RunUntilTestEnds(t, x.Observer.Run)
+		t.Log("wait several renew intervals to ensure that the node is registered")
+		test.
+			ExpectChannelToBlock(
+				t,
+				3*deps.Registrar.RenewInterval,
+				deps.MembershipChanges,
+			)
 
-		test.ExpectToReceive(
-			x.Context,
-			t,
-			x.MembershipChanges,
-			MembershipChange{
-				Registered: []Node{
-					x.Node,
+		t.Log("start an observer and await notification of registration")
+		test.
+			RunInBackground(ctx, deps.Observer.Run).
+			UntilTestEnds()
+		test.
+			ExpectChannelToReceive(
+				ctx,
+				deps.MembershipChanges,
+				MembershipChange{
+					Registered: []Node{
+						deps.Node,
+					},
 				},
-			},
-		)
+			)
 	})
 
-	t.Run("it does observe nodes that are deregistered before the observer starts", func(t *testing.T) {
-		x := setup(t)
+	t.Run("it does not observe nodes that are deregistered before the observer starts", func(t *testing.T) {
+		t.Parallel()
 
-		test.CompleteBeforeTestEnds(t, x.Registrar.Run)
-		x.Registrar.Shutdown.Signal()
+		ctx := test.WithContext(t)
+		deps := setup(ctx)
 
-		test.RunUntilTestEnds(t, x.Observer.Run)
+		t.Log("start the registrar and shut it down immediately")
+		task := test.
+			RunInBackground(t, deps.Registrar.Run).
+			UntilStopped()
 
-		select {
-		case <-x.Context.Done():
-			t.Fatal(x.Context.Err())
-		case <-x.MembershipChanges:
-			t.Fatal("unexpected membership change")
-		case <-time.After(2 * x.Observer.PollInterval):
-			// We've allowed enough time for polls to occur and have not seen a
-			// membership change.
-		}
+		deps.Registrar.Shutdown.Signal()
+		task.ExpectCompletion()
+
+		t.Log("start an observer and ensure it is never notified")
+		test.
+			RunInBackground(ctx, deps.Observer.Run).
+			UntilTestEnds()
+		test.
+			ExpectChannelToBlock(
+				t,
+				3*deps.Observer.PollInterval,
+				deps.MembershipChanges,
+			)
 	})
 
 	t.Run("it observes nodes that leave the cluster due to registration expiry", func(t *testing.T) {
-		x := setup(t)
+		t.Parallel()
 
-		_, stopRegistrar := test.Run(t, x.Registrar.Run)
-		test.RunUntilTestEnds(t, x.Observer.Run)
+		ctx := test.WithContext(t)
+		deps := setup(ctx)
 
-		test.ExpectToReceive(
-			x.Context,
+		registrar := test.
+			RunInBackground(t, deps.Registrar.Run).
+			UntilTestEnds()
+
+		test.
+			RunInBackground(ctx, deps.Observer.Run).
+			UntilTestEnds()
+
+		test.ExpectChannelToReceive(
 			t,
-			x.MembershipChanges,
+			deps.MembershipChanges,
 			MembershipChange{
 				Registered: []Node{
-					x.Node,
+					deps.Node,
 				},
 			},
 		)
 
-		stopRegistrar()
+		registrar.Stop()
 
-		test.ExpectToReceive(
-			x.Context,
+		test.ExpectChannelToReceive(
 			t,
-			x.MembershipChanges,
+			deps.MembershipChanges,
 			MembershipChange{
 				Deregistered: []Node{
-					x.Node,
+					deps.Node,
 				},
 			},
 		)

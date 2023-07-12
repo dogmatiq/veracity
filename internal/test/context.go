@@ -5,15 +5,32 @@ import (
 	"time"
 )
 
-// ContextWithTimeout returns a context that is cancelled when the test completes.
-func ContextWithTimeout(
-	t TestingT,
-	timeout time.Duration,
-) (context.Context, context.CancelFunc) {
-	t.Helper()
+// Context is a context that is also a [TestingT].
+type Context interface {
+	context.Context
+	TestingT
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+// WithContext returns a context that is bound to the lifetime of the test.
+func WithContext(t TestingT) Context {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
 
-	return ctx, cancel
+	return &testContext{
+		Context:  ctx,
+		TestingT: t,
+	}
+}
+
+type testContext struct {
+	context.Context
+	TestingT
+}
+
+func contextOf(t TestingT) context.Context {
+	if t, ok := t.(Context); ok {
+		return t
+	}
+
+	return context.Background()
 }
