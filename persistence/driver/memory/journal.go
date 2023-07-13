@@ -14,10 +14,17 @@ import (
 // memory.
 type JournalStore struct {
 	journals sync.Map // map[string]*journalState
+	onOpen   func(name string) error
 }
 
 // Open returns the journal with the given name.
 func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, error) {
+	if s.onOpen != nil {
+		if err := s.onOpen(name); err != nil {
+			return nil, err
+		}
+	}
+
 	state, ok := s.journals.Load(name)
 
 	if !ok {

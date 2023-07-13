@@ -2,12 +2,33 @@ package memory
 
 import (
 	"context"
-	"errors"
 	"reflect"
 	"sync"
 
 	"google.golang.org/protobuf/proto"
 )
+
+// FailOnJournalOpen configures the journal with the given name to return an
+// error on the next call to Open().
+func FailOnJournalOpen(
+	s *JournalStore,
+	name string,
+	produceErr error,
+) {
+	var once sync.Once
+
+	s.onOpen = func(n string) error {
+		var err error
+
+		if name == n {
+			once.Do(func() {
+				err = produceErr
+			})
+		}
+
+		return err
+	}
+}
 
 // FailBeforeJournalAppend configures the journal with the given name to return
 // an error on the next call to Append() with a record that satisifies the given
@@ -16,8 +37,9 @@ import (
 // The error is returned before the append is actually performed.
 func FailBeforeJournalAppend[R proto.Message](
 	s *JournalStore,
-	pred func(R) bool,
 	name string,
+	pred func(R) bool,
+	produceErr error,
 ) {
 	j, err := s.Open(context.Background(), name)
 	if err != nil {
@@ -30,7 +52,7 @@ func FailBeforeJournalAppend[R proto.Message](
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	h.state.BeforeAppend = failAppendOnce(pred)
+	h.state.BeforeAppend = failAppendOnce(pred, produceErr)
 }
 
 // FailAfterJournalAppend configures the journal with the given name to return
@@ -40,8 +62,9 @@ func FailBeforeJournalAppend[R proto.Message](
 // The error is returned after the append is actually performed.
 func FailAfterJournalAppend[R proto.Message](
 	s *JournalStore,
-	pred func(R) bool,
 	name string,
+	pred func(R) bool,
+	produceErr error,
 ) {
 	j, err := s.Open(context.Background(), name)
 	if err != nil {
@@ -54,13 +77,16 @@ func FailAfterJournalAppend[R proto.Message](
 	h.state.Lock()
 	defer h.state.Unlock()
 
-	h.state.AfterAppend = failAppendOnce(pred)
+	h.state.AfterAppend = failAppendOnce(pred, produceErr)
 }
 
-func failAppendOnce[R proto.Message](pred func(R) bool) func([]byte) error {
+func failAppendOnce[R proto.Message](
+	pred func(R) bool,
+	produceErr error,
+) func([]byte) error {
 	var once sync.Once
 
-	return func(data []byte) (err error) {
+	return func(data []byte) error {
 		var rec R
 		rec = reflect.New(
 			reflect.TypeOf(rec).Elem(),
@@ -70,9 +96,11 @@ func failAppendOnce[R proto.Message](pred func(R) bool) func([]byte) error {
 			panic(err)
 		}
 
+		var err error
+
 		if pred(rec) {
 			once.Do(func() {
-				err = errors.New("<error>")
+				err = produceErr
 			})
 		}
 
