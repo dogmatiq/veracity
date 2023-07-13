@@ -9,102 +9,187 @@ import (
 
 // TaskRunner launches a task in the background.
 type TaskRunner struct {
-	t  *testing.T
-	fn func(ctx context.Context) error
+	t    *testing.T
+	name string
+	fn   func(ctx context.Context) error
 }
 
 // RunInBackground returns a [TaskRunner] that executes fn in its own goroutine.
 func RunInBackground(
 	t *testing.T,
+	name string,
 	fn func(ctx context.Context) error,
 ) TaskRunner {
-	t.Helper()
-	return TaskRunner{t, fn}
+	return TaskRunner{t, name, fn}
 }
 
-// UntilStopped executes the task in its own goroutine until the test ends or it
-// is stopped explicitly.
+// UntilStopped executes the task in its own goroutine with the expectation that
+// it will not return until it is stopped explicitly, or the test ends.
 func (r TaskRunner) UntilStopped() *Task {
 	r.t.Helper()
-	return r.run()
+	r.t.Logf("running %q in the background until it is stopped explicitly", r.name)
+
+	return r.run(
+		r.fn,
+		func(err error) {
+			r.t.Helper()
+
+			switch err {
+			case errTestEnded:
+				// expected
+			case errStopped:
+				// expected
+			case nil:
+				r.t.Errorf("%q returned successfully, expected it to be stopped explicitly", r.name)
+			default:
+				r.t.Errorf("%q returned an error, expected it to be stopped explicitly: %s", r.name, err)
+			}
+		},
+	)
 }
 
-// BeforeTestEnds executes the task in its own goroutine before the test ends.
-//
-// If the task does not complete before the test ends, the test fails.
+// RepeatedlyUntilStopped executes the task in its own goroutine, restarting it
+// if it returns before it is stopped explicitly or the test ends.
+func (r TaskRunner) RepeatedlyUntilStopped() *Task {
+	r.t.Helper()
+	r.t.Logf("repeatedly running %q in the background until it is stopped explicitly", r.name)
+
+	return r.run(
+		func(ctx context.Context) error {
+			for {
+				err := r.fn(ctx)
+
+				if ctx.Err() == context.Canceled {
+					return err
+				} else if err == nil {
+					r.t.Logf("restarting %q because it returned successfully before being stopped", r.name)
+				} else {
+					r.t.Logf("restarting %q because it returned an error: %s", r.name, err)
+				}
+			}
+		},
+		func(err error) {
+			r.t.Helper()
+
+			switch err {
+			case errTestEnded:
+				// expected
+			case errStopped:
+				// expected
+			case nil:
+				r.t.Errorf("%q returned successfully, expected it to be stopped explicitly", r.name)
+			default:
+				r.t.Errorf("%q returned an error, expected it to be stopped explicitly: %s", r.name, err)
+			}
+		},
+	)
+}
+
+// BeforeTestEnds executes the task in its own goroutine with the expectation
+// that it will return successfully before the test ends.
 func (r TaskRunner) BeforeTestEnds() *Task {
 	r.t.Helper()
+	r.t.Logf("running %q to completion in the background before the test ends", r.name)
 
-	task := r.run()
+	return r.run(
+		r.fn,
+		func(err error) {
+			r.t.Helper()
 
-	r.t.Cleanup(func() {
-		r.t.Helper()
-
-		select {
-		case <-task.Done():
-			if task.Err() != nil {
-				r.t.Errorf("background task returned an unexpected error: %s", task.Err())
+			switch err {
+			case errTestEnded:
+				r.t.Errorf("%q did not return before the test ended, expected it to return successfully", r.name)
+			case errStopped:
+				r.t.Errorf("%q was stopped explicitly, expected it to return successfully", r.name)
+			case nil:
+				// expected
+			default:
+				r.t.Errorf("%q returned an error, expected it to return successfully: %s", r.name, err)
 			}
-		default:
-			r.t.Error("background task did not return before the test ended")
-		}
-	})
-
-	return task
+		},
+	)
 }
 
-// UntilTestEnds executes the task in its own goroutine until the test ends.
-//
-// If the task completes before the test ends, the test fails.
+// FailBeforeTestEnds executes the task in its own goroutine with the
+// expectation that it will return an error before the test ends.
+func (r TaskRunner) FailBeforeTestEnds() *Task {
+	r.t.Helper()
+	r.t.Logf("running %q to failure in the background before the test ends", r.name)
+
+	return r.run(
+		r.fn,
+		func(err error) {
+			r.t.Helper()
+
+			switch err {
+			case errTestEnded:
+				r.t.Errorf("%q did not return before the test ended, expected it to return an error", r.name)
+			case errStopped:
+				r.t.Errorf("%q was stopped explicitly, expected it to return an error", r.name)
+			case nil:
+				r.t.Errorf("%q returned successfully, expected it to return an error", r.name)
+			default:
+				// expected
+			}
+		},
+	)
+}
+
+// UntilTestEnds executes the task in its own goroutine with the expectation
+// that it will not return before the test ends.
 func (r TaskRunner) UntilTestEnds() *Task {
 	r.t.Helper()
+	r.t.Logf("running %q in the background background until the test ends", r.name)
 
-	task := r.run()
+	return r.run(
+		r.fn,
+		func(err error) {
+			r.t.Helper()
 
-	r.t.Cleanup(func() {
-		r.t.Helper()
-
-		select {
-		case <-task.Done():
-			switch task.Err() {
+			switch err {
+			case errTestEnded:
+				// expected
 			case errStopped:
-				r.t.Log("background task was explicitly (but unexpectedly) stopped before the test ended")
+				r.t.Errorf("%q was stopped explicitly, expected it to run until the test ended", r.name)
 			case nil:
-				r.t.Error("background task returned before the test ended")
+				r.t.Errorf("%q returned successfully, expected it to run until the test ended", r.name)
 			default:
-				r.t.Errorf("background task returned an error before the test ended: %s", task.Err())
+				r.t.Errorf("%q returned an error, expected it to run until the test ended: %s", r.name, err)
 			}
-		default:
-			task.Stop()
-			<-task.Done()
-
-			if task.Err() != errStopped {
-				r.t.Errorf("background task returned an unexpected error: %s", task.Err())
-			}
-		}
-	})
-
-	return task
+		},
+	)
 }
 
-func (r TaskRunner) run() *Task {
+func (r TaskRunner) run(
+	fn func(ctx context.Context) error,
+	expect func(err error),
+) *Task {
 	r.t.Helper()
 
 	ctx, cancel := context.WithCancelCause(context.Background())
 
 	task := &Task{
 		t:      r.t,
+		name:   r.name,
 		cancel: cancel,
 		done:   make(chan struct{}),
 	}
 
 	go func() {
-		err := r.fn(ctx)
+		r.t.Helper()
 
-		if err == context.Canceled && ctx.Err() == context.Canceled {
+		task.err = fn(ctx)
+
+		if task.err == context.Canceled && ctx.Err() == context.Canceled {
 			task.err = context.Cause(ctx)
-		} else {
-			task.err = err
+		}
+
+		switch task.err {
+		case errTestEnded, errStopped:
+		case nil:
+			r.t.Logf("%q returned successfully", r.name)
+		default:
+			r.t.Logf("%q returned an error: %s", r.name, task.err)
 		}
 
 		close(task.done)
@@ -113,12 +198,13 @@ func (r TaskRunner) run() *Task {
 	r.t.Cleanup(func() {
 		r.t.Helper()
 
-		cancel(nil)
+		cancel(errTestEnded)
 
 		select {
-		case <-task.done:
 		case <-time.After(shutdownTimeout):
-			r.t.Errorf("background task's context was canceled but it did not return within %s", shutdownTimeout)
+			r.t.Errorf("%q did not return within %s of being stopped", r.name, shutdownTimeout)
+		case <-task.done:
+			expect(task.err)
 		}
 	})
 
@@ -127,11 +213,15 @@ func (r TaskRunner) run() *Task {
 
 const shutdownTimeout = 10 * time.Second
 
-var errStopped = errors.New("task stopped")
+var (
+	errTestEnded = errors.New("stopped by test")
+	errStopped   = errors.New("stopped explicitly")
+)
 
 // Task represents a function running in the background.
 type Task struct {
 	t      TestingT
+	name   string
 	cancel context.CancelCauseFunc
 	done   chan struct{}
 	err    error
@@ -139,6 +229,8 @@ type Task struct {
 
 // Stop cancels the context passed to the function.
 func (t *Task) Stop() {
+	t.t.Helper()
+	t.t.Logf("stopping %q", t.name)
 	t.cancel(errStopped)
 }
 
@@ -148,16 +240,16 @@ func (t *Task) Stop() {
 // If it returns an error, the test fails.
 func (t *Task) StopAndWait() {
 	t.t.Helper()
-
+	t.t.Logf("stopping %q and waiting for it to return", t.name)
 	t.cancel(errStopped)
 
 	select {
-	case <-t.done:
-		if t.err != errStopped {
-			t.t.Fatalf("background task returned an unexpected error: %s", t.err)
-		}
 	case <-time.After(shutdownTimeout):
-		t.t.Fatalf("background task was canceled but did not return within %s", shutdownTimeout)
+		t.t.Errorf("%q did not return within %s of being stopped", t.name, shutdownTimeout)
+	case <-t.done:
+		if t.err != nil && t.err != errStopped {
+			t.t.Fatalf("%q returned an error, expected it to be stopped explicitly: %s", t.name, t.err)
+		}
 	}
 }
 
@@ -175,7 +267,7 @@ func (t *Task) Err() error {
 	select {
 	case <-t.done:
 	default:
-		t.t.Fatal("background task has not returned")
+		panic("cannot use Err() before Done() is closed")
 	}
 
 	return t.err

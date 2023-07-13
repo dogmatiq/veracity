@@ -26,6 +26,7 @@ func Expect[T any](
 		got,
 		protocmp.Transform(),
 		cmpopts.EquateEmpty(),
+		cmpopts.EquateErrors(),
 	); diff != "" {
 		t.Fatal(diff)
 	}
@@ -77,9 +78,9 @@ func ExpectChannelToClose[T any](
 	}
 }
 
-// ExpectChannelToBlock expects reading from the channel to block until the
-// given duration elapses.
-func ExpectChannelToBlock[T any](
+// ExpectChannelToBlockForDuration expects reading from the channel to block
+// until the given duration elapses.
+func ExpectChannelToBlockForDuration[T any](
 	t TestingT,
 	d time.Duration,
 	ch <-chan T,
@@ -90,6 +91,28 @@ func ExpectChannelToBlock[T any](
 	select {
 	case <-time.After(d):
 		// success! duration elapsed without receiving a value
+	case got, ok := <-ch:
+		if ok {
+			t.Error("received a value while expecting channel to block")
+			var want T // zero value
+			Expect(t, got, want, transforms...)
+		} else {
+			t.Error("channel closed while expecting channel to block")
+		}
+	}
+}
+
+// ExpectChannelWouldBlock expects reading from the channel would block.
+func ExpectChannelWouldBlock[T any](
+	t TestingT,
+	ch <-chan T,
+	transforms ...func(T) T,
+) {
+	t.Helper()
+
+	select {
+	default:
+		// success! there is no value available on the channel
 	case got, ok := <-ch:
 		if ok {
 			t.Error("received a value while expecting channel to block")
