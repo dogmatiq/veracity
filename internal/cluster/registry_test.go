@@ -17,8 +17,8 @@ func TestRegistry(t *testing.T) {
 		deps struct {
 			Node              Node
 			Registrar         *Registrar
+			MembershipChanged chan MembershipChanged
 			Observer          *RegistryObserver
-			MembershipChanges chan MembershipChange
 		},
 	) {
 		keyspaces := &memory.KeyValueStore{}
@@ -38,13 +38,13 @@ func TestRegistry(t *testing.T) {
 			Logger:        test.NewLogger(t),
 		}
 
-		deps.Observer = &RegistryObserver{
-			Keyspaces:    keyspaces,
-			PollInterval: 50 * time.Millisecond,
-		}
+		deps.MembershipChanged = make(chan MembershipChanged)
 
-		deps.MembershipChanges = make(chan MembershipChange)
-		deps.Observer.MembershipChanged.Subscribe(deps.MembershipChanges)
+		deps.Observer = &RegistryObserver{
+			Keyspaces:         keyspaces,
+			MembershipChanged: deps.MembershipChanged,
+			PollInterval:      50 * time.Millisecond,
+		}
 
 		return deps
 	}
@@ -58,28 +58,28 @@ func TestRegistry(t *testing.T) {
 		t.Log("start the observer before the registrar")
 
 		test.
-			RunInBackground(t, deps.Observer.Run).
+			RunInBackground(t, "observer", deps.Observer.Run).
 			UntilTestEnds()
 
 		t.Log("wait several poll intervals to ensure that the observer is running")
 
-		test.ExpectChannelToBlock(
+		test.ExpectChannelToBlockForDuration(
 			t,
 			3*deps.Observer.PollInterval,
-			deps.MembershipChanges,
+			deps.MembershipChanged,
 		)
 
 		t.Log("start the registrar and await notification of registration")
 
 		test.
-			RunInBackground(t, deps.Registrar.Run).
+			RunInBackground(t, "registrar", deps.Registrar.Run).
 			BeforeTestEnds()
 
 		test.
 			ExpectChannelToReceive(
 				tctx,
-				deps.MembershipChanges,
-				MembershipChange{
+				deps.MembershipChanged,
+				MembershipChanged{
 					Registered: []Node{
 						deps.Node,
 					},
@@ -89,10 +89,10 @@ func TestRegistry(t *testing.T) {
 		t.Log("wait several renew/poll intervals to ensure that the node's registration is renewed properly")
 
 		test.
-			ExpectChannelToBlock(
+			ExpectChannelToBlockForDuration(
 				tctx,
 				3*(deps.Registrar.RenewInterval+deps.Observer.PollInterval),
-				deps.MembershipChanges,
+				deps.MembershipChanged,
 			)
 
 		t.Log("shutdown the registrar and await notification of deregistration")
@@ -102,8 +102,8 @@ func TestRegistry(t *testing.T) {
 		test.
 			ExpectChannelToReceive(
 				tctx,
-				deps.MembershipChanges,
-				MembershipChange{
+				deps.MembershipChanged,
+				MembershipChanged{
 					Deregistered: []Node{
 						deps.Node,
 					},
@@ -120,28 +120,29 @@ func TestRegistry(t *testing.T) {
 		t.Log("start the registrar before the observer")
 
 		test.
-			RunInBackground(t, deps.Registrar.Run).
+			RunInBackground(t, "registrar", deps.Registrar.Run).
 			UntilTestEnds()
 
 		t.Log("wait several renew intervals to ensure that the node is registered")
 
 		test.
-			ExpectChannelToBlock(
+			ExpectChannelToBlockForDuration(
 				tctx,
 				3*deps.Registrar.RenewInterval,
-				deps.MembershipChanges,
+				deps.MembershipChanged,
 			)
 
 		t.Log("start an observer and await notification of registration")
 
 		test.
-			RunInBackground(t, deps.Observer.Run).
+			RunInBackground(t, "observer", deps.Observer.Run).
 			UntilTestEnds()
+
 		test.
 			ExpectChannelToReceive(
 				tctx,
-				deps.MembershipChanges,
-				MembershipChange{
+				deps.MembershipChanged,
+				MembershipChanged{
 					Registered: []Node{
 						deps.Node,
 					},
@@ -158,8 +159,8 @@ func TestRegistry(t *testing.T) {
 		t.Log("start the registrar and shut it down immediately")
 
 		task := test.
-			RunInBackground(t, deps.Registrar.Run).
-			UntilStopped()
+			RunInBackground(t, "registrar", deps.Registrar.Run).
+			BeforeTestEnds()
 
 		deps.Registrar.Shutdown.Signal()
 		test.
@@ -171,14 +172,14 @@ func TestRegistry(t *testing.T) {
 		t.Log("start an observer and ensure it is never notified")
 
 		test.
-			RunInBackground(t, deps.Observer.Run).
+			RunInBackground(t, "observer", deps.Observer.Run).
 			UntilTestEnds()
 
 		test.
-			ExpectChannelToBlock(
+			ExpectChannelToBlockForDuration(
 				tctx,
 				3*deps.Observer.PollInterval,
-				deps.MembershipChanges,
+				deps.MembershipChanged,
 			)
 	})
 
@@ -191,17 +192,17 @@ func TestRegistry(t *testing.T) {
 		t.Log("start the registrar and observer and await notification of registration")
 
 		registrar := test.
-			RunInBackground(t, deps.Registrar.Run).
-			UntilTestEnds()
+			RunInBackground(t, "registrar", deps.Registrar.Run).
+			UntilStopped()
 
 		test.
-			RunInBackground(t, deps.Observer.Run).
+			RunInBackground(t, "observer", deps.Observer.Run).
 			UntilTestEnds()
 
 		test.ExpectChannelToReceive(
 			tctx,
-			deps.MembershipChanges,
-			MembershipChange{
+			deps.MembershipChanged,
+			MembershipChanged{
 				Registered: []Node{
 					deps.Node,
 				},
@@ -214,8 +215,8 @@ func TestRegistry(t *testing.T) {
 
 		test.ExpectChannelToReceive(
 			tctx,
-			deps.MembershipChanges,
-			MembershipChange{
+			deps.MembershipChanged,
+			MembershipChanged{
 				Deregistered: []Node{
 					deps.Node,
 				},

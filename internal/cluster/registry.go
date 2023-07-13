@@ -9,7 +9,6 @@ import (
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/veracity/internal/cluster/internal/registrypb"
 	"github.com/dogmatiq/veracity/internal/fsm"
-	"github.com/dogmatiq/veracity/internal/messaging"
 	"github.com/dogmatiq/veracity/internal/protobuf/protokv"
 	"github.com/dogmatiq/veracity/internal/signaling"
 	"github.com/dogmatiq/veracity/persistence/kv"
@@ -181,28 +180,26 @@ func (r *Registrar) deleteRegistration(
 	)
 }
 
-// MembershipChange is an event that indicates a change in membership to the
+// MembershipChanged is an event that indicates a change in membership to the
 // cluster.
-type MembershipChange struct {
+type MembershipChanged struct {
 	Registered, Deregistered []Node
 }
 
 // RegistryObserver emits events about changes to the nodes in the registry.
 type RegistryObserver struct {
 	Keyspaces         kv.Store
-	MembershipChanged messaging.Topic[MembershipChange]
+	MembershipChanged chan<- MembershipChanged
 	Shutdown          signaling.Latch
 	PollInterval      time.Duration
 
-	keyspace kv.Keyspace
-	ticker   *time.Ticker
-	nodes    uuidpb.Map[Node]
+	keyspace     kv.Keyspace
+	nodes        uuidpb.Map[Node]
+	readyForPoll *time.Ticker
 }
 
 // Run starts the observer.
 func (o *RegistryObserver) Run(ctx context.Context) error {
-	defer o.MembershipChanged.Close()
-
 	var err error
 	o.keyspace, err = o.Keyspaces.Open(ctx, RegistryKeyspace)
 	if err != nil {
@@ -210,82 +207,81 @@ func (o *RegistryObserver) Run(ctx context.Context) error {
 	}
 	defer o.keyspace.Close()
 
+	o.nodes = uuidpb.Map[Node]{}
+
 	interval := o.PollInterval
 	if interval <= 0 {
 		interval = DefaultRegistryPollInterval
 	}
 
-	o.ticker = time.NewTicker(interval)
-	defer o.ticker.Stop()
+	o.readyForPoll = time.NewTicker(interval)
+	defer o.readyForPoll.Stop()
 
 	return fsm.Start(ctx, o.pollState)
 }
 
-func (o *RegistryObserver) idleState(ctx context.Context) (fsm.Action, error) {
+// idleState waits for until it's time to poll the registry.
+func (o *RegistryObserver) idleState(ctx context.Context) fsm.Action {
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return fsm.Stop()
 	case <-o.Shutdown.Signaled():
 		return fsm.Stop()
-	case <-o.ticker.C:
-		return fsm.Enter(o.pollState)
+	case <-o.readyForPoll.C:
+		return fsm.EnterState(o.pollState)
 	}
 }
 
-func (o *RegistryObserver) pollState(ctx context.Context) (fsm.Action, error) {
+// pollState loads the current set of nodes from the registry to produce a
+// [MembershipChange] event describing the changes since the last poll.
+func (o *RegistryObserver) pollState(ctx context.Context) fsm.Action {
 	nodes, err := o.loadNodes(ctx)
 	if err != nil {
-		return nil, err
+		return fsm.Fail(err)
 	}
 
-	event := MembershipChange{}
+	ev := MembershipChanged{}
 
 	for id, node := range o.nodes {
 		if _, ok := nodes[id]; !ok {
-			event.Deregistered = append(event.Deregistered, node)
+			ev.Deregistered = append(ev.Deregistered, node)
 		}
 	}
 
 	for id, node := range nodes {
 		if _, ok := o.nodes[id]; !ok {
-			event.Registered = append(event.Registered, node)
+			ev.Registered = append(ev.Registered, node)
 		}
 	}
 
-	if len(event.Registered) == 0 && len(event.Deregistered) == 0 {
-		return fsm.Enter(o.idleState)
+	if len(ev.Registered) == 0 && len(ev.Deregistered) == 0 {
+		return fsm.EnterState(o.idleState)
 	}
 
-	return fsm.With(event).Enter(o.publishState)
+	return fsm.With(ev).EnterState(o.publishState)
 }
 
-func (o *RegistryObserver) publishState(
-	ctx context.Context,
-	event MembershipChange,
-) (fsm.Action, error) {
+// publishState publishes a [MembershipChange] event.
+func (o *RegistryObserver) publishState(ctx context.Context, ev MembershipChanged) fsm.Action {
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-o.ticker.C:
-		return fsm.Enter(o.pollState)
-	case o.MembershipChanged.Publish() <- event:
-	}
+		return fsm.Stop()
+	case <-o.readyForPoll.C:
+		return fsm.EnterState(o.pollState)
+	case o.MembershipChanged <- ev:
+		for _, node := range ev.Registered {
+			o.nodes.Set(node.ID, node)
+		}
 
-	if o.nodes == nil {
-		o.nodes = uuidpb.Map[Node]{}
-	}
+		for _, node := range ev.Deregistered {
+			o.nodes.Delete(node.ID)
+		}
 
-	for _, node := range event.Registered {
-		o.nodes.Set(node.ID, node)
+		return fsm.EnterState(o.idleState)
 	}
-
-	for _, node := range event.Deregistered {
-		o.nodes.Delete(node.ID)
-	}
-
-	return fsm.Enter(o.idleState)
 }
 
+// loadNodes loads the current set of nodes from the registry.
 func (o *RegistryObserver) loadNodes(ctx context.Context) (uuidpb.Map[Node], error) {
 	nodes := uuidpb.Map[Node]{}
 
