@@ -5,5 +5,5 @@ import "github.com/dogmatiq/enginekit/protobuf/envelopepb"
 type EnqueueCommandExchange struct {
 	Command *envelopepb.Envelope
 
-	Done chan<- struct{}
+	Done chan<- error
 }

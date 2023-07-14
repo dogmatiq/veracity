@@ -13,7 +13,7 @@ type CommandExecutor struct {
 }
 
 func (e *CommandExecutor) ExecuteCommand(ctx context.Context, c dogma.Command) error {
-	done := make(chan struct{})
+	done := make(chan error, 1)
 
 	ex := &EnqueueCommandExchange{
 		Command: e.Packer.Pack(c),
@@ -29,8 +29,7 @@ func (e *CommandExecutor) ExecuteCommand(ctx context.Context, c dogma.Command) e
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-done:
+	case err := <-done:
+		return err
 	}
-
-	return nil
 }

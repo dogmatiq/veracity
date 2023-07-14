@@ -6,6 +6,7 @@ import (
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/enginekit/protobuf/envelopepb"
 	"github.com/dogmatiq/enginekit/protobuf/identitypb"
+	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/integration/internal/journalpb"
 	"github.com/dogmatiq/veracity/internal/protobuf/protojournal"
@@ -26,13 +27,14 @@ type Supervisor struct {
 }
 
 func (s *Supervisor) Run(ctx context.Context) error {
-	j, err := s.Journals.Open(ctx, "integration/"+s.HandlerIdentity.Key.AsString())
+	j, err := s.Journals.Open(ctx, JournalName(s.HandlerIdentity.Key))
 	if err != nil {
 		return err
 	}
 	defer j.Close()
 	s.pos = 0
 	pendingCmds := []*envelopepb.Envelope{}
+	handledCmds := uuidpb.Set{}
 
 	if err := protojournal.RangeAll(
 		ctx,
@@ -51,8 +53,12 @@ func (s *Supervisor) Run(ctx context.Context) error {
 			}
 
 			if rec := record.GetCommandHandled(); rec != nil {
+				// TODO: add to projection...
+				cmdID := rec.GetCommandId()
+				handledCmds.Add(cmdID)
+
 				for i, cmd := range pendingCmds {
-					if proto.Equal(cmd.GetMessageId(), rec.GetCommandId()) {
+					if proto.Equal(cmd.GetMessageId(), cmdID) {
 						pendingCmds = slices.Delete(pendingCmds, i, i+1)
 						break
 					}
@@ -70,6 +76,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 		if err := s.handleCommand(ctx, cmd, j); err != nil {
 			return err
 		}
+		handledCmds.Add(cmd.GetMessageId())
 	}
 
 	for {
@@ -77,6 +84,10 @@ func (s *Supervisor) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case ex := <-s.EnqueueCommand:
+			if handledCmds.Has(ex.Command.GetMessageId()) {
+				ex.Done <- nil
+				break
+			}
 			rec := &journalpb.Record{
 				OneOf: &journalpb.Record_CommandEnqueued{
 					CommandEnqueued: &journalpb.CommandEnqueued{
@@ -86,15 +97,18 @@ func (s *Supervisor) Run(ctx context.Context) error {
 			}
 
 			if err := protojournal.Append(ctx, j, s.pos, rec); err != nil {
+				ex.Done <- err
 				return err
 			}
 
 			s.pos++
-			close(ex.Done)
+			ex.Done <- nil
 
 			if err := s.handleCommand(ctx, ex.Command, j); err != nil {
 				return err
 			}
+
+			handledCmds.Add(ex.Command.GetMessageId())
 		}
 	}
 }

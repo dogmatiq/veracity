@@ -15,6 +15,7 @@ import (
 	. "github.com/dogmatiq/marshalkit/fixtures"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	. "github.com/dogmatiq/veracity/internal/integration"
+	"github.com/dogmatiq/veracity/internal/integration/internal/journalpb"
 	"github.com/dogmatiq/veracity/internal/test"
 	"github.com/dogmatiq/veracity/persistence/driver/memory"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -22,25 +23,24 @@ import (
 
 // - [x] Record command in inbox
 // - [x] Invoke the handler associated with the command
-// - [ ] Place all resulting events in the outbox and remove the command from the inbox
-// - [ ] Dispatch event 1 in the outbox to the event stream
-// - [ ] Contact event stream
-// - [ ] Remove event 1 from the outbox
-// - [ ] Dispatch event 2 in the outbox to the event stream
-// - [ ] Remove event 2 from the outbox
-// - [ ] Dispatch event 3 in the outbox to the event stream
-// - [ ] Remove event 3 from the outbox
+// - [x] Place all resulting events in the outbox and remove the command from the inbox
+// - [x] Record events to the event stream
+// - [x] - Record events to the event stream after failure
+// - [ ] Remove events from the outbox
 // - [ ] Remove integration from a dirty list.
-
 func TestSupervisor(t *testing.T) {
-	setup := func(t test.TestingT) (deps struct {
+
+	type dependencies struct {
 		Packer        *envelope.Packer
+		Journals      *memory.JournalStore
 		Supervisor    *Supervisor
 		Handler       *IntegrationMessageHandler
 		Exchanges     chan *EnqueueCommandExchange
 		EventRecorder *eventRecorderStub
 		Executor      *CommandExecutor
-	}) {
+	}
+
+	setup := func(t test.TestingT) (deps dependencies) {
 		deps.Packer = newPacker()
 
 		deps.Exchanges = make(chan *EnqueueCommandExchange)
@@ -54,10 +54,12 @@ func TestSupervisor(t *testing.T) {
 			Packer:          deps.Packer,
 		}
 
+		deps.Journals = &memory.JournalStore{}
+
 		deps.Supervisor = &Supervisor{
 			EnqueueCommand:  deps.Exchanges,
 			HandlerIdentity: identitypb.New("<handler>", uuidpb.Generate()),
-			Journals:        &memory.JournalStore{},
+			Journals:        deps.Journals,
 			Packer:          deps.Packer,
 			Handler:         deps.Handler,
 			EventRecorder:   deps.EventRecorder,
@@ -65,80 +67,181 @@ func TestSupervisor(t *testing.T) {
 
 		return deps
 	}
-	t.Run("it records events to the event stream", func(t *testing.T) {
+
+	t.Run("it executes commands once regardless of errors", func(t *testing.T) {
 		t.Parallel()
 
-		tctx := test.WithContext(t)
-		deps := setup(tctx)
+		cases := []struct {
+			Desc          string
+			InduceFailure func(*dependencies)
+		}{
+			{
+				Desc: "no faults",
+				InduceFailure: func(*dependencies) {
 
-		deps.Handler.HandleCommandFunc = func(
-			_ context.Context,
-			s dogma.IntegrationCommandScope,
-			c dogma.Command,
-		) error {
-			s.RecordEvent(MessageE1)
-			s.RecordEvent(MessageE2)
-			s.RecordEvent(MessageE3)
-
-			return nil
-		}
-
-		events := make(chan []*envelopepb.Envelope, 1)
-		deps.EventRecorder.RecordEventsFunc = func(envs []*envelopepb.Envelope) {
-			events <- envs
-		}
-
-		test.
-			RunInBackground(t, "supervisor", deps.Supervisor.Run).
-			UntilTestEnds()
-
-		if err := deps.Executor.ExecuteCommand(tctx, MessageC1); err != nil {
-			t.Fatal(err)
-		}
-
-		test.
-			ExpectChannelToReceive(
-				tctx,
-				events,
-				[]*envelopepb.Envelope{
-					{
-						MessageId:         deterministicUUID(2),
-						CausationId:       deterministicUUID(1),
-						CorrelationId:     deterministicUUID(1),
-						SourceApplication: deps.Packer.Application,
-						SourceHandler:     deps.Supervisor.HandlerIdentity,
-						CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
-						Description:       MessageE1.MessageDescription(),
-						PortableName:      MessageEPortableName,
-						MediaType:         MessageE1Packet.MediaType,
-						Data:              MessageE1Packet.Data,
-					},
-					{
-						MessageId:         deterministicUUID(3),
-						CausationId:       deterministicUUID(1),
-						CorrelationId:     deterministicUUID(1),
-						SourceApplication: deps.Packer.Application,
-						SourceHandler:     deps.Supervisor.HandlerIdentity,
-						CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
-						Description:       MessageE2.MessageDescription(),
-						PortableName:      MessageEPortableName,
-						MediaType:         MessageE2Packet.MediaType,
-						Data:              MessageE2Packet.Data,
-					},
-					{
-						MessageId:         deterministicUUID(4),
-						CausationId:       deterministicUUID(1),
-						CorrelationId:     deterministicUUID(1),
-						SourceApplication: deps.Packer.Application,
-						SourceHandler:     deps.Supervisor.HandlerIdentity,
-						CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
-						Description:       MessageE3.MessageDescription(),
-						PortableName:      MessageEPortableName,
-						MediaType:         MessageE3Packet.MediaType,
-						Data:              MessageE3Packet.Data,
-					},
 				},
-			)
+			},
+			{
+				Desc: "failure to open journal",
+				InduceFailure: func(deps *dependencies) {
+					memory.FailOnJournalOpen(
+						deps.Journals,
+						JournalName(deps.Supervisor.HandlerIdentity.Key),
+						errors.New("<error>"),
+					)
+				},
+			},
+			{
+				Desc: "failure before appending CommandEnqueued record to the journal",
+				InduceFailure: func(deps *dependencies) {
+					memory.FailBeforeJournalAppend(
+						deps.Journals,
+						JournalName(deps.Supervisor.HandlerIdentity.Key),
+						func(r *journalpb.Record) bool {
+							return r.GetCommandEnqueued() != nil
+						},
+						errors.New("<error>"),
+					)
+				},
+			},
+			{
+				Desc: "failure after appending CommandEnqueued record to the journal",
+				InduceFailure: func(deps *dependencies) {
+					memory.FailAfterJournalAppend(
+						deps.Journals,
+						JournalName(deps.Supervisor.HandlerIdentity.Key),
+						func(r *journalpb.Record) bool {
+							return r.GetCommandEnqueued() != nil
+						},
+						errors.New("<error>"),
+					)
+				},
+			},
+		}
+
+		for _, c := range cases {
+			c := c
+
+			t.Run(c.Desc, func(t *testing.T) {
+				t.Parallel()
+
+				tctx := test.WithContext(t)
+				deps := setup(tctx)
+
+				handled := make(chan struct{}, 100)
+				deps.Handler.HandleCommandFunc = func(
+					_ context.Context,
+					s dogma.IntegrationCommandScope,
+					c dogma.Command,
+				) error {
+					if c != MessageC1 {
+						return fmt.Errorf("unexpected command: got %s, want %s", c, MessageC1)
+					}
+
+					s.RecordEvent(MessageE1)
+					s.RecordEvent(MessageE2)
+					s.RecordEvent(MessageE3)
+
+					handled <- struct{}{}
+
+					return nil
+				}
+
+				events := make(chan []*envelopepb.Envelope, 100)
+				deps.EventRecorder.RecordEventsFunc = func(envs []*envelopepb.Envelope) {
+					events <- envs
+				}
+				cmd := deps.Packer.Pack(MessageC1)
+
+				c.InduceFailure(&deps)
+
+				test.
+					RunInBackground(t, "supervisor", deps.Supervisor.Run).
+					RepeatedlyUntilStopped()
+
+			loop:
+				for {
+					done := make(chan error, 1)
+
+					ex := &EnqueueCommandExchange{
+						Command: cmd,
+						Done:    done,
+					}
+
+					select {
+					case <-tctx.Done():
+						t.Fatal(tctx.Err())
+					case deps.Exchanges <- ex:
+					}
+
+					select {
+					case <-tctx.Done():
+						t.Fatal(tctx.Err())
+					case err := <-done:
+						if err == nil {
+							break loop
+						}
+					}
+				}
+
+				test.
+					ExpectChannelToReceive(
+						tctx,
+						events,
+						[]*envelopepb.Envelope{
+							{
+								MessageId:         deterministicUUID(2),
+								CausationId:       deterministicUUID(1),
+								CorrelationId:     deterministicUUID(1),
+								SourceApplication: deps.Packer.Application,
+								SourceHandler:     deps.Supervisor.HandlerIdentity,
+								CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
+								Description:       MessageE1.MessageDescription(),
+								PortableName:      MessageEPortableName,
+								MediaType:         MessageE1Packet.MediaType,
+								Data:              MessageE1Packet.Data,
+							},
+							{
+								MessageId:         deterministicUUID(3),
+								CausationId:       deterministicUUID(1),
+								CorrelationId:     deterministicUUID(1),
+								SourceApplication: deps.Packer.Application,
+								SourceHandler:     deps.Supervisor.HandlerIdentity,
+								CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
+								Description:       MessageE2.MessageDescription(),
+								PortableName:      MessageEPortableName,
+								MediaType:         MessageE2Packet.MediaType,
+								Data:              MessageE2Packet.Data,
+							},
+							{
+								MessageId:         deterministicUUID(4),
+								CausationId:       deterministicUUID(1),
+								CorrelationId:     deterministicUUID(1),
+								SourceApplication: deps.Packer.Application,
+								SourceHandler:     deps.Supervisor.HandlerIdentity,
+								CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
+								Description:       MessageE3.MessageDescription(),
+								PortableName:      MessageEPortableName,
+								MediaType:         MessageE3Packet.MediaType,
+								Data:              MessageE3Packet.Data,
+							},
+						},
+					)
+
+				test.
+					ExpectChannelToReceive(
+						t,
+						handled,
+						struct{}{},
+					)
+
+				test.
+					ExpectChannelWouldBlock(
+						t,
+						handled,
+					)
+			})
+		}
 	})
 
 	t.Run("it does not re-handle successful commands after restart", func(t *testing.T) {
@@ -174,7 +277,7 @@ func TestSupervisor(t *testing.T) {
 		test.
 			ExpectChannelToBlockForDuration(
 				tctx,
-				10*time.Second,
+				2*time.Second,
 				handled,
 			)
 	})
@@ -221,42 +324,6 @@ func TestSupervisor(t *testing.T) {
 		test.
 			RunInBackground(t, "supervisor", deps.Supervisor.Run).
 			UntilTestEnds()
-
-		test.
-			ExpectChannelToClose(
-				tctx,
-				handled,
-			)
-	})
-
-	t.Run("it passes the command to the handler", func(t *testing.T) {
-		t.Parallel()
-
-		tctx := test.WithContext(t)
-		deps := setup(tctx)
-
-		handled := make(chan struct{})
-		deps.Handler.HandleCommandFunc = func(
-			_ context.Context,
-			_ dogma.IntegrationCommandScope,
-			c dogma.Command,
-		) error {
-			close(handled)
-
-			if c != MessageC1 {
-				return fmt.Errorf("unexpected command: got %s, want %s", c, MessageC1)
-			}
-
-			return nil
-		}
-
-		test.
-			RunInBackground(t, "supervisor", deps.Supervisor.Run).
-			UntilTestEnds()
-
-		if err := deps.Executor.ExecuteCommand(tctx, MessageC1); err != nil {
-			t.Fatal(err)
-		}
 
 		test.
 			ExpectChannelToClose(
