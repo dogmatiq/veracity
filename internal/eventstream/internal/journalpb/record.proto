@@ -1,0 +1,18 @@
+syntax = "proto3";
+package veracity.eventstream.journal.v1;
+
+option go_package = "github.com/dogmatiq/veracity/internal/eventstream/internal/journalpb";
+
+import "github.com/dogmatiq/enginekit/protobuf/envelopepb/envelope.proto";
+
+// Record is a journal record that stores an operation performed on an event
+// stream.
+message Record {
+  uint64 stream_offset_before = 1;
+  uint64 stream_offset_after = 2;
+  oneof operation { AppendOperation append = 3; }
+}
+
+// AppendOperation is an operation that indicates a set of events have been
+// appended to the stream.
+message AppendOperation { repeated dogma.protobuf.Envelope events = 1; }
