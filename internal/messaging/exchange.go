@@ -13,13 +13,13 @@ type Exchange[Request, Response any] struct {
 }
 
 // Ok sends a successful response.
-func (x Exchange[Request, Response]) Ok(res Response) {
-	x.Response <- Failable[Response]{value: res}
+func (e Exchange[Request, Response]) Ok(res Response) {
+	e.Response <- Failable[Response]{value: res}
 }
 
 // Err sends an error response.
-func (x Exchange[Request, Response]) Err(err error) {
-	x.Response <- Failable[Response]{err: err}
+func (e Exchange[Request, Response]) Err(err error) {
+	e.Response <- Failable[Response]{err: err}
 }
 
 // ExchangeQueue is a queue of request/response exchanges.
