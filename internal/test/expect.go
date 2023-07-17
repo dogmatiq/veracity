@@ -62,6 +62,7 @@ func ExpectChannelToReceive[T any](
 				want,
 				options...,
 			)
+			t.Log("received the expected value on the channel")
 		} else {
 			t.Fatal("channel closed while expecting to receive a value")
 		}
@@ -94,6 +95,8 @@ func ExpectChannelToClose[T any](
 				want,
 				options...,
 			)
+		} else {
+			t.Log("channel closed, as expected")
 		}
 	}
 }
@@ -110,7 +113,7 @@ func ExpectChannelToBlockForDuration[T any](
 
 	select {
 	case <-time.After(d):
-		// success! duration elapsed without receiving a value
+		t.Logf("%s elapsed without receiving a value on the channel, as expected", d)
 	case got, ok := <-ch:
 		if ok {
 			var want T // zero value
@@ -137,7 +140,7 @@ func ExpectChannelWouldBlock[T any](
 
 	select {
 	default:
-		// success! there is no value available on the channel
+		t.Log("reading from channel would block, as expected")
 	case got, ok := <-ch:
 		if ok {
 			var want T // zero value
