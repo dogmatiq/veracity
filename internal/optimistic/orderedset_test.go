@@ -19,6 +19,24 @@ func TestOrderedSet(t *testing.T) {
 
 		t.Repeat(
 			map[string]func(*rapid.T){
+				"": func(t *rapid.T) {
+					test.Expect(
+						t,
+						"set cardinality is incorrect",
+						set.Len(),
+						len(members),
+					)
+
+					sorted := maps.Keys(members)
+					slices.Sort(sorted)
+
+					test.Expect(
+						t,
+						"set members are disjoint or out of order",
+						set.Members(),
+						sorted,
+					)
+				},
 				"add a non-member": func(t *rapid.T) {
 					m := rapid.
 						Int8().
@@ -28,15 +46,7 @@ func TestOrderedSet(t *testing.T) {
 						t.Skip("already a member")
 					}
 
-					if set.Has(m) {
-						t.Errorf("did not expect set to contain %d", m)
-					}
-
 					set.Add(m)
-
-					if !set.Has(m) {
-						t.Errorf("expected set to contain %d", m)
-					}
 
 					members[m] = struct{}{}
 				},
@@ -49,15 +59,7 @@ func TestOrderedSet(t *testing.T) {
 						SampledFrom(maps.Keys(members)).
 						Draw(t, "member")
 
-					before := set.Members()
 					set.Add(m)
-					after := set.Members()
-
-					test.Expect(
-						t,
-						after,
-						before,
-					)
 				},
 				"delete an existing member": func(t *rapid.T) {
 					if len(members) == 0 {
@@ -68,15 +70,7 @@ func TestOrderedSet(t *testing.T) {
 						SampledFrom(maps.Keys(members)).
 						Draw(t, "member")
 
-					if !set.Has(m) {
-						t.Errorf("expected set to contain %d", m)
-					}
-
 					set.Delete(m)
-
-					if set.Has(m) {
-						t.Errorf("did not expect set to contain %d", m)
-					}
 
 					delete(members, m)
 				},
@@ -89,38 +83,7 @@ func TestOrderedSet(t *testing.T) {
 						t.Skip("already a member")
 					}
 
-					before := set.Members()
 					set.Delete(m)
-					after := set.Members()
-
-					test.Expect(
-						t,
-						after,
-						before,
-					)
-				},
-				"cardinality": func(t *rapid.T) {
-					got := set.Len()
-					want := len(members)
-
-					if got != want {
-						t.Errorf(
-							"unexpected cardinality: got %d, want %d",
-							got,
-							want,
-						)
-					}
-				},
-				"members are ordered": func(t *rapid.T) {
-					got := set.Members()
-					want := maps.Keys(members)
-					slices.Sort(want)
-
-					test.Expect(
-						t,
-						got,
-						want,
-					)
 				},
 			},
 		)

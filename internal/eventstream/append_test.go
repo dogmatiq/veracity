@@ -195,6 +195,7 @@ func TestAppend(t *testing.T) {
 
 				test.Expect(
 					t,
+					"journal contains missing or unexpected events",
 					events,
 					[]*envelopepb.Envelope{
 						event,

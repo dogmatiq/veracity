@@ -27,7 +27,7 @@ type testContext struct {
 	TestingT
 }
 
-func contextOf(t TestingT) context.Context {
+func contextOf(t FailerT) context.Context {
 	if t, ok := t.(Context); ok {
 		return t
 	}
