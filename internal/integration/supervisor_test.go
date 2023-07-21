@@ -24,12 +24,11 @@ import (
 // - [x] Record command in inbox
 // - [x] Invoke the handler associated with the command
 // - [x] Place all resulting events in the outbox and remove the command from the inbox
+// - [ ] Determine which event stream to use
 // - [x] Record events to the event stream
 // - [x] - Record events to the event stream after failure
 // - [ ] Remove events from the outbox
-// - [ ] Remove integration from a dirty list.
 func TestSupervisor(t *testing.T) {
-
 	type dependencies struct {
 		Packer        *envelope.Packer
 		Journals      *memory.JournalStore
@@ -78,7 +77,6 @@ func TestSupervisor(t *testing.T) {
 			{
 				Desc: "no faults",
 				InduceFailure: func(*dependencies) {
-
 				},
 			},
 			{
