@@ -6,7 +6,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.19.0
 	github.com/aws/aws-sdk-go-v2/config v1.18.29
 	github.com/aws/aws-sdk-go-v2/credentials v1.13.28
-	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.20.1
+	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.20.2
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/dogmatiq/configkit v0.12.1
 	github.com/dogmatiq/discoverkit v0.1.2
