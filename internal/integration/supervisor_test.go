@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,7 +28,7 @@ import (
 // - [ ] Determine which event stream to use
 // - [x] Record events to the event stream
 // - [x] - Record events to the event stream after failure
-// - [ ] Remove events from the outbox
+// - [x] Remove events from the outbox
 func TestSupervisor(t *testing.T) {
 	type dependencies struct {
 		Packer        *envelope.Packer
@@ -115,6 +116,90 @@ func TestSupervisor(t *testing.T) {
 					)
 				},
 			},
+			{
+				Desc: "failure before handler records events",
+				InduceFailure: func(deps *dependencies) {
+					var done atomic.Bool
+					handle := deps.Handler.HandleCommandFunc
+
+					deps.Handler.HandleCommandFunc = func(
+						ctx context.Context,
+						s dogma.IntegrationCommandScope,
+						c dogma.Command,
+					) error {
+						if done.CompareAndSwap(false, true) {
+							return errors.New("<error>")
+						}
+
+						if err := handle(ctx, s, c); err != nil {
+							return err
+						}
+
+						return nil
+					}
+				},
+			},
+			{
+				Desc: "failure after handler records events",
+				InduceFailure: func(deps *dependencies) {
+					var done atomic.Bool
+					handle := deps.Handler.HandleCommandFunc
+
+					deps.Handler.HandleCommandFunc = func(
+						ctx context.Context,
+						s dogma.IntegrationCommandScope,
+						c dogma.Command,
+					) error {
+						if err := handle(ctx, s, c); err != nil {
+							return err
+						}
+
+						if done.CompareAndSwap(false, true) {
+							return errors.New("<error>")
+						}
+						return nil
+					}
+				},
+			},
+			{
+				Desc: "failure before events recorded to stream",
+				InduceFailure: func(deps *dependencies) {
+					var done atomic.Bool
+					record := deps.EventRecorder.RecordEventsFunc
+
+					deps.EventRecorder.RecordEventsFunc = func(
+						events []*envelopepb.Envelope,
+					) error {
+						if done.CompareAndSwap(false, true) {
+							return errors.New("<error>")
+						}
+
+						return record(events)
+
+					}
+				},
+			},
+			{
+				Desc: "failure after events recorded to stream",
+				InduceFailure: func(deps *dependencies) {
+					var done atomic.Bool
+					record := deps.EventRecorder.RecordEventsFunc
+
+					deps.EventRecorder.RecordEventsFunc = func(
+						events []*envelopepb.Envelope,
+					) error {
+						if err := record(events); err != nil {
+							return err
+						}
+
+						if done.CompareAndSwap(false, true) {
+							return errors.New("<error>")
+						}
+
+						return nil
+					}
+				},
+			},
 		}
 
 		for _, c := range cases {
@@ -146,8 +231,9 @@ func TestSupervisor(t *testing.T) {
 				}
 
 				events := make(chan []*envelopepb.Envelope, 100)
-				deps.EventRecorder.RecordEventsFunc = func(envs []*envelopepb.Envelope) {
+				deps.EventRecorder.RecordEventsFunc = func(envs []*envelopepb.Envelope) error {
 					events <- envs
+					return nil
 				}
 				cmd := deps.Packer.Pack(MessageC1)
 
@@ -258,13 +344,20 @@ func TestSupervisor(t *testing.T) {
 
 		supervisor.StopAndWait()
 
-		handled := make(chan struct{})
+		handled := make(chan struct{}, 100)
 		deps.Handler.HandleCommandFunc = func(
 			context.Context,
 			dogma.IntegrationCommandScope,
 			dogma.Command,
 		) error {
-			close(handled)
+			handled <- struct{}{}
+			return nil
+		}
+
+		deps.EventRecorder.RecordEventsFunc = func(
+			[]*envelopepb.Envelope,
+		) error {
+			handled <- struct{}{}
 			return nil
 		}
 
@@ -276,56 +369,6 @@ func TestSupervisor(t *testing.T) {
 			ExpectChannelToBlockForDuration(
 				tctx,
 				2*time.Second,
-				handled,
-			)
-	})
-
-	t.Run("it recovers from a handler error", func(t *testing.T) {
-		t.Parallel()
-
-		tctx := test.WithContext(t)
-		deps := setup(tctx)
-
-		handlerErr := errors.New("<error>")
-		deps.Handler.HandleCommandFunc = func(
-			_ context.Context,
-			_ dogma.IntegrationCommandScope,
-			c dogma.Command,
-		) error {
-			return handlerErr
-		}
-
-		supervisor := test.
-			RunInBackground(t, "supervisor", deps.Supervisor.Run).
-			FailBeforeTestEnds()
-
-		if err := deps.Executor.ExecuteCommand(tctx, MessageC1); err != nil {
-			t.Fatal(err)
-		}
-
-		test.
-			ExpectChannelToClose(
-				tctx,
-				supervisor.Done(),
-			)
-
-		if err := supervisor.Err(); err != handlerErr {
-			t.Fatalf("unexpected error: %s", err)
-		}
-
-		handled := make(chan struct{})
-		deps.Handler.HandleCommandFunc = func(ctx context.Context, ics dogma.IntegrationCommandScope, c dogma.Command) error {
-			close(handled)
-			return nil
-		}
-
-		test.
-			RunInBackground(t, "supervisor", deps.Supervisor.Run).
-			UntilTestEnds()
-
-		test.
-			ExpectChannelToClose(
-				tctx,
 				handled,
 			)
 	})

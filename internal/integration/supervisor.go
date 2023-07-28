@@ -34,6 +34,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	defer j.Close()
 	s.pos = 0
 	pendingCmds := []*envelopepb.Envelope{}
+	pendingEvents := [][]*envelopepb.Envelope{}
 	handledCmds := uuidpb.Set{}
 
 	if err := protojournal.RangeAll(
@@ -63,13 +64,31 @@ func (s *Supervisor) Run(ctx context.Context) error {
 						break
 					}
 				}
+				if len(rec.GetEvents()) > 0 {
+					pendingEvents = append(pendingEvents, rec.GetEvents())
+				}
 				return true, nil
+			}
+
+			if rec := record.GetEventsAppendedToStream(); rec != nil {
+				for i, events := range pendingEvents {
+					if proto.Equal(events[0].GetCausationId(), rec.GetCommandId()) {
+						pendingEvents = slices.Delete(pendingEvents, i, i+1)
+						break
+					}
+				}
 			}
 
 			return true, nil
 		},
 	); err != nil {
 		return err
+	}
+
+	for _, events := range pendingEvents {
+		if err := s.recordEvents(ctx, j, events); err != nil {
+			return err
+		}
 	}
 
 	for _, cmd := range pendingCmds {
@@ -154,7 +173,37 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 
 	s.pos++
 
-	s.EventRecorder.RecordEvents(envs)
+	return s.recordEvents(ctx, j, envs)
+}
+
+func (s *Supervisor) recordEvents(
+	ctx context.Context,
+	j journal.Journal,
+	envs []*envelopepb.Envelope,
+) error {
+	if len(envs) == 0 {
+		return nil
+	}
+
+	if err := s.EventRecorder.RecordEvents(envs); err != nil {
+		return err
+	}
+
+	if err := protojournal.Append(
+		ctx,
+		j,
+		s.pos,
+		&journalpb.Record{
+			OneOf: &journalpb.Record_EventsAppendedToStream{
+				EventsAppendedToStream: &journalpb.EventsAppendedToStream{
+					CommandId: envs[0].GetCausationId(),
+				},
+			},
+		},
+	); err != nil {
+		return err
+	}
+	s.pos++
 
 	return nil
 }

@@ -13,7 +13,7 @@ message Record {
     CommandHandled command_handled = 2;
     CommandHandlerFailed command_handler_failed = 3;
     EventStreamSelected event_stream_selected = 4;
-    EventAppendedToStream event_appended_to_stream = 5;
+    EventsAppendedToStream events_appended_to_stream = 5;
   }
 }
 
@@ -56,15 +56,15 @@ message EventStreamSelected {
   uint64 offset = 2;
 }
 
-// EventAppendedToStream is a journal record that indicates that an event that
-// was produced by the handler has been appended to an event stream.
-message EventAppendedToStream {
-  // EventId is the ID of the event that was appended to the stream.
-  dogma.protobuf.UUID event_id = 1;
+// EventsAppendedToStream is a journal record that indicates that the events
+// produced by a specific command have been appended to an event stream.
+message EventsAppendedToStream {
+  // CommandId is the ID of the command that produced the events.
+  dogma.protobuf.UUID command_id = 1;
 
-  // StreamId is the ID of the stream to which the event was appended.
+  // StreamId is the ID of the stream to which the events were appended.
   dogma.protobuf.UUID stream_id = 2;
 
-  // Offset is the offset of the event within the stream.
+  // Offset is the offset of the first event.
   uint64 offset = 3;
 }
