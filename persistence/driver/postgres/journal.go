@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"errors"
 
 	"github.com/dogmatiq/veracity/persistence/journal"
 )
@@ -45,7 +44,7 @@ func (j *journ) Bounds(ctx context.Context) (begin, end journal.Position, err er
 	return begin, end, err
 }
 
-func (j *journ) Get(ctx context.Context, pos journal.Position) ([]byte, bool, error) {
+func (j *journ) Get(ctx context.Context, pos journal.Position) ([]byte, error) {
 	row := j.DB.QueryRowContext(
 		ctx,
 		`SELECT record
@@ -59,10 +58,10 @@ func (j *journ) Get(ctx context.Context, pos journal.Position) ([]byte, bool, er
 	var rec []byte
 	err := row.Scan(&rec)
 	if err == sql.ErrNoRows {
-		err = nil
+		return nil, journal.ErrNotFound
 	}
 
-	return rec, len(rec) > 0, err
+	return rec, err
 }
 
 func (j *journ) Range(
@@ -70,10 +69,19 @@ func (j *journ) Range(
 	begin journal.Position,
 	fn journal.RangeFunc,
 ) error {
-	// TODO: "paginate" results across multiple queries to avoid loading
-	// everything into memory at once.
-	rows, err := j.DB.QueryContext(
+	expect := begin
+
+	return j.rangeQuery(
 		ctx,
+		func(ctx context.Context, pos journal.Position, rec []byte) (bool, error) {
+			if pos != expect {
+				return false, journal.ErrNotFound
+			}
+
+			expect++
+
+			return fn(ctx, pos, rec)
+		},
 		`SELECT position, record
 		FROM veracity.journal
 		WHERE name = $1
@@ -82,58 +90,54 @@ func (j *journ) Range(
 		j.Name,
 		begin,
 	)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	expectPos := begin
-
-	for rows.Next() {
-		var (
-			pos journal.Position
-			rec []byte
-		)
-		if err = rows.Scan(&pos, &rec); err != nil {
-			return err
-		}
-		if pos != expectPos {
-			return errors.New("cannot range over truncated records")
-		}
-		expectPos++
-
-		ok, err := fn(ctx, pos, rec)
-		if !ok || err != nil {
-			return err
-		}
-	}
-
-	return rows.Err()
 }
 
 func (j *journ) RangeAll(
 	ctx context.Context,
 	fn journal.RangeFunc,
 ) error {
-	// TODO: "paginate" results across multiple queries to avoid loading
-	// everything into memory at once.
-	rows, err := j.DB.QueryContext(
+	var (
+		first  = true
+		expect journal.Position
+	)
+
+	return j.rangeQuery(
 		ctx,
+		func(ctx context.Context, pos journal.Position, rec []byte) (bool, error) {
+			if first {
+				expect = pos
+				first = false
+			}
+
+			if pos != expect {
+				return false, journal.ErrNotFound
+			}
+
+			expect++
+
+			return fn(ctx, pos, rec)
+		},
 		`SELECT position, record
 		FROM veracity.journal
 		WHERE name = $1
 		ORDER BY position`,
 		j.Name,
 	)
+}
+
+func (j *journ) rangeQuery(
+	ctx context.Context,
+	fn journal.RangeFunc,
+	query string,
+	args ...any,
+) error {
+	// TODO: "paginate" results across multiple queries to avoid loading
+	// everything into memory at once.
+	rows, err := j.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
-
-	var (
-		first     = true
-		expectPos journal.Position
-	)
 
 	for rows.Next() {
 		var (
@@ -141,18 +145,9 @@ func (j *journ) RangeAll(
 			rec []byte
 		)
 
-		if err = rows.Scan(&pos, &rec); err != nil {
+		if err := rows.Scan(&pos, &rec); err != nil {
 			return err
 		}
-
-		if first {
-			expectPos = pos
-			first = false
-		} else if pos != expectPos {
-			return errors.New("cannot range over truncated records")
-		}
-
-		expectPos++
 
 		ok, err := fn(ctx, pos, rec)
 		if !ok || err != nil {

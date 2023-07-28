@@ -2,6 +2,7 @@ package protojournal
 
 import (
 	"context"
+	"errors"
 
 	"github.com/dogmatiq/veracity/internal/protobuf/typedproto"
 	"github.com/dogmatiq/veracity/persistence/journal"
@@ -43,12 +44,11 @@ func Search[
 	for begin < end {
 		pos := (begin >> 1) + (end >> 1)
 
-		rec, ok, err := Get[Record](ctx, j, pos)
-		if err != nil {
-			return 0, nil, false, err
-		}
-		if !ok {
+		rec, err := Get[Record](ctx, j, pos)
+		if errors.Is(err, journal.ErrNotFound) {
 			break
+		} else if err != nil {
+			return 0, nil, false, err
 		}
 
 		result, err := cmp(ctx, pos, rec)

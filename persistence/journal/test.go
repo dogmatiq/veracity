@@ -46,12 +46,9 @@ func RunTests(
 					t.Fatal(err)
 				}
 
-				actual, ok, err := j2.Get(ctx, 0)
+				actual, err := j2.Get(ctx, 0)
 				if err != nil {
 					t.Fatal(err)
-				}
-				if !ok {
-					t.Fatal("expected record to exist")
 				}
 
 				if !bytes.Equal(expect, actual) {
@@ -129,17 +126,17 @@ func RunTests(
 		t.Run("func Get()", func(t *testing.T) {
 			t.Parallel()
 
-			t.Run("it returns false if there is no record at the given position", func(t *testing.T) {
+			t.Run("it returns ErrNotFound if there is no record at the given position", func(t *testing.T) {
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
 
-				_, ok, err := j.Get(ctx, 1)
-				if err != nil {
-					t.Fatal(err)
+				_, err := j.Get(ctx, 1)
+				if err == nil {
+					t.Fatal("expected error")
 				}
-				if ok {
-					t.Fatal("returned ok == true for non-existent record")
+				if err != ErrNotFound {
+					t.Fatal(err)
 				}
 			})
 
@@ -153,12 +150,9 @@ func RunTests(
 				expect := appendRecords(ctx, t, j, 15)
 
 				for i, rec := range expect {
-					actual, ok, err := j.Get(ctx, Position(i))
+					actual, err := j.Get(ctx, Position(i))
 					if err != nil {
 						t.Fatal(err)
-					}
-					if !ok {
-						t.Fatal("expected record to exist")
 					}
 
 					if !bytes.Equal(rec, actual) {
@@ -177,22 +171,16 @@ func RunTests(
 				ctx, j := setup(t, newStore)
 				appendRecords(ctx, t, j, 1)
 
-				rec, ok, err := j.Get(ctx, 0)
+				rec, err := j.Get(ctx, 0)
 				if err != nil {
 					t.Fatal(err)
-				}
-				if !ok {
-					t.Fatal("expected record to exist")
 				}
 
 				rec[0] = 'X'
 
-				actual, ok, err := j.Get(ctx, 0)
+				actual, err := j.Get(ctx, 0)
 				if err != nil {
 					t.Fatal(err)
-				}
-				if !ok {
-					t.Fatal("expected record to exist")
 				}
 
 				if expect := []byte("<record-0>"); !bytes.Equal(expect, actual) {
@@ -263,7 +251,7 @@ func RunTests(
 				}
 			})
 
-			t.Run("returns an error if the first record is truncated", func(t *testing.T) {
+			t.Run("returns ErrNotFound if the first record is truncated", func(t *testing.T) {
 				t.Parallel()
 
 				ctx, j := setup(t, newStore)
@@ -286,9 +274,9 @@ func RunTests(
 					t.Fatal("expected error")
 				}
 
-				expect := "cannot range over truncated records"
-				if err.Error() != expect {
-					t.Fatalf("unexpected error: want %s, got %s", expect, err.Error())
+				expect := ErrNotFound
+				if err != expect {
+					t.Fatalf("unexpected error: want %s, got %s", expect, err)
 				}
 			})
 
@@ -310,12 +298,9 @@ func RunTests(
 					t.Fatal(err)
 				}
 
-				actual, ok, err := j.Get(ctx, 0)
+				actual, err := j.Get(ctx, 0)
 				if err != nil {
 					t.Fatal(err)
-				}
-				if !ok {
-					t.Fatal("expected record to exist")
 				}
 
 				if expect := []byte("<record-0>"); !bytes.Equal(expect, actual) {
@@ -430,12 +415,9 @@ func RunTests(
 					t.Fatal(err)
 				}
 
-				actual, ok, err := j.Get(ctx, 0)
+				actual, err := j.Get(ctx, 0)
 				if err != nil {
 					t.Fatal(err)
-				}
-				if !ok {
-					t.Fatal("expected record to exist")
 				}
 
 				if expect := []byte("<record-0>"); !bytes.Equal(expect, actual) {
@@ -483,12 +465,9 @@ func RunTests(
 					t.Fatal(err)
 				}
 
-				actual, ok, err := j.Get(ctx, 1)
+				actual, err := j.Get(ctx, 1)
 				if err != nil {
 					t.Fatal(err)
-				}
-				if !ok {
-					t.Fatal("expected record to exist")
 				}
 
 				if !bytes.Equal(expect, actual) {
@@ -513,12 +492,9 @@ func RunTests(
 
 				rec[0] = 'X'
 
-				actual, ok, err := j.Get(ctx, 0)
+				actual, err := j.Get(ctx, 0)
 				if err != nil {
 					t.Fatal(err)
-				}
-				if !ok {
-					t.Fatal("expected record to exist")
 				}
 
 				if expect := []byte("<record>"); !bytes.Equal(expect, actual) {

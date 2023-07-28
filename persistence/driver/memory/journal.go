@@ -3,7 +3,6 @@ package memory
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/dogmatiq/veracity/persistence/journal"
@@ -74,7 +73,7 @@ func (h *journalHandle) Bounds(ctx context.Context) (begin, end journal.Position
 	return h.state.Begin, h.state.End, ctx.Err()
 }
 
-func (h *journalHandle) Get(ctx context.Context, pos journal.Position) ([]byte, bool, error) {
+func (h *journalHandle) Get(ctx context.Context, pos journal.Position) ([]byte, error) {
 	if h.state == nil {
 		panic("journal is closed")
 	}
@@ -83,10 +82,10 @@ func (h *journalHandle) Get(ctx context.Context, pos journal.Position) ([]byte, 
 	defer h.state.RUnlock()
 
 	if pos < h.state.Begin || pos >= h.state.End {
-		return nil, false, nil
+		return nil, journal.ErrNotFound
 	}
 
-	return slices.Clone(h.state.Records[pos-h.state.Begin]), true, ctx.Err()
+	return slices.Clone(h.state.Records[pos-h.state.Begin]), ctx.Err()
 }
 
 func (h *journalHandle) Range(
@@ -104,7 +103,7 @@ func (h *journalHandle) Range(
 	h.state.RUnlock()
 
 	if first > begin {
-		return fmt.Errorf("cannot range over truncated records")
+		return journal.ErrNotFound
 	}
 
 	start := begin - first

@@ -104,7 +104,7 @@ func (j *journ) Bounds(ctx context.Context) (begin, end journal.Position, err er
 	return begin, end, nil
 }
 
-func (j *journ) Get(ctx context.Context, pos journal.Position) ([]byte, bool, error) {
+func (j *journ) Get(ctx context.Context, pos journal.Position) ([]byte, error) {
 	ctx, span := j.Telemetry.StartSpan(
 		ctx,
 		"journal.get",
@@ -112,15 +112,10 @@ func (j *journ) Get(ctx context.Context, pos journal.Position) ([]byte, bool, er
 	)
 	defer span.End()
 
-	rec, ok, err := j.Next.Get(ctx, pos)
+	rec, err := j.Next.Get(ctx, pos)
 	if err != nil {
 		span.Error("could not fetch journal record", err)
-		return nil, false, err
-	}
-
-	if !ok {
-		span.Debug("could not fetch non-existent journal record")
-		return nil, false, nil
+		return nil, err
 	}
 
 	size := int64(len(rec))
@@ -135,7 +130,7 @@ func (j *journ) Get(ctx context.Context, pos journal.Position) ([]byte, bool, er
 
 	span.Debug("fetched single journal record")
 
-	return rec, true, nil
+	return rec, nil
 }
 
 func (j *journ) Range(

@@ -193,7 +193,7 @@ func (j *journ) Bounds(ctx context.Context) (begin, end journal.Position, err er
 	return begin, end + 1, nil
 }
 
-func (j *journ) Get(ctx context.Context, pos journal.Position) ([]byte, bool, error) {
+func (j *journ) Get(ctx context.Context, pos journal.Position) ([]byte, error) {
 	j.position.Value = formatPosition(pos)
 
 	out, err := awsx.Do(
@@ -202,16 +202,19 @@ func (j *journ) Get(ctx context.Context, pos journal.Position) ([]byte, bool, er
 		j.DecorateGetItem,
 		&j.getRequest,
 	)
-	if err != nil || out.Item == nil {
-		return nil, false, err
+	if err != nil {
+		return nil, err
+	}
+	if out.Item == nil {
+		return nil, journal.ErrNotFound
 	}
 
 	rec, err := getAttr[*types.AttributeValueMemberB](out.Item, journalRecordAttr)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 
-	return rec.Value, true, nil
+	return rec.Value, nil
 }
 
 func (j *journ) Range(
@@ -219,22 +222,17 @@ func (j *journ) Range(
 	begin journal.Position,
 	fn journal.RangeFunc,
 ) error {
-	validatePos := true
+	expect := begin
 
 	return j.rangeQuery(
 		ctx,
 		begin,
-		func(
-			ctx context.Context,
-			pos journal.Position,
-			rec []byte,
-		) (bool, error) {
-			if validatePos {
-				if pos != begin {
-					return false, errors.New("cannot range over truncated records")
-				}
-				validatePos = false
+		func(ctx context.Context, pos journal.Position, rec []byte) (bool, error) {
+			if pos != expect {
+				return false, journal.ErrNotFound
 			}
+
+			expect++
 
 			return fn(ctx, pos, rec)
 		},
@@ -245,18 +243,38 @@ func (j *journ) RangeAll(
 	ctx context.Context,
 	fn journal.RangeFunc,
 ) error {
-	return j.rangeQuery(ctx, 0, fn)
+	var (
+		first  = true
+		expect journal.Position
+	)
+
+	return j.rangeQuery(
+		ctx,
+		0,
+		func(ctx context.Context, pos journal.Position, rec []byte) (bool, error) {
+			if first {
+				expect = pos
+				first = false
+			}
+
+			if pos != expect {
+				return false, journal.ErrNotFound
+			}
+
+			expect++
+
+			return fn(ctx, pos, rec)
+		},
+	)
 }
 
 func (j *journ) rangeQuery(
 	ctx context.Context,
-	begin journal.Position,
-	fn func(context.Context, journal.Position, []byte) (bool, error),
+	min journal.Position,
+	fn journal.RangeFunc,
 ) error {
 	j.rangeQueryRequest.ExclusiveStartKey = nil
-	j.position.Value = formatPosition(begin)
-
-	var expectPos journal.Position
+	j.position.Value = formatPosition(min)
 
 	for {
 		out, err := awsx.Do(
@@ -274,17 +292,6 @@ func (j *journ) rangeQuery(
 			if err != nil {
 				return err
 			}
-
-			if expectPos != 0 && pos != expectPos {
-				return fmt.Errorf(
-					"item is corrupt: %q attribute should be %d not %d",
-					journalPositionAttr,
-					expectPos,
-					pos,
-				)
-			}
-
-			expectPos = pos + 1
 
 			rec, err := getAttr[*types.AttributeValueMemberB](item, journalRecordAttr)
 			if err != nil {

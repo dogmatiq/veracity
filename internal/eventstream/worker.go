@@ -55,7 +55,7 @@ func (w *worker) Run(ctx context.Context) (err error) {
 	}
 
 	if ok {
-		w.pos = pos
+		w.pos = pos + 1
 		w.off = Offset(rec.StreamOffsetAfter)
 	}
 
