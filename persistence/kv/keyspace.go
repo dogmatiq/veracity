@@ -24,8 +24,8 @@ type Keyspace interface {
 	// If v is empty, the key is deleted.
 	Set(ctx context.Context, k, v []byte) error
 
-	// RangeAll invokes fn for each key in the keyspace in an undefined order.
-	RangeAll(ctx context.Context, fn RangeFunc) error
+	// Range invokes fn for each key in the keyspace in an undefined order.
+	Range(ctx context.Context, fn RangeFunc) error
 
 	// Close closes the keyspace.
 	Close() error

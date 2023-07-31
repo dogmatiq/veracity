@@ -285,7 +285,7 @@ func (o *RegistryObserver) publishState(ctx context.Context, ev MembershipChange
 func (o *RegistryObserver) loadNodes(ctx context.Context) (uuidpb.Map[Node], error) {
 	nodes := uuidpb.Map[Node]{}
 
-	return nodes, protokv.RangeAll(
+	return nodes, protokv.Range(
 		ctx,
 		o.keyspace,
 		func(

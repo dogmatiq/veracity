@@ -216,7 +216,7 @@ func (ks *keyspace) delete(ctx context.Context, k []byte) error {
 	return err
 }
 
-func (ks *keyspace) RangeAll(
+func (ks *keyspace) Range(
 	ctx context.Context,
 	fn kv.RangeFunc,
 ) error {

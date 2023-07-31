@@ -103,7 +103,7 @@ func (h *keyspaceHandle) Set(ctx context.Context, k, v []byte) error {
 	return ctx.Err()
 }
 
-func (h *keyspaceHandle) RangeAll(
+func (h *keyspaceHandle) Range(
 	ctx context.Context,
 	fn kv.RangeFunc,
 ) error {

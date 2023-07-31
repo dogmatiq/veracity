@@ -195,15 +195,15 @@ func (ks *keyspace) Set(ctx context.Context, k, v []byte) error {
 	return nil
 }
 
-func (ks *keyspace) RangeAll(ctx context.Context, fn kv.RangeFunc) error {
-	ctx, span := ks.Telemetry.StartSpan(ctx, "keyspace.range_all")
+func (ks *keyspace) Range(ctx context.Context, fn kv.RangeFunc) error {
+	ctx, span := ks.Telemetry.StartSpan(ctx, "keyspace.range")
 	defer span.End()
 
 	return ks.instrumentRange(
 		ctx,
 		span,
 		fn,
-		ks.Next.RangeAll,
+		ks.Next.Range,
 	)
 }
 

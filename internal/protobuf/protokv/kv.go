@@ -52,8 +52,8 @@ func Set[
 	return ks.Set(ctx, k, data)
 }
 
-// RangeAll invokes fn for each key in ks.
-func RangeAll[
+// Range invokes fn for each key in ks.
+func Range[
 	T typedproto.Message[S],
 	S typedproto.MessageStruct,
 ](
@@ -61,7 +61,7 @@ func RangeAll[
 	ks kv.Keyspace,
 	fn RangeFunc[T],
 ) error {
-	return ks.RangeAll(
+	return ks.Range(
 		ctx,
 		func(ctx context.Context, k, data []byte) (bool, error) {
 			v, err := typedproto.Unmarshal[T](data)

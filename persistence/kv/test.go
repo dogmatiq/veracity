@@ -303,7 +303,7 @@ func RunTests(
 			})
 		})
 
-		t.Run("func RangeAll()", func(t *testing.T) {
+		t.Run("func Range()", func(t *testing.T) {
 			t.Parallel()
 
 			t.Run("calls the function for each key in the keyspace", func(t *testing.T) {
@@ -325,7 +325,7 @@ func RunTests(
 
 				actual := map[string]string{}
 
-				if err := ks.RangeAll(
+				if err := ks.Range(
 					ctx,
 					func(ctx context.Context, k, v []byte) (bool, error) {
 						actual[string(k)] = string(v)
@@ -354,7 +354,7 @@ func RunTests(
 				}
 
 				called := false
-				if err := ks.RangeAll(
+				if err := ks.Range(
 					ctx,
 					func(ctx context.Context, k, v []byte) (bool, error) {
 						if called {
@@ -382,7 +382,7 @@ func RunTests(
 					t.Fatal(err)
 				}
 
-				if err := ks.RangeAll(
+				if err := ks.Range(
 					ctx,
 					func(ctx context.Context, k, v []byte) (bool, error) {
 						k[0] = 'X'
@@ -432,7 +432,7 @@ func RunTests(
 					t.Fatal(err)
 				}
 
-				if err := ks.RangeAll(
+				if err := ks.Range(
 					ctx,
 					func(ctx context.Context, k, expect []byte) (bool, error) {
 						actual, err := ks.Get(ctx, k)
@@ -468,7 +468,7 @@ func RunTests(
 					t.Fatal(err)
 				}
 
-				if err := ks.RangeAll(
+				if err := ks.Range(
 					ctx,
 					func(ctx context.Context, k, _ []byte) (bool, error) {
 						ok, err := ks.Has(ctx, k)
@@ -502,7 +502,7 @@ func RunTests(
 
 				expect := []byte("<updated>")
 
-				if err := ks.RangeAll(
+				if err := ks.Range(
 					ctx,
 					func(ctx context.Context, k, _ []byte) (bool, error) {
 						if err := ks.Set(ctx, k, expect); err != nil {

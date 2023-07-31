@@ -101,7 +101,7 @@ func (ks *keyspace) Set(ctx context.Context, k, v []byte) error {
 	return err
 }
 
-func (ks *keyspace) RangeAll(
+func (ks *keyspace) Range(
 	ctx context.Context,
 	fn kv.RangeFunc,
 ) error {
