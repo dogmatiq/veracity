@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
+	"github.com/dogmatiq/veracity/internal/test"
 )
 
 // RunTests runs tests that confirm a journal implementation behaves correctly.
@@ -17,47 +17,80 @@ func RunTests(
 	t *testing.T,
 	newStore func(t *testing.T) Store,
 ) {
+	type dependencies struct {
+		Store       Store
+		JournalName string
+		Journal     Journal
+	}
+
+	setup := func(
+		t *testing.T,
+		newStore func(t *testing.T) Store,
+	) *dependencies {
+		deps := &dependencies{
+			Store:       newStore(t),
+			JournalName: fmt.Sprintf("<journal-%d>", journalCounter.Add(1)),
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		j, err := deps.Store.Open(ctx, deps.JournalName)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Cleanup(func() {
+			if err := j.Close(); err != nil {
+				t.Fatal(err)
+			}
+		})
+
+		deps.Journal = j
+
+		return deps
+	}
+
 	t.Run("type Store", func(t *testing.T) {
 		t.Parallel()
 
 		t.Run("func Open()", func(t *testing.T) {
 			t.Parallel()
 
-			t.Run("allows journals to be opened multiple times", func(t *testing.T) {
-				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-				defer cancel()
+			t.Run("allows a journal to be opened multiple times", func(t *testing.T) {
+				t.Parallel()
 
+				tctx := test.WithContext(t)
 				store := newStore(t)
 
-				j1, err := store.Open(ctx, "<journal>")
+				j1, err := store.Open(tctx, "<journal>")
 				if err != nil {
 					t.Fatal(err)
 				}
 				defer j1.Close()
 
-				j2, err := store.Open(ctx, "<journal>")
+				j2, err := store.Open(tctx, "<journal>")
 				if err != nil {
 					t.Fatal(err)
 				}
 				defer j2.Close()
 
-				expect := []byte("<record>")
-				if err := j1.Append(ctx, 0, expect); err != nil {
+				want := []byte("<record>")
+				if err := j1.Append(tctx, 0, want); err != nil {
 					t.Fatal(err)
 				}
 
-				actual, err := j2.Get(ctx, 0)
+				got, err := j2.Get(tctx, 0)
 				if err != nil {
 					t.Fatal(err)
 				}
 
-				if !bytes.Equal(expect, actual) {
-					t.Fatalf(
-						"unexpected record, want %q, got %q",
-						string(expect),
-						string(actual),
-					)
-				}
+				test.Expect(
+					t,
+					"unexpected journal record",
+					got,
+					want,
+				)
 			})
 		})
 	})
@@ -72,7 +105,7 @@ func RunTests(
 				cases := []struct {
 					Desc                   string
 					ExpectBegin, ExpectEnd Position
-					Setup                  func(ctx context.Context, t *testing.T, j Journal)
+					Setup                  func(context.Context, *testing.T, Journal)
 				}{
 					{
 						"empty",
@@ -103,21 +136,29 @@ func RunTests(
 					t.Run(c.Desc, func(t *testing.T) {
 						t.Parallel()
 
-						ctx, j := setup(t, newStore)
-						c.Setup(ctx, t, j)
+						tctx := test.WithContext(t)
+						deps := setup(t, newStore)
 
-						begin, end, err := j.Bounds(ctx)
+						c.Setup(tctx, t, deps.Journal)
+
+						begin, end, err := deps.Journal.Bounds(tctx)
 						if err != nil {
 							t.Fatal(err)
 						}
 
-						if begin != c.ExpectBegin {
-							t.Fatalf("unexpected begin position, want %d, got %d", c.ExpectBegin, begin)
-						}
+						test.Expect(
+							t,
+							"unexpected begin position",
+							begin,
+							c.ExpectBegin,
+						)
 
-						if end != c.ExpectEnd {
-							t.Fatalf("unexpected end position, want %d, got %d", c.ExpectEnd, end)
-						}
+						test.Expect(
+							t,
+							"unexpected end position",
+							end,
+							c.ExpectEnd,
+						)
 					})
 				}
 			})
@@ -129,13 +170,11 @@ func RunTests(
 			t.Run("it returns ErrNotFound if there is no record at the given position", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, newStore)
+				tctx := test.WithContext(t)
+				deps := setup(t, newStore)
 
-				_, err := j.Get(ctx, 1)
-				if err == nil {
-					t.Fatal("expected error")
-				}
-				if err != ErrNotFound {
+				_, err := deps.Journal.Get(tctx, 1)
+				if !errors.Is(err, ErrNotFound) {
 					t.Fatal(err)
 				}
 			})
@@ -143,23 +182,31 @@ func RunTests(
 			t.Run("it returns the record if it exists", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, newStore)
+				tctx := test.WithContext(t)
+				deps := setup(t, newStore)
 
 				// Ensure we test with a position that becomes 2 digits long to
 				// confirm that the implementation is not using a lexical sort.
-				expect := appendRecords(ctx, t, j, 15)
+				records := appendRecords(tctx, t, deps.Journal, 15)
 
-				for i, rec := range expect {
-					actual, err := j.Get(ctx, Position(i))
+				for i, want := range records {
+					got, err := deps.Journal.Get(tctx, Position(i))
 					if err != nil {
 						t.Fatal(err)
 					}
 
-					if !bytes.Equal(rec, actual) {
+					test.Expect(
+						t,
+						fmt.Sprintf("unexpected record at position %d", i),
+						got,
+						want,
+					)
+
+					if !bytes.Equal(want, got) {
 						t.Fatalf(
 							"unexpected record, want %q, got %q",
-							string(rec),
-							string(actual),
+							string(want),
+							string(got),
 						)
 					}
 				}
@@ -168,28 +215,29 @@ func RunTests(
 			t.Run("it does not return its internal byte slice", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, newStore)
-				appendRecords(ctx, t, j, 1)
+				tctx := test.WithContext(t)
+				deps := setup(t, newStore)
 
-				rec, err := j.Get(ctx, 0)
+				appendRecords(tctx, t, deps.Journal, 1)
+
+				rec, err := deps.Journal.Get(tctx, 0)
 				if err != nil {
 					t.Fatal(err)
 				}
 
 				rec[0] = 'X'
 
-				actual, err := j.Get(ctx, 0)
+				got, err := deps.Journal.Get(tctx, 0)
 				if err != nil {
 					t.Fatal(err)
 				}
 
-				if expect := []byte("<record-0>"); !bytes.Equal(expect, actual) {
-					t.Fatalf(
-						"unexpected record, want %q, got %q",
-						string(expect),
-						string(actual),
-					)
-				}
+				test.Expect(
+					t,
+					"unexpected record",
+					got,
+					[]byte("<record-0>"),
+				)
 			})
 		})
 
@@ -199,23 +247,28 @@ func RunTests(
 			t.Run("calls the function for each record in the journal", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, newStore)
-				expect := appendRecords(ctx, t, j, 15)
+				tctx := test.WithContext(t)
+				deps := setup(t, newStore)
 
-				var actual [][]byte
-				expectPos := Position(10)
-				expect = expect[expectPos:]
+				want := appendRecords(tctx, t, deps.Journal, 15)
 
-				if err := j.Range(
-					ctx,
-					expectPos,
-					func(ctx context.Context, pos Position, rec []byte) (bool, error) {
-						if pos != expectPos {
-							t.Fatalf("unexpected position: want %d, got %d", expectPos, pos)
-						}
+				var got [][]byte
+				wantPos := Position(10)
+				want = want[wantPos:]
 
-						actual = append(actual, rec)
-						expectPos++
+				if err := deps.Journal.Range(
+					tctx,
+					wantPos,
+					func(ctx context.Context, gotPos Position, rec []byte) (bool, error) {
+						test.Expect(
+							t,
+							"unexpected position",
+							gotPos,
+							wantPos,
+						)
+
+						got = append(got, rec)
+						wantPos++
 
 						return true, nil
 					},
@@ -223,20 +276,25 @@ func RunTests(
 					t.Fatal(err)
 				}
 
-				if diff := cmp.Diff(expect, actual); diff != "" {
-					t.Fatal(diff)
-				}
+				test.Expect(
+					t,
+					"unexpected records",
+					got,
+					want,
+				)
 			})
 
 			t.Run("it stops iterating if the function returns false", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, newStore)
-				appendRecords(ctx, t, j, 2)
+				tctx := test.WithContext(t)
+				deps := setup(t, newStore)
+
+				appendRecords(tctx, t, deps.Journal, 2)
 
 				called := false
-				if err := j.Range(
-					ctx,
+				if err := deps.Journal.Range(
+					tctx,
 					0,
 					func(ctx context.Context, pos Position, rec []byte) (bool, error) {
 						if called {
@@ -251,43 +309,71 @@ func RunTests(
 				}
 			})
 
-			t.Run("returns ErrNotFound if the first record is truncated", func(t *testing.T) {
+			t.Run("it returns ErrNotFound if the first record is truncated", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, newStore)
-				records := appendRecords(ctx, t, j, 5)
+				tctx := test.WithContext(t)
+				deps := setup(t, newStore)
+
+				records := appendRecords(tctx, t, deps.Journal, 5)
 				retainPos := Position(len(records) - 1)
 
-				err := j.Truncate(ctx, retainPos)
+				err := deps.Journal.Truncate(tctx, retainPos)
 				if err != nil {
 					t.Fatal(err)
 				}
 
-				err = j.Range(
-					ctx,
+				err = deps.Journal.Range(
+					tctx,
 					1,
 					func(ctx context.Context, pos Position, rec []byte) (bool, error) {
 						panic("unexpected call")
 					},
 				)
-				if err == nil {
-					t.Fatal("expected error")
-				}
 
-				expect := ErrNotFound
-				if err != expect {
-					t.Fatalf("unexpected error: want %s, got %s", expect, err)
-				}
+				test.Expect(
+					t,
+					"unexpected error",
+					err,
+					ErrNotFound,
+				)
+			})
+
+			t.Run("it returns an error if a record is truncated during iteration", func(t *testing.T) {
+				t.Skip() // TODO
+				t.Parallel()
+
+				tctx := test.WithContext(t)
+				deps := setup(t, newStore)
+
+				appendRecords(tctx, t, deps.Journal, 5)
+
+				err := deps.Journal.Range(
+					tctx,
+					0,
+					func(ctx context.Context, pos Position, rec []byte) (bool, error) {
+						return true, deps.Journal.Truncate(ctx, 5)
+					},
+				)
+
+				test.Expect(
+					t,
+					"unexpected error",
+					err,
+					ErrNotFound,
+				)
 			})
 
 			t.Run("it does not invoke the function with its internal byte slice", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, newStore)
-				appendRecords(ctx, t, j, 1)
+				tctx := test.WithContext(t)
+				deps := setup(t, newStore)
 
-				if err := j.Range(
-					ctx,
+				appendRecords(tctx, t, deps.Journal, 1)
+
+				if err := deps.Journal.Range(
+					tctx,
 					0,
 					func(ctx context.Context, pos Position, rec []byte) (bool, error) {
 						rec[0] = 'X'
@@ -298,135 +384,17 @@ func RunTests(
 					t.Fatal(err)
 				}
 
-				actual, err := j.Get(ctx, 0)
+				got, err := deps.Journal.Get(tctx, 0)
 				if err != nil {
 					t.Fatal(err)
 				}
 
-				if expect := []byte("<record-0>"); !bytes.Equal(expect, actual) {
-					t.Fatalf(
-						"unexpected record, want %q, got %q",
-						string(expect),
-						string(actual),
-					)
-				}
-			})
-		})
-
-		t.Run("func RangeAll()", func(t *testing.T) {
-			t.Parallel()
-
-			t.Run("calls the function for each record in the journal", func(t *testing.T) {
-				t.Parallel()
-
-				ctx, j := setup(t, newStore)
-				expect := appendRecords(ctx, t, j, 15)
-
-				var actual [][]byte
-				var expectPos Position
-
-				if err := j.RangeAll(
-					ctx,
-					func(ctx context.Context, pos Position, rec []byte) (bool, error) {
-						if pos != expectPos {
-							t.Fatalf("unexpected position: want %d, got %d", expectPos, pos)
-						}
-
-						actual = append(actual, rec)
-						expectPos++
-
-						return true, nil
-					},
-				); err != nil {
-					t.Fatal(err)
-				}
-
-				if diff := cmp.Diff(expect, actual); diff != "" {
-					t.Fatal(diff)
-				}
-			})
-
-			t.Run("it stops iterating if the function returns false", func(t *testing.T) {
-				t.Parallel()
-
-				ctx, j := setup(t, newStore)
-				appendRecords(ctx, t, j, 2)
-
-				called := false
-				if err := j.RangeAll(
-					ctx,
-					func(ctx context.Context, pos Position, rec []byte) (bool, error) {
-						if called {
-							return false, errors.New("unexpected call")
-						}
-
-						called = true
-						return false, nil
-					},
-				); err != nil {
-					t.Fatal(err)
-				}
-			})
-
-			t.Run("it starts at the first non-truncated record", func(t *testing.T) {
-				t.Parallel()
-
-				ctx, j := setup(t, newStore)
-				records := appendRecords(ctx, t, j, 5)
-
-				retainPos := Position(len(records) - 1)
-				err := j.Truncate(ctx, retainPos)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				if err := j.RangeAll(
-					ctx,
-					func(ctx context.Context, pos Position, rec []byte) (bool, error) {
-						if pos != retainPos {
-							t.Fatalf("unexpected position: want %d, got %d", retainPos, pos)
-						}
-
-						if !bytes.Equal(rec, records[retainPos]) {
-							t.Fatalf("unexpected record: want %q, got %q", records[retainPos], rec)
-						}
-
-						return false, nil
-					},
-				); err != nil {
-					t.Fatal(err)
-				}
-			})
-
-			t.Run("it does not invoke the function with its internal byte slice", func(t *testing.T) {
-				t.Parallel()
-
-				ctx, j := setup(t, newStore)
-				appendRecords(ctx, t, j, 1)
-
-				if err := j.RangeAll(
-					ctx,
-					func(ctx context.Context, _ Position, rec []byte) (bool, error) {
-						rec[0] = 'X'
-
-						return true, nil
-					},
-				); err != nil {
-					t.Fatal(err)
-				}
-
-				actual, err := j.Get(ctx, 0)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				if expect := []byte("<record-0>"); !bytes.Equal(expect, actual) {
-					t.Fatalf(
-						"unexpected record, want %q, got %q",
-						string(expect),
-						string(actual),
-					)
-				}
+				test.Expect(
+					t,
+					"unexpected record",
+					got,
+					[]byte("<record-0>"),
+				)
 			})
 		})
 
@@ -436,9 +404,10 @@ func RunTests(
 			t.Run("it does not return an error if there is no record at the given position", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, newStore)
+				tctx := test.WithContext(t)
+				deps := setup(t, newStore)
 
-				if err := j.Append(ctx, 0, []byte("<record>")); err != nil {
+				if err := deps.Journal.Append(tctx, 0, []byte("<record>")); err != nil {
 					t.Fatal(err)
 				}
 			})
@@ -446,64 +415,65 @@ func RunTests(
 			t.Run("it returns ErrConflict there is already a record at the given position", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, newStore)
+				tctx := test.WithContext(t)
+				deps := setup(t, newStore)
 
-				if err := j.Append(ctx, 0, []byte("<prior>")); err != nil {
+				if err := deps.Journal.Append(tctx, 0, []byte("<prior>")); err != nil {
 					t.Fatal(err)
 				}
 
-				expect := []byte("<original>")
-				if err := j.Append(ctx, 1, expect); err != nil {
+				want := []byte("<original>")
+				if err := deps.Journal.Append(tctx, 1, want); err != nil {
 					t.Fatal(err)
 				}
 
-				err := j.Append(ctx, 1, []byte("<modified>"))
-				if err == nil {
-					t.Fatal("expected ErrConflict")
-				}
-				if err != ErrConflict {
-					t.Fatal(err)
-				}
+				err := deps.Journal.Append(tctx, 1, []byte("<modified>"))
 
-				actual, err := j.Get(ctx, 1)
+				test.Expect(
+					t,
+					"unexpected error",
+					err,
+					ErrConflict,
+				)
+
+				got, err := deps.Journal.Get(tctx, 1)
 				if err != nil {
 					t.Fatal(err)
 				}
 
-				if !bytes.Equal(expect, actual) {
-					t.Fatalf(
-						"unexpected record, want %q, got %q",
-						string(expect),
-						string(actual),
-					)
-				}
+				test.Expect(
+					t,
+					"unexpected record",
+					got,
+					want,
+				)
 			})
 
 			t.Run("it does not keep a reference to the record slice", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, newStore)
+				tctx := test.WithContext(t)
+				deps := setup(t, newStore)
 
 				rec := []byte("<record>")
 
-				if err := j.Append(ctx, 0, rec); err != nil {
+				if err := deps.Journal.Append(tctx, 0, rec); err != nil {
 					t.Fatal(err)
 				}
 
 				rec[0] = 'X'
 
-				actual, err := j.Get(ctx, 0)
+				got, err := deps.Journal.Get(tctx, 0)
 				if err != nil {
 					t.Fatal(err)
 				}
 
-				if expect := []byte("<record>"); !bytes.Equal(expect, actual) {
-					t.Fatalf(
-						"unexpected record, want %q, got %q",
-						string(expect),
-						string(actual),
-					)
-				}
+				test.Expect(
+					t,
+					"unexpected record",
+					got,
+					[]byte("<record>"),
+				)
 			})
 		})
 
@@ -513,47 +483,55 @@ func RunTests(
 			t.Run("it truncates the journal", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, newStore)
-				appendRecords(ctx, t, j, 3)
+				tctx := test.WithContext(t)
+				deps := setup(t, newStore)
 
-				if err := j.Truncate(ctx, 1); err != nil {
+				appendRecords(tctx, t, deps.Journal, 3)
+
+				if err := deps.Journal.Truncate(tctx, 1); err != nil {
 					t.Fatal(err)
 				}
 
-				begin, _, err := j.Bounds(ctx)
+				begin, _, err := deps.Journal.Bounds(tctx)
 				if err != nil {
 					t.Fatal(err)
 				}
 
-				const expect = 1
-				if begin != expect {
-					t.Fatalf("unexpected begin position, want %d, got %d", expect, begin)
-				}
+				test.Expect(
+					t,
+					"unexpected begin position",
+					begin,
+					1,
+				)
 			})
 
 			t.Run("it truncates the journal when it has already been truncated", func(t *testing.T) {
 				t.Parallel()
 
-				ctx, j := setup(t, newStore)
-				appendRecords(ctx, t, j, 3)
+				tctx := test.WithContext(t)
+				deps := setup(t, newStore)
 
-				if err := j.Truncate(ctx, 1); err != nil {
+				appendRecords(tctx, t, deps.Journal, 3)
+
+				if err := deps.Journal.Truncate(tctx, 1); err != nil {
 					t.Fatal(err)
 				}
 
-				if err := j.Truncate(ctx, 2); err != nil {
+				if err := deps.Journal.Truncate(tctx, 2); err != nil {
 					t.Fatal(err)
 				}
 
-				begin, _, err := j.Bounds(ctx)
+				begin, _, err := deps.Journal.Bounds(tctx)
 				if err != nil {
 					t.Fatal(err)
 				}
 
-				const expect = 2
-				if begin != expect {
-					t.Fatalf("unexpected begin position, want %d, got %d", expect, begin)
-				}
+				test.Expect(
+					t,
+					"unexpected begin position",
+					begin,
+					2,
+				)
 			})
 		})
 	})
@@ -561,34 +539,10 @@ func RunTests(
 
 var journalCounter atomic.Uint64
 
-func setup(
-	t *testing.T,
-	newStore func(t *testing.T) Store,
-) (context.Context, Journal) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	t.Cleanup(cancel)
-
-	store := newStore(t)
-
-	name := fmt.Sprintf("<journal-%d>", journalCounter.Add(1))
-	j, err := store.Open(ctx, name)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Cleanup(func() {
-		if err := j.Close(); err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	return ctx, j
-}
-
 // appendRecords appends records to j.
 func appendRecords(
 	ctx context.Context,
-	t interface{ Fatal(...interface{}) },
+	t test.FailerT,
 	j Journal,
 	n int,
 ) [][]byte {

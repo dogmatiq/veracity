@@ -124,7 +124,7 @@ func (ks *keyspace) Range(
 			k []byte
 			v []byte
 		)
-		if err = rows.Scan(&k, &v); err != nil {
+		if err := rows.Scan(&k, &v); err != nil {
 			return err
 		}
 

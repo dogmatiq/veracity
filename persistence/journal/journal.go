@@ -43,9 +43,6 @@ type Journal interface {
 	// It returns [ErrNotFound] if there is no record at the given position.
 	Range(ctx context.Context, pos Position, fn RangeFunc) error
 
-	// RangeAll invokes fn for each record in the journal, in order.
-	RangeAll(ctx context.Context, fn RangeFunc) error
-
 	// Append adds a record to the journal.
 	//
 	// end must be the next "unused" position in the journal; the first position

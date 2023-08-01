@@ -9,8 +9,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// A RangeFunc is called by [Range] and [RangeAll] for each record in a
-// [journal.Journal].
+// A RangeFunc is called by [Range] for each record in a [journal.Journal].
 type RangeFunc[Record proto.Message] func(
 	ctx context.Context,
 	pos journal.Position,
@@ -31,31 +30,6 @@ func Range[
 	return j.Range(
 		ctx,
 		begin,
-		func(
-			ctx context.Context,
-			pos journal.Position,
-			data []byte,
-		) (bool, error) {
-			rec, err := typedproto.Unmarshal[Record](data)
-			if err != nil {
-				return false, fmt.Errorf("unable to unmarshal record: %w", err)
-			}
-			return fn(ctx, pos, rec)
-		},
-	)
-}
-
-// RangeAll invokes fn for each record in the journal, in order.
-func RangeAll[
-	Record typedproto.Message[Struct],
-	Struct typedproto.MessageStruct,
-](
-	ctx context.Context,
-	j journal.Journal,
-	fn RangeFunc[Record],
-) error {
-	return j.RangeAll(
-		ctx,
 		func(
 			ctx context.Context,
 			pos journal.Position,

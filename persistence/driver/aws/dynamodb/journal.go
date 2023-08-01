@@ -74,10 +74,10 @@ func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, 
 	j.boundsQueryRequest = dynamodb.QueryInput{
 		TableName:              aws.String(s.Table),
 		KeyConditionExpression: aws.String(`#N = :N`),
-		ProjectionExpression:   aws.String("#O"),
+		ProjectionExpression:   aws.String("#P"),
 		ExpressionAttributeNames: map[string]string{
 			"#N": journalNameAttr,
-			"#O": journalPositionAttr,
+			"#P": journalPositionAttr,
 		},
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":N": j.name,
@@ -100,16 +100,16 @@ func (s *JournalStore) Open(ctx context.Context, name string) (journal.Journal, 
 
 	j.rangeQueryRequest = dynamodb.QueryInput{
 		TableName:              aws.String(s.Table),
-		KeyConditionExpression: aws.String(`#N = :N AND #O >= :O`),
-		ProjectionExpression:   aws.String("#O, #R"),
+		KeyConditionExpression: aws.String(`#N = :N AND #P >= :P`),
+		ProjectionExpression:   aws.String("#P, #R"),
 		ExpressionAttributeNames: map[string]string{
 			"#N": journalNameAttr,
-			"#O": journalPositionAttr,
+			"#P": journalPositionAttr,
 			"#R": journalRecordAttr,
 		},
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":N": j.name,
-			":O": j.position,
+			":P": j.position,
 		},
 	}
 
@@ -222,59 +222,10 @@ func (j *journ) Range(
 	begin journal.Position,
 	fn journal.RangeFunc,
 ) error {
-	expect := begin
-
-	return j.rangeQuery(
-		ctx,
-		begin,
-		func(ctx context.Context, pos journal.Position, rec []byte) (bool, error) {
-			if pos != expect {
-				return false, journal.ErrNotFound
-			}
-
-			expect++
-
-			return fn(ctx, pos, rec)
-		},
-	)
-}
-
-func (j *journ) RangeAll(
-	ctx context.Context,
-	fn journal.RangeFunc,
-) error {
-	var (
-		first  = true
-		expect journal.Position
-	)
-
-	return j.rangeQuery(
-		ctx,
-		0,
-		func(ctx context.Context, pos journal.Position, rec []byte) (bool, error) {
-			if first {
-				expect = pos
-				first = false
-			}
-
-			if pos != expect {
-				return false, journal.ErrNotFound
-			}
-
-			expect++
-
-			return fn(ctx, pos, rec)
-		},
-	)
-}
-
-func (j *journ) rangeQuery(
-	ctx context.Context,
-	min journal.Position,
-	fn journal.RangeFunc,
-) error {
 	j.rangeQueryRequest.ExclusiveStartKey = nil
-	j.position.Value = formatPosition(min)
+	j.position.Value = formatPosition(begin)
+
+	expectPos := begin
 
 	for {
 		out, err := awsx.Do(
@@ -292,6 +243,12 @@ func (j *journ) rangeQuery(
 			if err != nil {
 				return err
 			}
+
+			if pos != expectPos {
+				return journal.ErrNotFound
+			}
+
+			expectPos++
 
 			rec, err := getAttr[*types.AttributeValueMemberB](item, journalRecordAttr)
 			if err != nil {
@@ -331,25 +288,29 @@ func (j *journ) Append(ctx context.Context, end journal.Position, rec []byte) er
 }
 
 func (j *journ) Truncate(ctx context.Context, end journal.Position) error {
-	return j.RangeAll(
-		ctx,
-		func(ctx context.Context, pos journal.Position, _ []byte) (bool, error) {
-			if pos >= end {
-				return false, nil
-			}
+	begin, actualEnd, err := j.Bounds(ctx)
+	if err != nil {
+		return err
+	}
 
-			j.position.Value = formatPosition(pos)
+	if end >= actualEnd {
+		return errors.New("cannot truncate beyond the end of the journal")
+	}
 
-			_, err := awsx.Do(
-				ctx,
-				j.Client.DeleteItem,
-				j.DecorateDeleteItem,
-				&j.deleteRequest,
-			)
+	for pos := begin; pos < end; pos++ {
+		j.position.Value = formatPosition(pos)
 
-			return true, err
-		},
-	)
+		if _, err := awsx.Do(
+			ctx,
+			j.Client.DeleteItem,
+			j.DecorateDeleteItem,
+			&j.deleteRequest,
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (j *journ) Close() error {
