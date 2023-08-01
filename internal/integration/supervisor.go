@@ -37,9 +37,10 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	pendingEvents := [][]*envelopepb.Envelope{}
 	handledCmds := uuidpb.Set{}
 
-	if err := protojournal.RangeAll(
+	if err := protojournal.Range(
 		ctx,
 		j,
+		0,
 		func(
 			ctx context.Context,
 			pos journal.Position,
