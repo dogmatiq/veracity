@@ -69,19 +69,10 @@ func (j *journ) Range(
 	begin journal.Position,
 	fn journal.RangeFunc,
 ) error {
-	expect := begin
-
-	return j.rangeQuery(
+	// TODO: "paginate" results across multiple queries to avoid loading
+	// everything into memory at once.
+	rows, err := j.DB.QueryContext(
 		ctx,
-		func(ctx context.Context, pos journal.Position, rec []byte) (bool, error) {
-			if pos != expect {
-				return false, journal.ErrNotFound
-			}
-
-			expect++
-
-			return fn(ctx, pos, rec)
-		},
 		`SELECT position, record
 		FROM veracity.journal
 		WHERE name = $1
@@ -90,64 +81,27 @@ func (j *journ) Range(
 		j.Name,
 		begin,
 	)
-}
-
-func (j *journ) RangeAll(
-	ctx context.Context,
-	fn journal.RangeFunc,
-) error {
-	var (
-		first  = true
-		expect journal.Position
-	)
-
-	return j.rangeQuery(
-		ctx,
-		func(ctx context.Context, pos journal.Position, rec []byte) (bool, error) {
-			if first {
-				expect = pos
-				first = false
-			}
-
-			if pos != expect {
-				return false, journal.ErrNotFound
-			}
-
-			expect++
-
-			return fn(ctx, pos, rec)
-		},
-		`SELECT position, record
-		FROM veracity.journal
-		WHERE name = $1
-		ORDER BY position`,
-		j.Name,
-	)
-}
-
-func (j *journ) rangeQuery(
-	ctx context.Context,
-	fn journal.RangeFunc,
-	query string,
-	args ...any,
-) error {
-	// TODO: "paginate" results across multiple queries to avoid loading
-	// everything into memory at once.
-	rows, err := j.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
+
+	expectPos := begin
 
 	for rows.Next() {
 		var (
 			pos journal.Position
 			rec []byte
 		)
-
 		if err := rows.Scan(&pos, &rec); err != nil {
 			return err
 		}
+
+		if pos != expectPos {
+			return journal.ErrNotFound
+		}
+
+		expectPos++
 
 		ok, err := fn(ctx, pos, rec)
 		if !ok || err != nil {

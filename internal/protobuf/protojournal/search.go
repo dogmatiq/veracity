@@ -92,27 +92,6 @@ func Scan[
 	return value, ok, err
 }
 
-// ScanAll finds a value within the journal by scanning all records.
-func ScanAll[
-	T any,
-	Record typedproto.Message[Struct],
-	Struct typedproto.MessageStruct,
-](
-	ctx context.Context,
-	j journal.Journal,
-	scan ScanFunc[T, Record],
-) (value T, ok bool, err error) {
-	err = RangeAll(
-		ctx,
-		j,
-		func(ctx context.Context, pos journal.Position, rec Record) (bool, error) {
-			value, ok, err = scan(ctx, pos, rec)
-			return !ok, err
-		},
-	)
-	return value, ok, err
-}
-
 // ScanFromSearchResult finds a value within the journal by scanning all records
 // beginning with the for which cmp() returns true.
 func ScanFromSearchResult[

@@ -145,37 +145,6 @@ func (j *journ) Range(
 	)
 	defer span.End()
 
-	return j.instrumentRange(
-		ctx,
-		span,
-		fn,
-		func(ctx context.Context, fn journal.RangeFunc) error {
-			return j.Next.Range(ctx, begin, fn)
-		},
-	)
-}
-
-func (j *journ) RangeAll(
-	ctx context.Context,
-	fn journal.RangeFunc,
-) error {
-	ctx, span := j.Telemetry.StartSpan(ctx, "journal.range_all")
-	defer span.End()
-
-	return j.instrumentRange(
-		ctx,
-		span,
-		fn,
-		j.Next.RangeAll,
-	)
-}
-
-func (j *journ) instrumentRange(
-	ctx context.Context,
-	span *telemetry.Span,
-	fn journal.RangeFunc,
-	doRange func(context.Context, journal.RangeFunc) error,
-) error {
 	var (
 		first, count journal.Position
 		totalSize    int64
@@ -184,8 +153,9 @@ func (j *journ) instrumentRange(
 
 	span.Debug("reading journal records")
 
-	err := doRange(
+	err := j.Next.Range(
 		ctx,
+		begin,
 		func(ctx context.Context, pos journal.Position, rec []byte) (bool, error) {
 			if count == 0 {
 				first = pos

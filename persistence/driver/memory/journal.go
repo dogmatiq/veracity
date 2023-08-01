@@ -119,30 +119,6 @@ func (h *journalHandle) Range(
 	return ctx.Err()
 }
 
-func (h *journalHandle) RangeAll(
-	ctx context.Context,
-	fn journal.RangeFunc,
-) error {
-	if h.state == nil {
-		panic("journal is closed")
-	}
-
-	h.state.RLock()
-	pos := h.state.Begin
-	records := h.state.Records
-	h.state.RUnlock()
-
-	for _, rec := range records {
-		ok, err := fn(ctx, pos, slices.Clone(rec))
-		if !ok || err != nil {
-			return err
-		}
-		pos++
-	}
-
-	return ctx.Err()
-}
-
 func (h *journalHandle) Append(ctx context.Context, end journal.Position, rec []byte) error {
 	if h.state == nil {
 		panic("journal is closed")
