@@ -15,10 +15,13 @@ import (
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	. "github.com/dogmatiq/marshalkit/fixtures"
 	"github.com/dogmatiq/veracity/internal/envelope"
+	"github.com/dogmatiq/veracity/internal/eventstream"
 	. "github.com/dogmatiq/veracity/internal/integration"
 	"github.com/dogmatiq/veracity/internal/integration/internal/journalpb"
 	"github.com/dogmatiq/veracity/internal/test"
 	"github.com/dogmatiq/veracity/persistence/driver/memory"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -72,8 +75,9 @@ func TestSupervisor(t *testing.T) {
 		t.Parallel()
 
 		cases := []struct {
-			Desc          string
-			InduceFailure func(*dependencies)
+			Desc                              string
+			InduceFailure                     func(*dependencies)
+			ExpectMultipleEventAppendRequests bool
 		}{
 			{
 				Desc: "no faults",
@@ -162,33 +166,113 @@ func TestSupervisor(t *testing.T) {
 				},
 			},
 			{
-				Desc: "failure before events recorded to stream",
+				Desc: "failure before appending CommandHandled record to the journal",
+				InduceFailure: func(deps *dependencies) {
+					memory.FailBeforeJournalAppend(
+						deps.Journals,
+						JournalName(deps.Supervisor.HandlerIdentity.Key),
+						func(r *journalpb.Record) bool {
+							return r.GetCommandHandled() != nil
+						},
+						errors.New("<error>"),
+					)
+				},
+			},
+			{
+				Desc: "failure after appending CommandHandled record to the journal",
+				InduceFailure: func(deps *dependencies) {
+					memory.FailAfterJournalAppend(
+						deps.Journals,
+						JournalName(deps.Supervisor.HandlerIdentity.Key),
+						func(r *journalpb.Record) bool {
+							return r.GetCommandHandled() != nil
+						},
+						errors.New("<error>"),
+					)
+				},
+			},
+			{
+				Desc: "failure before appending CommandHandlerFailed record to the journal",
 				InduceFailure: func(deps *dependencies) {
 					var done atomic.Bool
-					record := deps.EventRecorder.RecordEventsFunc
+					handle := deps.Handler.HandleCommandFunc
 
-					deps.EventRecorder.RecordEventsFunc = func(
-						events []*envelopepb.Envelope,
+					deps.Handler.HandleCommandFunc = func(
+						ctx context.Context,
+						s dogma.IntegrationCommandScope,
+						c dogma.Command,
+					) error {
+						if done.CompareAndSwap(false, true) {
+							return errors.New("<error>")
+						}
+						return handle(ctx, s, c)
+					}
+
+					memory.FailBeforeJournalAppend(
+						deps.Journals,
+						JournalName(deps.Supervisor.HandlerIdentity.Key),
+						func(r *journalpb.Record) bool {
+							return r.GetCommandHandlerFailed() != nil
+						},
+						errors.New("<error>"),
+					)
+				},
+			},
+			{
+				Desc: "failure after appending CommandHandlerFailed record to the journal",
+				InduceFailure: func(deps *dependencies) {
+					var done atomic.Bool
+					handle := deps.Handler.HandleCommandFunc
+
+					deps.Handler.HandleCommandFunc = func(
+						ctx context.Context,
+						s dogma.IntegrationCommandScope,
+						c dogma.Command,
+					) error {
+						if done.CompareAndSwap(false, true) {
+							return errors.New("<error>")
+						}
+						return handle(ctx, s, c)
+					}
+
+					memory.FailAfterJournalAppend(
+						deps.Journals,
+						JournalName(deps.Supervisor.HandlerIdentity.Key),
+						func(r *journalpb.Record) bool {
+							return r.GetCommandHandlerFailed() != nil
+						},
+						errors.New("<error>"),
+					)
+				},
+			},
+			{
+				Desc: "failure before events appended to stream",
+				InduceFailure: func(deps *dependencies) {
+					var done atomic.Bool
+					record := deps.EventRecorder.AppendEventsFunc
+
+					deps.EventRecorder.AppendEventsFunc = func(
+						req eventstream.AppendRequest,
 					) error {
 						if done.CompareAndSwap(false, true) {
 							return errors.New("<error>")
 						}
 
-						return record(events)
-
+						return record(req)
 					}
 				},
 			},
 			{
-				Desc: "failure after events recorded to stream",
+				Desc:                              "failure after events appended to stream",
+				ExpectMultipleEventAppendRequests: true,
 				InduceFailure: func(deps *dependencies) {
 					var done atomic.Bool
-					record := deps.EventRecorder.RecordEventsFunc
+					record := deps.EventRecorder.AppendEventsFunc
 
-					deps.EventRecorder.RecordEventsFunc = func(
-						events []*envelopepb.Envelope,
+					deps.EventRecorder.AppendEventsFunc = func(
+						req eventstream.AppendRequest,
 					) error {
-						if err := record(events); err != nil {
+						if err := record(req); err != nil {
 							return err
 						}
 
@@ -198,6 +282,33 @@ func TestSupervisor(t *testing.T) {
 
 						return nil
 					}
+				},
+			},
+			{
+				Desc:                              "failure before appending EventsAppendedToStream record to the journal",
+				ExpectMultipleEventAppendRequests: true,
+				InduceFailure: func(deps *dependencies) {
+					memory.FailBeforeJournalAppend(
+						deps.Journals,
+						JournalName(deps.Supervisor.HandlerIdentity.Key),
+						func(r *journalpb.Record) bool {
+							return r.GetEventsAppendedToStream() != nil
+						},
+						errors.New("<error>"),
+					)
+				},
+			},
+			{
+				Desc: "failure after appending EventsAppendedToStream record to the journal",
+				InduceFailure: func(deps *dependencies) {
+					memory.FailAfterJournalAppend(
+						deps.Journals,
+						JournalName(deps.Supervisor.HandlerIdentity.Key),
+						func(r *journalpb.Record) bool {
+							return r.GetEventsAppendedToStream() != nil
+						},
+						errors.New("<error>"),
+					)
 				},
 			},
 		}
@@ -230,26 +341,28 @@ func TestSupervisor(t *testing.T) {
 					return nil
 				}
 
-				events := make(chan []*envelopepb.Envelope, 100)
-				deps.EventRecorder.RecordEventsFunc = func(envs []*envelopepb.Envelope) error {
-					events <- envs
+				appendRequests := make(chan eventstream.AppendRequest, 100)
+				deps.EventRecorder.AppendEventsFunc = func(
+					req eventstream.AppendRequest,
+				) error {
+					appendRequests <- req
 					return nil
 				}
 				cmd := deps.Packer.Pack(MessageC1)
 
 				c.InduceFailure(&deps)
 
-				test.
+				supervisor := test.
 					RunInBackground(t, "supervisor", deps.Supervisor.Run).
-					RepeatedlyUntilStopped()
+					RepeatedlyUntilSuccess()
 
 			loop:
 				for {
-					done := make(chan error, 1)
+					enqueued := make(chan error, 1)
 
 					ex := &EnqueueCommandExchange{
 						Command: cmd,
-						Done:    done,
+						Done:    enqueued,
 					}
 
 					select {
@@ -261,56 +374,44 @@ func TestSupervisor(t *testing.T) {
 					select {
 					case <-tctx.Done():
 						t.Fatal(tctx.Err())
-					case err := <-done:
+					case err := <-enqueued:
 						if err == nil {
 							break loop
 						}
 					}
 				}
 
-				test.
-					ExpectChannelToReceive(
-						tctx,
-						events,
-						[]*envelopepb.Envelope{
-							{
-								MessageId:         deterministicUUID(2),
-								CausationId:       deterministicUUID(1),
-								CorrelationId:     deterministicUUID(1),
-								SourceApplication: deps.Packer.Application,
-								SourceHandler:     deps.Supervisor.HandlerIdentity,
-								CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
-								Description:       MessageE1.MessageDescription(),
-								PortableName:      MessageEPortableName,
-								MediaType:         MessageE1Packet.MediaType,
-								Data:              MessageE1Packet.Data,
-							},
-							{
-								MessageId:         deterministicUUID(3),
-								CausationId:       deterministicUUID(1),
-								CorrelationId:     deterministicUUID(1),
-								SourceApplication: deps.Packer.Application,
-								SourceHandler:     deps.Supervisor.HandlerIdentity,
-								CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
-								Description:       MessageE2.MessageDescription(),
-								PortableName:      MessageEPortableName,
-								MediaType:         MessageE2Packet.MediaType,
-								Data:              MessageE2Packet.Data,
-							},
-							{
-								MessageId:         deterministicUUID(4),
-								CausationId:       deterministicUUID(1),
-								CorrelationId:     deterministicUUID(1),
-								SourceApplication: deps.Packer.Application,
-								SourceHandler:     deps.Supervisor.HandlerIdentity,
-								CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
-								Description:       MessageE3.MessageDescription(),
-								PortableName:      MessageEPortableName,
-								MediaType:         MessageE3Packet.MediaType,
-								Data:              MessageE3Packet.Data,
-							},
+				expectedAppendRequest := eventstream.AppendRequest{
+					Events: []*envelopepb.Envelope{
+						{
+							SourceApplication: deps.Packer.Application,
+							SourceHandler:     deps.Supervisor.HandlerIdentity,
+							CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
+							Description:       MessageE1.MessageDescription(),
+							PortableName:      MessageEPortableName,
+							MediaType:         MessageE1Packet.MediaType,
+							Data:              MessageE1Packet.Data,
 						},
-					)
+						{
+							SourceApplication: deps.Packer.Application,
+							SourceHandler:     deps.Supervisor.HandlerIdentity,
+							CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
+							Description:       MessageE2.MessageDescription(),
+							PortableName:      MessageEPortableName,
+							MediaType:         MessageE2Packet.MediaType,
+							Data:              MessageE2Packet.Data,
+						},
+						{
+							SourceApplication: deps.Packer.Application,
+							SourceHandler:     deps.Supervisor.HandlerIdentity,
+							CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
+							Description:       MessageE3.MessageDescription(),
+							PortableName:      MessageEPortableName,
+							MediaType:         MessageE3Packet.MediaType,
+							Data:              MessageE3Packet.Data,
+						},
+					},
+				}
 
 				test.
 					ExpectChannelToReceive(
@@ -324,6 +425,52 @@ func TestSupervisor(t *testing.T) {
 						t,
 						handled,
 					)
+
+				firstAppendRequest := test.
+					ExpectChannelToReceive(
+						t,
+						appendRequests,
+						expectedAppendRequest,
+						protocmp.IgnoreFields(
+							&envelopepb.Envelope{},
+							"message_id",
+							"causation_id",
+							"correlation_id",
+						),
+						cmpopts.IgnoreFields(
+							eventstream.AppendRequest{},
+							"IsFirstAttempt",
+						),
+					)
+
+				deps.Supervisor.Shutdown()
+				supervisor.WaitForSuccess()
+				close(appendRequests)
+
+				if c.ExpectMultipleEventAppendRequests {
+					subsequentAppendRequest := firstAppendRequest
+					subsequentAppendRequest.IsFirstAttempt = false
+
+					test.ExpectChannelToReceive(
+						t,
+						appendRequests,
+						subsequentAppendRequest,
+					)
+
+					for req := range appendRequests {
+						test.Expect(
+							tctx,
+							"unexpected event stream append request",
+							req,
+							subsequentAppendRequest,
+						)
+					}
+				} else {
+					test.ExpectChannelToClose(
+						tctx,
+						appendRequests,
+					)
+				}
 			})
 		}
 	})
@@ -338,38 +485,42 @@ func TestSupervisor(t *testing.T) {
 			RunInBackground(t, "supervisor", deps.Supervisor.Run).
 			UntilStopped()
 
-		if err := deps.Executor.ExecuteCommand(tctx, MessageC1); err != nil {
-			t.Fatal(err)
-		}
-
-		supervisor.StopAndWait()
-
-		handled := make(chan struct{}, 100)
 		deps.Handler.HandleCommandFunc = func(
 			context.Context,
 			dogma.IntegrationCommandScope,
 			dogma.Command,
 		) error {
-			handled <- struct{}{}
+			supervisor.Stop()
 			return nil
 		}
 
-		deps.EventRecorder.RecordEventsFunc = func(
-			[]*envelopepb.Envelope,
+		if err := deps.Executor.ExecuteCommand(tctx, MessageC1); err != nil {
+			t.Fatal(err)
+		}
+
+		supervisor.WaitUntilStopped()
+
+		rehandled := make(chan struct{}, 100)
+		deps.Handler.HandleCommandFunc = func(
+			context.Context,
+			dogma.IntegrationCommandScope,
+			dogma.Command,
 		) error {
-			handled <- struct{}{}
+			close(rehandled)
 			return nil
 		}
 
-		test.
+		supervisor = test.
 			RunInBackground(t, "supervisor", deps.Supervisor.Run).
-			UntilTestEnds()
+			BeforeTestEnds()
+
+		deps.Supervisor.Shutdown()
+		supervisor.WaitForSuccess()
 
 		test.
-			ExpectChannelToBlockForDuration(
+			ExpectChannelWouldBlock(
 				tctx,
-				2*time.Second,
-				handled,
+				rehandled,
 			)
 	})
 }

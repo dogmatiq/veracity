@@ -1,7 +1,9 @@
 package integration
 
-import "github.com/dogmatiq/enginekit/protobuf/envelopepb"
+import (
+	"github.com/dogmatiq/veracity/internal/eventstream"
+)
 
 type EventRecorder interface {
-	RecordEvents(events []*envelopepb.Envelope) error
+	AppendEvents(req eventstream.AppendRequest) error
 }

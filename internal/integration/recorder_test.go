@@ -1,14 +1,16 @@
 package integration_test
 
-import "github.com/dogmatiq/enginekit/protobuf/envelopepb"
+import (
+	"github.com/dogmatiq/veracity/internal/eventstream"
+)
 
 type eventRecorderStub struct {
-	RecordEventsFunc func(events []*envelopepb.Envelope) error
+	AppendEventsFunc func(req eventstream.AppendRequest) error
 }
 
-func (s *eventRecorderStub) RecordEvents(events []*envelopepb.Envelope) error {
-	if s.RecordEventsFunc != nil {
-		return s.RecordEventsFunc(events)
+func (s *eventRecorderStub) AppendEvents(req eventstream.AppendRequest) error {
+	if s.AppendEventsFunc != nil {
+		return s.AppendEventsFunc(req)
 	}
 	return nil
 }

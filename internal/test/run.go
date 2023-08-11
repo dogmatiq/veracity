@@ -85,6 +85,43 @@ func (r TaskRunner) RepeatedlyUntilStopped() *Task {
 	)
 }
 
+// RepeatedlyUntilSuccess executes the task in its own goroutine, restarting it
+// if it returns an error before the test ends.
+func (r TaskRunner) RepeatedlyUntilSuccess() *Task {
+	r.t.Helper()
+	r.t.Logf("repeatedly running %q in the background until it returns successfully", r.name)
+
+	return r.run(
+		func(ctx context.Context) error {
+			for {
+				err := r.fn(ctx)
+
+				if ctx.Err() == context.Canceled {
+					return err
+				} else if err == nil {
+					return nil
+				} else {
+					r.t.Logf("restarting %q because it returned an error: %s", r.name, err)
+				}
+			}
+		},
+		func(err error) {
+			r.t.Helper()
+
+			switch err {
+			case errTestEnded:
+				// expected
+			case errStopped:
+				r.t.Errorf("%q was stopped explicitly, expected it to return successfully", r.name)
+			case nil:
+				// expected
+			default:
+				r.t.Errorf("%q returned an error, expected it to return successfully: %s", r.name, err)
+			}
+		},
+	)
+}
+
 // BeforeTestEnds executes the task in its own goroutine with the expectation
 // that it will return successfully before the test ends.
 func (r TaskRunner) BeforeTestEnds() *Task {
@@ -246,6 +283,40 @@ func (t *Task) StopAndWait() {
 	select {
 	case <-time.After(shutdownTimeout):
 		t.t.Errorf("%q did not return within %s of being stopped", t.name, shutdownTimeout)
+	case <-t.done:
+		if t.err != nil && t.err != errStopped {
+			t.t.Fatalf("%q returned an error, expected it to be stopped explicitly: %s", t.name, t.err)
+		}
+	}
+}
+
+// WaitForSuccess waits for the function to return successfully.
+//
+// If it returns an error, the test fails.
+func (t *Task) WaitForSuccess() {
+	t.t.Helper()
+	t.t.Logf("waiting for %q to return", t.name)
+
+	select {
+	case <-time.After(shutdownTimeout):
+		t.t.Errorf("%q did not return within %s", t.name, shutdownTimeout)
+	case <-t.done:
+		if t.err != nil {
+			t.t.Fatalf("%q returned an error, expected it to return successfully: %s", t.name, t.err)
+		}
+	}
+}
+
+// WaitUntilStopped waits for the function to be explicitly stopped
+//
+// If it returns an error, the test fails.
+func (t *Task) WaitUntilStopped() {
+	t.t.Helper()
+	t.t.Logf("waiting for %q to return", t.name)
+
+	select {
+	case <-time.After(shutdownTimeout):
+		t.t.Errorf("%q did not return within %s", t.name, shutdownTimeout)
 	case <-t.done:
 		if t.err != nil && t.err != errStopped {
 			t.t.Fatalf("%q returned an error, expected it to be stopped explicitly: %s", t.name, t.err)

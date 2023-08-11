@@ -8,8 +8,10 @@ import (
 	"github.com/dogmatiq/enginekit/protobuf/identitypb"
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/veracity/internal/envelope"
+	"github.com/dogmatiq/veracity/internal/eventstream"
 	"github.com/dogmatiq/veracity/internal/integration/internal/journalpb"
 	"github.com/dogmatiq/veracity/internal/protobuf/protojournal"
+	"github.com/dogmatiq/veracity/internal/signaling"
 	"github.com/dogmatiq/veracity/persistence/journal"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
@@ -23,7 +25,8 @@ type Supervisor struct {
 	Packer          *envelope.Packer
 	EventRecorder   EventRecorder
 
-	pos journal.Position
+	shutdown signaling.Latch
+	pos      journal.Position
 }
 
 func (s *Supervisor) Run(ctx context.Context) error {
@@ -87,7 +90,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	}
 
 	for _, events := range pendingEvents {
-		if err := s.recordEvents(ctx, j, events); err != nil {
+		if err := s.recordEvents(ctx, j, events, false); err != nil {
 			return err
 		}
 	}
@@ -129,8 +132,15 @@ func (s *Supervisor) Run(ctx context.Context) error {
 			}
 
 			handledCmds.Add(ex.Command.GetMessageId())
+		case <-s.shutdown.Signaled():
+			return nil
 		}
 	}
+}
+
+// Shutdown stops the supervisor when it next becomes idle.
+func (s *Supervisor) Shutdown() {
+	s.shutdown.Signal()
 }
 
 func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope, j journal.Journal) error {
@@ -174,19 +184,25 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 
 	s.pos++
 
-	return s.recordEvents(ctx, j, envs)
+	return s.recordEvents(ctx, j, envs, true)
 }
 
 func (s *Supervisor) recordEvents(
 	ctx context.Context,
 	j journal.Journal,
 	envs []*envelopepb.Envelope,
+	isFirstAttempt bool,
 ) error {
 	if len(envs) == 0 {
 		return nil
 	}
 
-	if err := s.EventRecorder.RecordEvents(envs); err != nil {
+	if err := s.EventRecorder.AppendEvents(
+		eventstream.AppendRequest{
+			Events:         envs,
+			IsFirstAttempt: isFirstAttempt,
+		},
+	); err != nil {
 		return err
 	}
 

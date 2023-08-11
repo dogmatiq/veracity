@@ -13,21 +13,23 @@ func Expect[T any](
 	t FailerT,
 	failMessage string,
 	got, want T,
-	transforms ...func(T) T,
+	options ...cmp.Option,
 ) {
 	t.Helper()
 
-	for _, fn := range transforms {
-		got = fn(got)
-		want = fn(want)
-	}
+	options = append(
+		[]cmp.Option{
+			protocmp.Transform(),
+			cmpopts.EquateEmpty(),
+			cmpopts.EquateErrors(),
+		},
+		options...,
+	)
 
 	if diff := cmp.Diff(
 		want,
 		got,
-		protocmp.Transform(),
-		cmpopts.EquateEmpty(),
-		cmpopts.EquateErrors(),
+		options...,
 	); diff != "" {
 		t.Log(failMessage)
 		t.Fatal(diff)
@@ -40,35 +42,40 @@ func ExpectChannelToReceive[T any](
 	t FailerT,
 	ch <-chan T,
 	want T,
-	transforms ...func(T) T,
-) {
+	options ...cmp.Option,
+) (got T) {
 	t.Helper()
 
 	ctx := contextOf(t)
 
+	var ok bool
+
 	select {
 	case <-ctx.Done():
 		t.Fatalf("no value received on channel: %s", ctx.Err())
-	case got, ok := <-ch:
+	case got, ok = <-ch:
 		if ok {
 			Expect(
 				t,
 				"channel received an unexpected value",
 				got,
 				want,
-				transforms...,
+				options...,
 			)
 		} else {
-			t.Error("channel closed while expecting to receive a value")
+			t.Fatal("channel closed while expecting to receive a value")
 		}
+
 	}
+
+	return got
 }
 
 // ExpectChannelToClose waits until a channel is closed.
 func ExpectChannelToClose[T any](
 	t TestingT,
 	ch <-chan T,
-	transforms ...func(T) T,
+	options ...cmp.Option,
 ) {
 	t.Helper()
 
@@ -85,7 +92,7 @@ func ExpectChannelToClose[T any](
 				"channel received a value while expecting channel to be closed",
 				got,
 				want,
-				transforms...,
+				options...,
 			)
 		}
 	}
@@ -97,7 +104,7 @@ func ExpectChannelToBlockForDuration[T any](
 	t TestingT,
 	d time.Duration,
 	ch <-chan T,
-	transforms ...func(T) T,
+	options ...cmp.Option,
 ) {
 	t.Helper()
 
@@ -107,11 +114,12 @@ func ExpectChannelToBlockForDuration[T any](
 	case got, ok := <-ch:
 		if ok {
 			var want T // zero value
-			Expect(t,
+			Expect(
+				t,
 				"channel received a value while expecting channel to block",
 				got,
 				want,
-				transforms...,
+				options...,
 			)
 		} else {
 			t.Error("channel closed while expecting channel to block")
@@ -123,7 +131,7 @@ func ExpectChannelToBlockForDuration[T any](
 func ExpectChannelWouldBlock[T any](
 	t TestingT,
 	ch <-chan T,
-	transforms ...func(T) T,
+	options ...cmp.Option,
 ) {
 	t.Helper()
 
@@ -133,11 +141,12 @@ func ExpectChannelWouldBlock[T any](
 	case got, ok := <-ch:
 		if ok {
 			var want T // zero value
-			Expect(t,
+			Expect(
+				t,
 				"channel received a value while expecting channel to block",
 				got,
 				want,
-				transforms...,
+				options...,
 			)
 		} else {
 			t.Error("channel closed while expecting channel to block")
