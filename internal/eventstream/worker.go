@@ -82,7 +82,7 @@ func (w *worker) idleState(ctx context.Context) fsm.Action {
 	case <-timeout.C:
 		return fsm.Stop()
 
-	case ex := <-w.AppendQueue.Pop():
+	case ex := <-w.AppendQueue.Recv():
 		return fsm.With(ex).EnterState(w.handleAppendState)
 	}
 }

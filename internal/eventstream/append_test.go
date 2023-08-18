@@ -115,7 +115,7 @@ func TestAppend(t *testing.T) {
 					RunInBackground(t, "supervisor", deps.Supervisor.Run).
 					UntilStopped()
 
-				res, err := deps.Supervisor.AppendRequests.Exchange(
+				res, err := deps.Supervisor.AppendQueue.Exchange(
 					tctx,
 					AppendRequest{
 						StreamID: streamID,
@@ -154,7 +154,7 @@ func TestAppend(t *testing.T) {
 					t.Logf("append an event, attempt #%d", attempt)
 					attempt++
 
-					_, err := deps.Supervisor.AppendRequests.Exchange(tctx, req)
+					_, err := deps.Supervisor.AppendQueue.Exchange(tctx, req)
 					if err == nil {
 						break
 					}

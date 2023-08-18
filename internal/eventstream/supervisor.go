@@ -18,10 +18,10 @@ var errShuttingDown = errors.New("event stream sub-system is shutting down")
 
 // A Supervisor coordinates event stream workers.
 type Supervisor struct {
-	Journals       journal.Store
-	AppendRequests messaging.ExchangeQueue[AppendRequest, AppendResponse]
-	Events         chan<- Event
-	Logger         *slog.Logger
+	Journals    journal.Store
+	AppendQueue messaging.ExchangeQueue[AppendRequest, AppendResponse]
+	Events      chan<- Event
+	Logger      *slog.Logger
 
 	shutdown      signaling.Latch
 	workers       uuidpb.Map[*worker]
@@ -63,7 +63,7 @@ func (s *Supervisor) idleState(ctx context.Context) fsm.Action {
 		}
 		return fsm.StayInCurrentState()
 
-	case ex := <-s.AppendRequests.Pop():
+	case ex := <-s.AppendQueue.Recv():
 		return fsm.With(ex).EnterState(s.forwardAppendState)
 	}
 }
@@ -92,7 +92,7 @@ func (s *Supervisor) forwardAppendState(
 		}
 		return fsm.StayInCurrentState()
 
-	case w.AppendQueue.Push() <- ex:
+	case w.AppendQueue.Send() <- ex:
 		return fsm.EnterState(s.idleState)
 	}
 }

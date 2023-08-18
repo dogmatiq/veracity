@@ -60,10 +60,8 @@ func (c applicationVisitor) VisitRichProcess(ctx context.Context, cfg configkit.
 }
 
 func (c applicationVisitor) VisitRichIntegration(ctx context.Context, cfg configkit.RichIntegration) error {
-	ch := make(chan *integration.EnqueueCommandExchange)
 
 	sup := &integration.Supervisor{
-		EnqueueCommand:  ch,
 		Handler:         cfg.Handler(),
 		HandlerIdentity: marshalIdentity(cfg.Identity()),
 		Journals:        c.Persistence.Journals,
@@ -71,8 +69,8 @@ func (c applicationVisitor) VisitRichIntegration(ctx context.Context, cfg config
 	}
 
 	exec := &integration.CommandExecutor{
-		EnqueueCommands: ch,
-		Packer:          c.packer,
+		ExecuteQueue: &sup.ExecuteQueue,
+		Packer:       c.packer,
 	}
 
 	c.Tasks = append(c.Tasks, sup.Run)

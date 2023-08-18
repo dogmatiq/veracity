@@ -25,47 +25,36 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// - [x] Record command in inbox
-// - [x] Invoke the handler associated with the command
-// - [x] Place all resulting events in the outbox and remove the command from the inbox
-// - [ ] Determine which event stream to use
-// - [x] Record events to the event stream
-// - [x] - Record events to the event stream after failure
-// - [x] Remove events from the outbox
 func TestSupervisor(t *testing.T) {
 	type dependencies struct {
 		Packer        *envelope.Packer
 		Journals      *memory.JournalStore
-		Supervisor    *Supervisor
 		Handler       *IntegrationMessageHandler
-		Exchanges     chan *EnqueueCommandExchange
 		EventRecorder *eventRecorderStub
+		Supervisor    *Supervisor
 		Executor      *CommandExecutor
 	}
 
 	setup := func(t test.TestingT) (deps dependencies) {
 		deps.Packer = newPacker()
 
-		deps.Exchanges = make(chan *EnqueueCommandExchange)
+		deps.Journals = &memory.JournalStore{}
 
 		deps.Handler = &IntegrationMessageHandler{}
 
 		deps.EventRecorder = &eventRecorderStub{}
 
-		deps.Executor = &CommandExecutor{
-			EnqueueCommands: deps.Exchanges,
-			Packer:          deps.Packer,
-		}
-
-		deps.Journals = &memory.JournalStore{}
-
 		deps.Supervisor = &Supervisor{
-			EnqueueCommand:  deps.Exchanges,
 			HandlerIdentity: identitypb.New("<handler>", uuidpb.Generate()),
 			Journals:        deps.Journals,
 			Packer:          deps.Packer,
 			Handler:         deps.Handler,
 			EventRecorder:   deps.EventRecorder,
+		}
+
+		deps.Executor = &CommandExecutor{
+			ExecuteQueue: &deps.Supervisor.ExecuteQueue,
+			Packer:       deps.Packer,
 		}
 
 		return deps
@@ -135,11 +124,7 @@ func TestSupervisor(t *testing.T) {
 							return errors.New("<error>")
 						}
 
-						if err := handle(ctx, s, c); err != nil {
-							return err
-						}
-
-						return nil
+						return handle(ctx, s, c)
 					}
 				},
 			},
@@ -252,13 +237,14 @@ func TestSupervisor(t *testing.T) {
 					record := deps.EventRecorder.AppendEventsFunc
 
 					deps.EventRecorder.AppendEventsFunc = func(
+						ctx context.Context,
 						req eventstream.AppendRequest,
 					) error {
 						if done.CompareAndSwap(false, true) {
 							return errors.New("<error>")
 						}
 
-						return record(req)
+						return record(ctx, req)
 					}
 				},
 			},
@@ -270,9 +256,10 @@ func TestSupervisor(t *testing.T) {
 					record := deps.EventRecorder.AppendEventsFunc
 
 					deps.EventRecorder.AppendEventsFunc = func(
+						ctx context.Context,
 						req eventstream.AppendRequest,
 					) error {
-						if err := record(req); err != nil {
+						if err := record(ctx, req); err != nil {
 							return err
 						}
 
@@ -343,6 +330,7 @@ func TestSupervisor(t *testing.T) {
 
 				appendRequests := make(chan eventstream.AppendRequest, 100)
 				deps.EventRecorder.AppendEventsFunc = func(
+					ctx context.Context,
 					req eventstream.AppendRequest,
 				) error {
 					appendRequests <- req
@@ -356,28 +344,18 @@ func TestSupervisor(t *testing.T) {
 					RunInBackground(t, "supervisor", deps.Supervisor.Run).
 					RepeatedlyUntilSuccess()
 
-			loop:
 				for {
-					enqueued := make(chan error, 1)
+					_, err := deps.Supervisor.ExecuteQueue.Exchange(
+						tctx,
+						ExecuteRequest{Command: cmd},
+					)
 
-					ex := &EnqueueCommandExchange{
-						Command: cmd,
-						Done:    enqueued,
+					if tctx.Err() != nil {
+						t.Fatal(tctx.Err())
 					}
 
-					select {
-					case <-tctx.Done():
-						t.Fatal(tctx.Err())
-					case deps.Exchanges <- ex:
-					}
-
-					select {
-					case <-tctx.Done():
-						t.Fatal(tctx.Err())
-					case err := <-enqueued:
-						if err == nil {
-							break loop
-						}
+					if err == nil {
+						break
 					}
 				}
 
