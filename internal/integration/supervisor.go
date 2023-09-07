@@ -15,6 +15,7 @@ import (
 	"github.com/dogmatiq/veracity/internal/protobuf/protojournal"
 	"github.com/dogmatiq/veracity/internal/signaling"
 	"github.com/dogmatiq/veracity/persistence/journal"
+	"github.com/dogmatiq/veracity/persistence/kv"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 )
@@ -32,18 +33,26 @@ type Supervisor struct {
 	Handler         dogma.IntegrationMessageHandler
 	HandlerIdentity *identitypb.Identity
 	Journals        journal.Store
+	Keyspaces       kv.Store
 	Packer          *envelope.Packer
 	EventRecorder   EventRecorder
 
 	journal     journal.Journal
 	pos         journal.Position
-	handledCmds uuidpb.Set
+	handledCmds kv.Keyspace
 	shutdown    signaling.Latch
 }
 
 func (s *Supervisor) Run(ctx context.Context) error {
 	var err error
+
 	s.journal, err = s.Journals.Open(ctx, JournalName(s.HandlerIdentity.Key))
+	if err != nil {
+		return err
+	}
+	defer s.journal.Close()
+
+	s.handledCmds, err = s.Keyspaces.Open(ctx, HandledCommandsKeyspaceName(s.HandlerIdentity.Key))
 	if err != nil {
 		return err
 	}
@@ -57,7 +66,6 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 
 	pendingCmds := []*envelopepb.Envelope{}
 	pendingEvents := [][]*envelopepb.Envelope{}
-	s.handledCmds = uuidpb.Set{}
 
 	if err := protojournal.Range(
 		ctx,
@@ -76,10 +84,7 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 					pendingCmds = append(pendingCmds, cmd)
 				},
 				func(rec *journalpb.CommandHandled) {
-					// TODO: add to projection...
 					cmdID := rec.GetCommandId()
-					s.handledCmds.Add(cmdID)
-
 					for i, cmd := range pendingCmds {
 						if proto.Equal(cmd.GetMessageId(), cmdID) {
 							pendingCmds = slices.Delete(pendingCmds, i, i+1)
@@ -125,7 +130,6 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 		if err := s.handleCommand(ctx, cmd, s.journal); err != nil {
 			return fsm.Fail(err)
 		}
-		s.handledCmds.Add(cmd.GetMessageId())
 	}
 
 	return fsm.EnterState(s.idleState)
@@ -172,6 +176,14 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 		return handlerErr
 	}
 
+	if err := s.handledCmds.Set(
+		ctx,
+		cmd.GetMessageId().AsBytes(),
+		[]byte{1},
+	); err != nil {
+		return err
+	}
+
 	var envs []*envelopepb.Envelope
 	for _, ev := range sc.evs {
 		envs = append(envs, s.Packer.Pack(ev, envelope.WithCause(cmd), envelope.WithHandler(s.HandlerIdentity)))
@@ -187,7 +199,6 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 	}); err != nil {
 		return err
 	}
-
 	s.pos++
 
 	return s.recordEvents(ctx, j, envs, true)
@@ -238,10 +249,19 @@ func (s *Supervisor) handleCommandState(
 	ctx context.Context,
 	ex messaging.Exchange[ExecuteRequest, ExecuteResponse],
 ) fsm.Action {
-	if s.handledCmds.Has(ex.Request.Command.GetMessageId()) {
+	alreadyHandled, err := s.handledCmds.Has(
+		ctx,
+		ex.Request.Command.GetMessageId().AsBytes(),
+	)
+	if err != nil {
+		ex.Err(err)
+		return fsm.Fail(err)
+	}
+	if alreadyHandled {
 		ex.Ok(ExecuteResponse{})
 		return fsm.EnterState(s.idleState)
 	}
+
 	rec := &journalpb.Record{
 		OneOf: &journalpb.Record_CommandEnqueued{
 			CommandEnqueued: &journalpb.CommandEnqueued{
@@ -262,6 +282,17 @@ func (s *Supervisor) handleCommandState(
 		return fsm.Fail(err)
 	}
 
-	s.handledCmds.Add(ex.Request.Command.GetMessageId())
 	return fsm.EnterState(s.idleState)
+}
+
+// JournalName returns the name of the journal that contains the state
+// of the integration handler with the given key.
+func JournalName(key *uuidpb.UUID) string {
+	return "integration:" + key.AsString()
+}
+
+// HandledCommandsKeyspaceName returns the name of the keyspace that contains
+// the set of handled command IDs.
+func HandledCommandsKeyspaceName(key *uuidpb.UUID) string {
+	return "integration:" + key.AsString() + ":handled-commands"
 }

@@ -13,8 +13,8 @@ import (
 // The error is returned before the set is actually performed.
 func FailBeforeKeyspaceSet(
 	s *KeyValueStore,
-	pred func(k, v []byte) bool,
 	name string,
+	pred func(k, v []byte) bool,
 ) {
 	j, err := s.Open(context.Background(), name)
 	if err != nil {
@@ -37,8 +37,8 @@ func FailBeforeKeyspaceSet(
 // The error is returned after the set is actually performed.
 func FailAfterKeyspaceSet(
 	s *KeyValueStore,
-	pred func(k, v []byte) bool,
 	name string,
+	pred func(k, v []byte) bool,
 ) {
 	j, err := s.Open(context.Background(), name)
 	if err != nil {

@@ -29,6 +29,7 @@ func TestSupervisor(t *testing.T) {
 	type dependencies struct {
 		Packer        *envelope.Packer
 		Journals      *memory.JournalStore
+		Keyspaces     *memory.KeyValueStore
 		Handler       *IntegrationMessageHandler
 		EventRecorder *eventRecorderStub
 		Supervisor    *Supervisor
@@ -40,6 +41,8 @@ func TestSupervisor(t *testing.T) {
 
 		deps.Journals = &memory.JournalStore{}
 
+		deps.Keyspaces = &memory.KeyValueStore{}
+
 		deps.Handler = &IntegrationMessageHandler{}
 
 		deps.EventRecorder = &eventRecorderStub{}
@@ -47,6 +50,7 @@ func TestSupervisor(t *testing.T) {
 		deps.Supervisor = &Supervisor{
 			HandlerIdentity: identitypb.New("<handler>", uuidpb.Generate()),
 			Journals:        deps.Journals,
+			Keyspaces:       deps.Keyspaces,
 			Packer:          deps.Packer,
 			Handler:         deps.Handler,
 			EventRecorder:   deps.EventRecorder,
@@ -298,6 +302,30 @@ func TestSupervisor(t *testing.T) {
 					)
 				},
 			},
+			{
+				Desc: "failure before adding command to handled-commands keyspace",
+				InduceFailure: func(deps *dependencies) {
+					memory.FailBeforeKeyspaceSet(
+						deps.Keyspaces,
+						HandledCommandsKeyspaceName(deps.Supervisor.HandlerIdentity.Key),
+						func(k, v []byte) bool {
+							return true
+						},
+					)
+				},
+			},
+			{
+				Desc: "failure after adding command to handled-commands keyspace",
+				InduceFailure: func(deps *dependencies) {
+					memory.FailAfterKeyspaceSet(
+						deps.Keyspaces,
+						HandledCommandsKeyspaceName(deps.Supervisor.HandlerIdentity.Key),
+						func(k, v []byte) bool {
+							return true
+						},
+					)
+				},
+			},
 		}
 
 		for _, c := range cases {
@@ -449,6 +477,47 @@ func TestSupervisor(t *testing.T) {
 						appendRequests,
 					)
 				}
+
+				// TODO: look into resetting the latch
+				secondSupervisor := &Supervisor{
+					HandlerIdentity: deps.Supervisor.HandlerIdentity,
+					Journals:        deps.Journals,
+					Keyspaces:       deps.Keyspaces,
+					Packer:          deps.Packer,
+					Handler:         deps.Handler,
+					EventRecorder:   deps.EventRecorder,
+				}
+
+				rehandled := make(chan struct{}, 100)
+				deps.Handler.HandleCommandFunc = func(
+					context.Context,
+					dogma.IntegrationCommandScope,
+					dogma.Command,
+				) error {
+					close(rehandled)
+					return nil
+				}
+
+				supervisor = test.
+					RunInBackground(t, "supervisor", secondSupervisor.Run).
+					BeforeTestEnds()
+
+				if _, err := secondSupervisor.ExecuteQueue.Exchange(
+					tctx,
+					ExecuteRequest{Command: cmd},
+				); err != nil {
+					t.Fatal(err)
+				}
+
+				secondSupervisor.Shutdown()
+
+				supervisor.WaitForSuccess()
+
+				test.
+					ExpectChannelWouldBlock(
+						tctx,
+						rehandled,
+					)
 			})
 		}
 	})
@@ -461,14 +530,14 @@ func TestSupervisor(t *testing.T) {
 
 		supervisor := test.
 			RunInBackground(t, "supervisor", deps.Supervisor.Run).
-			UntilStopped()
+			BeforeTestEnds()
 
 		deps.Handler.HandleCommandFunc = func(
 			context.Context,
 			dogma.IntegrationCommandScope,
 			dogma.Command,
 		) error {
-			supervisor.Stop()
+			deps.Supervisor.Shutdown()
 			return nil
 		}
 
@@ -476,7 +545,7 @@ func TestSupervisor(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		supervisor.WaitUntilStopped()
+		supervisor.WaitForSuccess()
 
 		rehandled := make(chan struct{}, 100)
 		deps.Handler.HandleCommandFunc = func(
