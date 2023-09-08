@@ -14,6 +14,11 @@ type CommandExecutor struct {
 }
 
 func (e *CommandExecutor) ExecuteCommand(ctx context.Context, c dogma.Command) error {
-	_, err := e.ExecuteQueue.Exchange(ctx, ExecuteRequest{Command: e.Packer.Pack(c)})
+	_, err := e.ExecuteQueue.Exchange(
+		ctx, ExecuteRequest{
+			Command:        e.Packer.Pack(c),
+			IsFirstAttempt: true,
+		},
+	)
 	return err
 }

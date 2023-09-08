@@ -21,8 +21,11 @@ import (
 )
 
 type ExecuteRequest struct {
-	// TODO: IsFirstAttempt
 	Command *envelopepb.Envelope
+
+	// IsFirstAttempt indicates whether or not this is the first request
+	// attempting to execute this specific command.
+	IsFirstAttempt bool
 }
 
 type ExecuteResponse struct {
@@ -37,10 +40,12 @@ type Supervisor struct {
 	Packer          *envelope.Packer
 	EventRecorder   EventRecorder
 
-	journal     journal.Journal
-	pos         journal.Position
-	handledCmds kv.Keyspace
-	shutdown    signaling.Latch
+	// TODO: add a field to store the event stream offset.
+	eventStreamID *uuidpb.UUID
+	journal       journal.Journal
+	pos           journal.Position
+	handledCmds   kv.Keyspace
+	shutdown      signaling.Latch
 }
 
 func (s *Supervisor) Run(ctx context.Context) error {
@@ -62,15 +67,24 @@ func (s *Supervisor) Run(ctx context.Context) error {
 }
 
 func (s *Supervisor) initState(ctx context.Context) fsm.Action {
-	s.pos = 0
-
 	pendingCmds := []*envelopepb.Envelope{}
 	pendingEvents := [][]*envelopepb.Envelope{}
+
+	var err error
+	s.eventStreamID, _, err = s.EventRecorder.SelectEventStream(ctx)
+	if err != nil {
+		return fsm.Fail(err)
+	}
+
+	s.pos, _, err = s.journal.Bounds(ctx)
+	if err != nil {
+		return fsm.Fail(err)
+	}
 
 	if err := protojournal.Range(
 		ctx,
 		s.journal,
-		0,
+		s.pos,
 		func(
 			ctx context.Context,
 			pos journal.Position,
@@ -130,6 +144,10 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 		if err := s.handleCommand(ctx, cmd, s.journal); err != nil {
 			return fsm.Fail(err)
 		}
+	}
+
+	if err := s.journal.Truncate(ctx, s.pos); err != nil {
+		return fsm.Fail(err)
 	}
 
 	return fsm.EnterState(s.idleState)
@@ -217,9 +235,10 @@ func (s *Supervisor) recordEvents(
 	if err := s.EventRecorder.AppendEvents(
 		ctx,
 		eventstream.AppendRequest{
-			// TODO: set minimum offset
+			StreamID:       s.eventStreamID,
 			Events:         envs,
 			IsFirstAttempt: isFirstAttempt,
+			// TODO: populate the offset.
 		},
 	); err != nil {
 		return err
@@ -249,17 +268,19 @@ func (s *Supervisor) handleCommandState(
 	ctx context.Context,
 	ex messaging.Exchange[ExecuteRequest, ExecuteResponse],
 ) fsm.Action {
-	alreadyHandled, err := s.handledCmds.Has(
-		ctx,
-		ex.Request.Command.GetMessageId().AsBytes(),
-	)
-	if err != nil {
-		ex.Err(err)
-		return fsm.Fail(err)
-	}
-	if alreadyHandled {
-		ex.Ok(ExecuteResponse{})
-		return fsm.EnterState(s.idleState)
+	if !ex.Request.IsFirstAttempt {
+		alreadyHandled, err := s.handledCmds.Has(
+			ctx,
+			ex.Request.Command.GetMessageId().AsBytes(),
+		)
+		if err != nil {
+			ex.Err(err)
+			return fsm.Fail(err)
+		}
+		if alreadyHandled {
+			ex.Ok(ExecuteResponse{})
+			return fsm.EnterState(s.idleState)
+		}
 	}
 
 	rec := &journalpb.Record{

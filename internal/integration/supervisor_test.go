@@ -364,6 +364,14 @@ func TestSupervisor(t *testing.T) {
 					appendRequests <- req
 					return nil
 				}
+
+				streamID := uuidpb.Generate()
+				deps.EventRecorder.SelectEventStreamFunc = func(
+					ctx context.Context,
+				) (*uuidpb.UUID, eventstream.Offset, error) {
+					return streamID, 0, nil
+				}
+
 				cmd := deps.Packer.Pack(MessageC1)
 
 				c.InduceFailure(&deps)
@@ -372,11 +380,15 @@ func TestSupervisor(t *testing.T) {
 					RunInBackground(t, "supervisor", deps.Supervisor.Run).
 					RepeatedlyUntilSuccess()
 
+				req := ExecuteRequest{
+					Command:        cmd,
+					IsFirstAttempt: true,
+				}
+
 				for {
-					_, err := deps.Supervisor.ExecuteQueue.Exchange(
-						tctx,
-						ExecuteRequest{Command: cmd},
-					)
+					_, err := deps.Supervisor.ExecuteQueue.Exchange(tctx, req)
+
+					req.IsFirstAttempt = false
 
 					if tctx.Err() != nil {
 						t.Fatal(tctx.Err())
@@ -385,9 +397,11 @@ func TestSupervisor(t *testing.T) {
 					if err == nil {
 						break
 					}
+
 				}
 
 				expectedAppendRequest := eventstream.AppendRequest{
+					StreamID: streamID,
 					Events: []*envelopepb.Envelope{
 						{
 							SourceApplication: deps.Packer.Application,
@@ -502,10 +516,9 @@ func TestSupervisor(t *testing.T) {
 					RunInBackground(t, "supervisor", secondSupervisor.Run).
 					BeforeTestEnds()
 
-				if _, err := secondSupervisor.ExecuteQueue.Exchange(
-					tctx,
-					ExecuteRequest{Command: cmd},
-				); err != nil {
+				req.IsFirstAttempt = false
+
+				if _, err := secondSupervisor.ExecuteQueue.Exchange(tctx, req); err != nil {
 					t.Fatal(err)
 				}
 
