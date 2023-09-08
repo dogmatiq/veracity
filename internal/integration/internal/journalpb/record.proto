@@ -12,8 +12,7 @@ message Record {
     CommandEnqueued command_enqueued = 1;
     CommandHandled command_handled = 2;
     CommandHandlerFailed command_handler_failed = 3;
-    EventStreamSelected event_stream_selected = 4;
-    EventsAppendedToStream events_appended_to_stream = 5;
+    EventsAppendedToStream events_appended_to_stream = 4;
   }
 }
 
@@ -33,6 +32,12 @@ message CommandHandled {
   // Events is the list of events produced while handling the command, in
   // chronological order.
   repeated dogma.protobuf.Envelope events = 2;
+
+  // StreamId is the ID of the stream to which the events will be appended.
+  dogma.protobuf.UUID stream_id = 3;
+
+  // StreamOffset is the next offset of the stream, at the time it was selected.
+  uint64 stream_offset = 4;
 }
 
 // CommandHandlerFailed is a journal record that the handler returned an error
@@ -43,17 +48,6 @@ message CommandHandlerFailed {
 
   // Error is the message of the error that the handler returned.
   string error = 2;
-}
-
-// EventStreamSelected is a journal record that indicates that a specific event
-// stream has been selected as the target for the events produced by the
-// handler.
-message EventStreamSelected {
-  // StreamId is the ID of the stream to which the events will be appended.
-  dogma.protobuf.UUID stream_id = 1;
-
-  // Offset is the next offset of the stream, at the time it was selected.
-  uint64 offset = 2;
 }
 
 // EventsAppendedToStream is a journal record that indicates that the events

@@ -21,11 +21,6 @@ func (x *Record) SetCommandHandlerFailed(v *CommandHandlerFailed) {
 	x.OneOf = &Record_CommandHandlerFailed{CommandHandlerFailed: v}
 }
 
-// SetEventStreamSelected sets x.OneOf to a [Record_EventStreamSelected] value.
-func (x *Record) SetEventStreamSelected(v *EventStreamSelected) {
-	x.OneOf = &Record_EventStreamSelected{EventStreamSelected: v}
-}
-
 // SetEventsAppendedToStream sets x.OneOf to a [Record_EventsAppendedToStream] value.
 func (x *Record) SetEventsAppendedToStream(v *EventsAppendedToStream) {
 	x.OneOf = &Record_EventsAppendedToStream{EventsAppendedToStream: v}
@@ -34,7 +29,6 @@ func (x *Record) DispatchOneOf(
 	commandEnqueued func(*CommandEnqueued),
 	commandHandled func(*CommandHandled),
 	commandHandlerFailed func(*CommandHandlerFailed),
-	eventStreamSelected func(*EventStreamSelected),
 	eventsAppendedToStream func(*EventsAppendedToStream),
 	other func(),
 ) {
@@ -45,8 +39,6 @@ func (x *Record) DispatchOneOf(
 		commandHandled(v.CommandHandled)
 	case *Record_CommandHandlerFailed:
 		commandHandlerFailed(v.CommandHandlerFailed)
-	case *Record_EventStreamSelected:
-		eventStreamSelected(v.EventStreamSelected)
 	case *Record_EventsAppendedToStream:
 		eventsAppendedToStream(v.EventsAppendedToStream)
 	default:

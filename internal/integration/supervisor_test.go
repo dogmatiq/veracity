@@ -365,11 +365,15 @@ func TestSupervisor(t *testing.T) {
 					return nil
 				}
 
+				var isFirstSelect atomic.Bool
 				streamID := uuidpb.Generate()
 				deps.EventRecorder.SelectEventStreamFunc = func(
 					ctx context.Context,
 				) (*uuidpb.UUID, eventstream.Offset, error) {
-					return streamID, 0, nil
+					if isFirstSelect.CompareAndSwap(false, true) {
+						return streamID, 0, nil
+					}
+					return uuidpb.Generate(), 0, nil
 				}
 
 				cmd := deps.Packer.Pack(MessageC1)

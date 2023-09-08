@@ -41,11 +41,12 @@ type Supervisor struct {
 	EventRecorder   EventRecorder
 
 	// TODO: add a field to store the event stream offset.
-	eventStreamID *uuidpb.UUID
-	journal       journal.Journal
-	pos           journal.Position
-	handledCmds   kv.Keyspace
-	shutdown      signaling.Latch
+	eventStreamID     *uuidpb.UUID
+	eventStreamOffset eventstream.Offset
+	journal           journal.Journal
+	pos               journal.Position
+	handledCmds       kv.Keyspace
+	shutdown          signaling.Latch
 }
 
 func (s *Supervisor) Run(ctx context.Context) error {
@@ -67,14 +68,9 @@ func (s *Supervisor) Run(ctx context.Context) error {
 }
 
 func (s *Supervisor) initState(ctx context.Context) fsm.Action {
-	pendingCmds := []*envelopepb.Envelope{}
-	pendingEvents := [][]*envelopepb.Envelope{}
-
+	var pendingCmds []*envelopepb.Envelope
+	var pendingEvents []*journalpb.CommandHandled
 	var err error
-	s.eventStreamID, _, err = s.EventRecorder.SelectEventStream(ctx)
-	if err != nil {
-		return fsm.Fail(err)
-	}
 
 	s.pos, _, err = s.journal.Bounds(ctx)
 	if err != nil {
@@ -106,18 +102,15 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 						}
 					}
 					if len(rec.GetEvents()) > 0 {
-						pendingEvents = append(pendingEvents, rec.GetEvents())
+						pendingEvents = append(pendingEvents, rec)
 					}
 				},
 				func(*journalpb.CommandHandlerFailed) {
 					// ignore
 				},
-				func(*journalpb.EventStreamSelected) {
-					// ignore
-				},
 				func(rec *journalpb.EventsAppendedToStream) {
-					for i, events := range pendingEvents {
-						if proto.Equal(events[0].GetCausationId(), rec.GetCommandId()) {
+					for i, candidate := range pendingEvents {
+						if proto.Equal(candidate.GetCommandId(), rec.GetCommandId()) {
 							pendingEvents = slices.Delete(pendingEvents, i, i+1)
 							break
 						}
@@ -134,8 +127,8 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 		return fsm.Fail(err)
 	}
 
-	for _, events := range pendingEvents {
-		if err := s.recordEvents(ctx, s.journal, events, false); err != nil {
+	for _, rec := range pendingEvents {
+		if err := s.recordEvents(ctx, s.journal, rec, false); err != nil {
 			return fsm.Fail(err)
 		}
 	}
@@ -207,38 +200,49 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 		envs = append(envs, s.Packer.Pack(ev, envelope.WithCause(cmd), envelope.WithHandler(s.HandlerIdentity)))
 	}
 
+	if s.eventStreamID == nil {
+		s.eventStreamID, s.eventStreamOffset, err = s.EventRecorder.SelectEventStream(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	rec := &journalpb.CommandHandled{
+		CommandId:    cmd.GetMessageId(),
+		Events:       envs,
+		StreamId:     s.eventStreamID,
+		StreamOffset: uint64(s.eventStreamOffset),
+	}
+
 	if err := protojournal.Append(ctx, j, s.pos, &journalpb.Record{
 		OneOf: &journalpb.Record_CommandHandled{
-			CommandHandled: &journalpb.CommandHandled{
-				CommandId: cmd.GetMessageId(),
-				Events:    envs,
-			},
+			CommandHandled: rec,
 		},
 	}); err != nil {
 		return err
 	}
 	s.pos++
 
-	return s.recordEvents(ctx, j, envs, true)
+	return s.recordEvents(ctx, j, rec, true)
 }
 
 func (s *Supervisor) recordEvents(
 	ctx context.Context,
 	j journal.Journal,
-	envs []*envelopepb.Envelope,
+	rec *journalpb.CommandHandled,
 	isFirstAttempt bool,
 ) error {
-	if len(envs) == 0 {
+	if len(rec.GetEvents()) == 0 {
 		return nil
 	}
 
 	if err := s.EventRecorder.AppendEvents(
 		ctx,
 		eventstream.AppendRequest{
-			StreamID:       s.eventStreamID,
-			Events:         envs,
-			IsFirstAttempt: isFirstAttempt,
-			// TODO: populate the offset.
+			StreamID:             rec.GetStreamId(),
+			Events:               rec.GetEvents(),
+			LowestPossibleOffset: eventstream.Offset(rec.GetStreamOffset()),
+			IsFirstAttempt:       isFirstAttempt,
 		},
 	); err != nil {
 		return err
@@ -251,7 +255,7 @@ func (s *Supervisor) recordEvents(
 		&journalpb.Record{
 			OneOf: &journalpb.Record_EventsAppendedToStream{
 				EventsAppendedToStream: &journalpb.EventsAppendedToStream{
-					CommandId: envs[0].GetCausationId(),
+					CommandId: rec.GetCommandId(),
 				},
 			},
 		},
