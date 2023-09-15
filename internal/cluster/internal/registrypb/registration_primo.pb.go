@@ -5,3 +5,28 @@
 // source: github.com/dogmatiq/veracity/internal/cluster/internal/registrypb/registration.proto
 
 package registrypb
+
+import (
+	uuidpb "github.com/dogmatiq/enginekit/protobuf/uuidpb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+)
+
+// SetId sets the x.Id field to v.
+func (x *Node) SetId(v *uuidpb.UUID) {
+	x.Id = v
+}
+
+// SetAddresses sets the x.Addresses field to v.
+func (x *Node) SetAddresses(v []string) {
+	x.Addresses = v
+}
+
+// SetNode sets the x.Node field to v.
+func (x *Registration) SetNode(v *Node) {
+	x.Node = v
+}
+
+// SetExpiresAt sets the x.ExpiresAt field to v.
+func (x *Registration) SetExpiresAt(v *timestamppb.Timestamp) {
+	x.ExpiresAt = v
+}

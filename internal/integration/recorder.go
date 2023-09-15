@@ -8,6 +8,6 @@ import (
 )
 
 type EventRecorder interface {
-	AppendEvents(context.Context, eventstream.AppendRequest) error
+	AppendEvents(context.Context, eventstream.AppendRequest) (eventstream.AppendResponse, error)
 	SelectEventStream(context.Context) (streamID *uuidpb.UUID, offset eventstream.Offset, err error)
 }
