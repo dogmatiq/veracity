@@ -33,11 +33,12 @@ message CommandHandled {
   // chronological order.
   repeated dogma.protobuf.Envelope events = 2;
 
-  // StreamId is the ID of the stream to which the events will be appended.
-  dogma.protobuf.UUID stream_id = 3;
+  // EventStreamId is the ID of the stream to which the events will be appended.
+  dogma.protobuf.UUID event_stream_id = 3;
 
-  // StreamOffset is the next offset of the stream, at the time it was selected.
-  uint64 stream_offset = 4;
+  // LowestPossibleEventOffset is the next offset of the stream, at the time it 
+  // was selected.
+  uint64 lowest_possible_event_offset = 4;
 }
 
 // CommandHandlerFailed is a journal record that the handler returned an error
@@ -56,9 +57,9 @@ message EventsAppendedToStream {
   // CommandId is the ID of the command that produced the events.
   dogma.protobuf.UUID command_id = 1;
 
-  // StreamId is the ID of the stream to which the events were appended.
-  dogma.protobuf.UUID stream_id = 2;
+  // EventStreamId is the ID of the stream to which the events were appended.
+  dogma.protobuf.UUID event_stream_id = 2;
 
-  // Offset is the offset of the first event.
-  uint64 offset = 3;
+  // EventOffset is the offset of the first event.
+  uint64 event_offset = 3;
 }

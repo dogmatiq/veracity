@@ -8,15 +8,15 @@ import (
 )
 
 type eventRecorderStub struct {
-	AppendEventsFunc      func(ctx context.Context, req eventstream.AppendRequest) error
+	AppendEventsFunc      func(ctx context.Context, req eventstream.AppendRequest) (eventstream.AppendResponse, error)
 	SelectEventStreamFunc func(context.Context) (streamID *uuidpb.UUID, offset eventstream.Offset, err error)
 }
 
-func (s *eventRecorderStub) AppendEvents(ctx context.Context, req eventstream.AppendRequest) error {
+func (s *eventRecorderStub) AppendEvents(ctx context.Context, req eventstream.AppendRequest) (eventstream.AppendResponse, error) {
 	if s.AppendEventsFunc != nil {
 		return s.AppendEventsFunc(ctx, req)
 	}
-	return nil
+	return eventstream.AppendResponse{}, nil
 }
 
 func (s *eventRecorderStub) SelectEventStream(ctx context.Context) (streamID *uuidpb.UUID, offset eventstream.Offset, err error) {

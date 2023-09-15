@@ -40,13 +40,12 @@ type Supervisor struct {
 	Packer          *envelope.Packer
 	EventRecorder   EventRecorder
 
-	// TODO: add a field to store the event stream offset.
-	eventStreamID     *uuidpb.UUID
-	eventStreamOffset eventstream.Offset
-	journal           journal.Journal
-	pos               journal.Position
-	handledCmds       kv.Keyspace
-	shutdown          signaling.Latch
+	eventStreamID             *uuidpb.UUID
+	lowestPossibleEventOffset eventstream.Offset
+	journal                   journal.Journal
+	pos                       journal.Position
+	handledCmds               kv.Keyspace
+	shutdown                  signaling.Latch
 }
 
 func (s *Supervisor) Run(ctx context.Context) error {
@@ -88,12 +87,14 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 		) (ok bool, err error) {
 			s.pos = pos + 1
 
-			record.DispatchOneOf(
-				func(rec *journalpb.CommandEnqueued) {
+			journalpb.Switch_Record_OneOf(
+				record,
+				func(rec *journalpb.CommandEnqueued) error {
 					cmd := rec.GetCommand()
 					pendingCmds = append(pendingCmds, cmd)
+					return nil
 				},
-				func(rec *journalpb.CommandHandled) {
+				func(rec *journalpb.CommandHandled) error {
 					cmdID := rec.GetCommandId()
 					for i, cmd := range pendingCmds {
 						if proto.Equal(cmd.GetMessageId(), cmdID) {
@@ -104,20 +105,20 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 					if len(rec.GetEvents()) > 0 {
 						pendingEvents = append(pendingEvents, rec)
 					}
+					return nil
 				},
-				func(*journalpb.CommandHandlerFailed) {
+				func(*journalpb.CommandHandlerFailed) error {
 					// ignore
+					return nil
 				},
-				func(rec *journalpb.EventsAppendedToStream) {
+				func(rec *journalpb.EventsAppendedToStream) error {
 					for i, candidate := range pendingEvents {
 						if proto.Equal(candidate.GetCommandId(), rec.GetCommandId()) {
 							pendingEvents = slices.Delete(pendingEvents, i, i+1)
 							break
 						}
 					}
-				},
-				func() {
-					panic("unrecognized record type")
+					return nil
 				},
 			)
 
@@ -201,17 +202,17 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 	}
 
 	if s.eventStreamID == nil {
-		s.eventStreamID, s.eventStreamOffset, err = s.EventRecorder.SelectEventStream(ctx)
+		s.eventStreamID, s.lowestPossibleEventOffset, err = s.EventRecorder.SelectEventStream(ctx)
 		if err != nil {
 			return err
 		}
 	}
 
 	rec := &journalpb.CommandHandled{
-		CommandId:    cmd.GetMessageId(),
-		Events:       envs,
-		StreamId:     s.eventStreamID,
-		StreamOffset: uint64(s.eventStreamOffset),
+		CommandId:                 cmd.GetMessageId(),
+		Events:                    envs,
+		EventStreamId:             s.eventStreamID,
+		LowestPossibleEventOffset: uint64(s.lowestPossibleEventOffset),
 	}
 
 	if err := protojournal.Append(ctx, j, s.pos, &journalpb.Record{
@@ -236,16 +237,22 @@ func (s *Supervisor) recordEvents(
 		return nil
 	}
 
-	if err := s.EventRecorder.AppendEvents(
+	res, err := s.EventRecorder.AppendEvents(
 		ctx,
 		eventstream.AppendRequest{
-			StreamID:             rec.GetStreamId(),
-			Events:               rec.GetEvents(),
-			LowestPossibleOffset: eventstream.Offset(rec.GetStreamOffset()),
+			StreamID: rec.GetEventStreamId(),
+			Events:   rec.GetEvents(),
+			// TODO rename GetStreamOffset in proto
+			LowestPossibleOffset: eventstream.Offset(rec.GetLowestPossibleEventOffset()),
 			IsFirstAttempt:       isFirstAttempt,
 		},
-	); err != nil {
+	)
+	if err != nil {
 		return err
+	}
+
+	if s.eventStreamID == rec.GetEventStreamId() {
+		s.lowestPossibleEventOffset = res.EndOffset
 	}
 
 	if err := protojournal.Append(

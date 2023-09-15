@@ -6,42 +6,104 @@
 
 package journalpb
 
-// SetCommandEnqueued sets x.OneOf to a [Record_CommandEnqueued] value.
+import (
+	envelopepb "github.com/dogmatiq/enginekit/protobuf/envelopepb"
+	uuidpb "github.com/dogmatiq/enginekit/protobuf/uuidpb"
+)
+
+// Switch_Record_OneOf dispatches to one of the given functions based on
+// which value of the [Record] message's "OneOf" one-of group is populated.
+//
+// It panics if x.OneOf field is nil; otherwise, it returns the value
+// returned by the called function. If no return value is required, use a return
+// type of [error] and always return nil.
+func Switch_Record_OneOf[T any](
+	x *Record,
+	caseCommandEnqueued func(*CommandEnqueued) T,
+	caseCommandHandled func(*CommandHandled) T,
+	caseCommandHandlerFailed func(*CommandHandlerFailed) T,
+	caseEventsAppendedToStream func(*EventsAppendedToStream) T,
+) T {
+	switch v := x.OneOf.(type) {
+	case *Record_CommandEnqueued:
+		return caseCommandEnqueued(v.CommandEnqueued)
+	case *Record_CommandHandled:
+		return caseCommandHandled(v.CommandHandled)
+	case *Record_CommandHandlerFailed:
+		return caseCommandHandlerFailed(v.CommandHandlerFailed)
+	case *Record_EventsAppendedToStream:
+		return caseEventsAppendedToStream(v.EventsAppendedToStream)
+	default:
+		panic("Switch_Record_OneOf: x.OneOf is nil")
+	}
+}
+
+// SetCommandEnqueued sets the x.OneOf field to a [OneOf] value containing v
 func (x *Record) SetCommandEnqueued(v *CommandEnqueued) {
 	x.OneOf = &Record_CommandEnqueued{CommandEnqueued: v}
 }
 
-// SetCommandHandled sets x.OneOf to a [Record_CommandHandled] value.
+// SetCommandHandled sets the x.OneOf field to a [OneOf] value containing v
 func (x *Record) SetCommandHandled(v *CommandHandled) {
 	x.OneOf = &Record_CommandHandled{CommandHandled: v}
 }
 
-// SetCommandHandlerFailed sets x.OneOf to a [Record_CommandHandlerFailed] value.
+// SetCommandHandlerFailed sets the x.OneOf field to a [OneOf] value containing v
 func (x *Record) SetCommandHandlerFailed(v *CommandHandlerFailed) {
 	x.OneOf = &Record_CommandHandlerFailed{CommandHandlerFailed: v}
 }
 
-// SetEventsAppendedToStream sets x.OneOf to a [Record_EventsAppendedToStream] value.
+// SetEventsAppendedToStream sets the x.OneOf field to a [OneOf] value containing v
 func (x *Record) SetEventsAppendedToStream(v *EventsAppendedToStream) {
 	x.OneOf = &Record_EventsAppendedToStream{EventsAppendedToStream: v}
 }
-func (x *Record) DispatchOneOf(
-	commandEnqueued func(*CommandEnqueued),
-	commandHandled func(*CommandHandled),
-	commandHandlerFailed func(*CommandHandlerFailed),
-	eventsAppendedToStream func(*EventsAppendedToStream),
-	other func(),
-) {
-	switch v := x.GetOneOf().(type) {
-	case *Record_CommandEnqueued:
-		commandEnqueued(v.CommandEnqueued)
-	case *Record_CommandHandled:
-		commandHandled(v.CommandHandled)
-	case *Record_CommandHandlerFailed:
-		commandHandlerFailed(v.CommandHandlerFailed)
-	case *Record_EventsAppendedToStream:
-		eventsAppendedToStream(v.EventsAppendedToStream)
-	default:
-		other()
-	}
+
+// SetCommand sets the x.Command field to v.
+func (x *CommandEnqueued) SetCommand(v *envelopepb.Envelope) {
+	x.Command = v
+}
+
+// SetCommandId sets the x.CommandId field to v.
+func (x *CommandHandled) SetCommandId(v *uuidpb.UUID) {
+	x.CommandId = v
+}
+
+// SetEvents sets the x.Events field to v.
+func (x *CommandHandled) SetEvents(v []*envelopepb.Envelope) {
+	x.Events = v
+}
+
+// SetEventStreamId sets the x.EventStreamId field to v.
+func (x *CommandHandled) SetEventStreamId(v *uuidpb.UUID) {
+	x.EventStreamId = v
+}
+
+// SetLowestPossibleEventOffset sets the x.LowestPossibleEventOffset field to v.
+func (x *CommandHandled) SetLowestPossibleEventOffset(v uint64) {
+	x.LowestPossibleEventOffset = v
+}
+
+// SetCommandId sets the x.CommandId field to v.
+func (x *CommandHandlerFailed) SetCommandId(v *uuidpb.UUID) {
+	x.CommandId = v
+}
+
+// SetError sets the x.Error field to v.
+func (x *CommandHandlerFailed) SetError(v string) {
+	x.Error = v
+}
+
+// SetCommandId sets the x.CommandId field to v.
+func (x *EventsAppendedToStream) SetCommandId(v *uuidpb.UUID) {
+	x.CommandId = v
+}
+
+// SetEventStreamId sets the x.EventStreamId field to v.
+func (x *EventsAppendedToStream) SetEventStreamId(v *uuidpb.UUID) {
+	x.EventStreamId = v
+}
+
+// SetEventOffset sets the x.EventOffset field to v.
+func (x *EventsAppendedToStream) SetEventOffset(v uint64) {
+	x.EventOffset = v
 }

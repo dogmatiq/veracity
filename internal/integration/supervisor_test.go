@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -243,9 +244,9 @@ func TestSupervisor(t *testing.T) {
 					deps.EventRecorder.AppendEventsFunc = func(
 						ctx context.Context,
 						req eventstream.AppendRequest,
-					) error {
+					) (eventstream.AppendResponse, error) {
 						if done.CompareAndSwap(false, true) {
-							return errors.New("<error>")
+							return eventstream.AppendResponse{}, errors.New("<error>")
 						}
 
 						return record(ctx, req)
@@ -262,16 +263,17 @@ func TestSupervisor(t *testing.T) {
 					deps.EventRecorder.AppendEventsFunc = func(
 						ctx context.Context,
 						req eventstream.AppendRequest,
-					) error {
-						if err := record(ctx, req); err != nil {
-							return err
+					) (eventstream.AppendResponse, error) {
+						res, err := record(ctx, req)
+						if err != nil {
+							return eventstream.AppendResponse{}, err
 						}
 
 						if done.CompareAndSwap(false, true) {
-							return errors.New("<error>")
+							return eventstream.AppendResponse{}, errors.New("<error>")
 						}
 
-						return nil
+						return res, nil
 					}
 				},
 			},
@@ -360,20 +362,21 @@ func TestSupervisor(t *testing.T) {
 				deps.EventRecorder.AppendEventsFunc = func(
 					ctx context.Context,
 					req eventstream.AppendRequest,
-				) error {
+				) (eventstream.AppendResponse, error) {
 					appendRequests <- req
-					return nil
+					return eventstream.AppendResponse{}, nil
 				}
 
 				var isFirstSelect atomic.Bool
 				streamID := uuidpb.Generate()
+				lowestPossibleOffset := eventstream.Offset(1)
 				deps.EventRecorder.SelectEventStreamFunc = func(
 					ctx context.Context,
 				) (*uuidpb.UUID, eventstream.Offset, error) {
 					if isFirstSelect.CompareAndSwap(false, true) {
-						return streamID, 0, nil
+						return streamID, lowestPossibleOffset, nil
 					}
-					return uuidpb.Generate(), 0, nil
+					return uuidpb.Generate(), eventstream.Offset(rand.Uint32()), nil
 				}
 
 				cmd := deps.Packer.Pack(MessageC1)
@@ -435,6 +438,7 @@ func TestSupervisor(t *testing.T) {
 							Data:              MessageE3Packet.Data,
 						},
 					},
+					LowestPossibleOffset: lowestPossibleOffset,
 				}
 
 				test.
@@ -585,6 +589,119 @@ func TestSupervisor(t *testing.T) {
 			ExpectChannelWouldBlock(
 				tctx,
 				rehandled,
+			)
+	})
+
+	t.Run("it increases the lowest possible offset after appending events", func(t *testing.T) {
+		t.Parallel()
+
+		tctx := test.WithContext(t)
+		deps := setup(tctx)
+
+		appendRequests := make(chan eventstream.AppendRequest, 100)
+		var endOffset atomic.Uint64
+
+		endOffset.Store(10)
+
+		deps.EventRecorder.AppendEventsFunc = func(
+			ctx context.Context,
+			req eventstream.AppendRequest,
+		) (eventstream.AppendResponse, error) {
+			appendRequests <- req
+			numEvents := uint64(len(req.Events))
+			endOffset := endOffset.Add(numEvents)
+			return eventstream.AppendResponse{
+				EndOffset:   eventstream.Offset(endOffset),
+				BeginOffset: eventstream.Offset(endOffset - numEvents),
+			}, nil
+		}
+
+		streamID := uuidpb.Generate()
+		deps.EventRecorder.SelectEventStreamFunc = func(
+			ctx context.Context,
+		) (*uuidpb.UUID, eventstream.Offset, error) {
+			return streamID, eventstream.Offset(endOffset.Load()), nil
+		}
+
+		test.
+			RunInBackground(t, "supervisor", deps.Supervisor.Run).
+			UntilTestEnds()
+
+		deps.Handler.HandleCommandFunc = func(
+			_ context.Context,
+			s dogma.IntegrationCommandScope,
+			c dogma.Command,
+		) error {
+			switch c {
+			case MessageC1:
+				s.RecordEvent(MessageE1)
+			case MessageC2:
+				s.RecordEvent(MessageE2)
+			}
+			return nil
+		}
+
+		if err := deps.Executor.ExecuteCommand(tctx, MessageC1); err != nil {
+			t.Fatal(err)
+		}
+		if err := deps.Executor.ExecuteCommand(tctx, MessageC2); err != nil {
+			t.Fatal(err)
+		}
+
+		test.
+			ExpectChannelToReceive(
+				t,
+				appendRequests,
+				eventstream.AppendRequest{
+					StreamID: streamID,
+					Events: []*envelopepb.Envelope{
+						{
+							SourceApplication: deps.Packer.Application,
+							SourceHandler:     deps.Supervisor.HandlerIdentity,
+							CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
+							Description:       MessageE1.MessageDescription(),
+							PortableName:      MessageEPortableName,
+							MediaType:         MessageE1Packet.MediaType,
+							Data:              MessageE1Packet.Data,
+						},
+					},
+					IsFirstAttempt:       true,
+					LowestPossibleOffset: 10,
+				},
+				protocmp.IgnoreFields(
+					&envelopepb.Envelope{},
+					"message_id",
+					"causation_id",
+					"correlation_id",
+				),
+			)
+
+		test.
+			ExpectChannelToReceive(
+				t,
+				appendRequests,
+				eventstream.AppendRequest{
+					StreamID: streamID,
+					Events: []*envelopepb.Envelope{
+						{
+							SourceApplication: deps.Packer.Application,
+							SourceHandler:     deps.Supervisor.HandlerIdentity,
+							CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
+							Description:       MessageE2.MessageDescription(),
+							PortableName:      MessageEPortableName,
+							MediaType:         MessageE2Packet.MediaType,
+							Data:              MessageE2Packet.Data,
+						},
+					},
+					IsFirstAttempt:       true,
+					LowestPossibleOffset: 11,
+				},
+				protocmp.IgnoreFields(
+					&envelopepb.Envelope{},
+					"message_id",
+					"causation_id",
+					"correlation_id",
+				),
 			)
 	})
 }
