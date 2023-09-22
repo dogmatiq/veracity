@@ -17,9 +17,9 @@ require (
 	github.com/dogmatiq/marshalkit v0.7.3
 	github.com/dogmatiq/sqltest v0.3.0
 	github.com/google/go-cmp v0.5.9
-	go.opentelemetry.io/otel v1.17.0
-	go.opentelemetry.io/otel/metric v1.17.0
-	go.opentelemetry.io/otel/trace v1.17.0
+	go.opentelemetry.io/otel v1.18.0
+	go.opentelemetry.io/otel/metric v1.18.0
+	go.opentelemetry.io/otel/trace v1.18.0
 	golang.org/x/exp v0.0.0-20230810033253-352e893a4cad
 	golang.org/x/sync v0.3.0
 	google.golang.org/grpc v1.58.2
