@@ -10,8 +10,8 @@ import "github.com/dogmatiq/enginekit/protobuf/envelopepb/envelope.proto";
 message Record {
   uint64 stream_offset_before = 1;
   uint64 stream_offset_after = 2;
-  oneof operation { AppendOperation append_operation = 3; }
+  oneof operation { EventsAppended events_appended = 3; }
 }
 
 // AppendOperation is an operation that appends a set of events to a stream.
-message AppendOperation { repeated dogma.protobuf.Envelope events = 1; }
+message EventsAppended { repeated dogma.protobuf.Envelope events = 1; }

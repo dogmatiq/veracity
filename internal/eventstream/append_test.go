@@ -184,9 +184,12 @@ func TestAppend(t *testing.T) {
 					func(
 						ctx context.Context,
 						_ journal.Position,
-						r *journalpb.Record,
+						rec *journalpb.Record,
 					) (bool, error) {
-						events = append(events, r.GetAppendOperation().GetEvents()...)
+						events = append(
+							events,
+							rec.GetEventsAppended().GetEvents()...,
+						)
 						return true, nil
 					},
 				); err != nil {

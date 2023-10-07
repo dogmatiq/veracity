@@ -6,7 +6,8 @@ option go_package = "github.com/dogmatiq/veracity/internal/integration/internal/
 import "github.com/dogmatiq/enginekit/protobuf/uuidpb/uuid.proto";
 import "github.com/dogmatiq/enginekit/protobuf/envelopepb/envelope.proto";
 
-// Record is a container for a journal record.
+// Record is a journal record that stores an operation that was performed by an
+// integration supervisor.
 message Record {
   oneof operation {
     CommandEnqueued command_enqueued = 1;
@@ -16,15 +17,15 @@ message Record {
   }
 }
 
-// CommandEnqueued is a journal record that indicates a command has been
-// enqueued for handling.
+// CommandEnqueued is an operation that indicates a command has been enqueued
+// for handling.
 message CommandEnqueued {
   // Command is the envelope containing the command to be handled.
   dogma.protobuf.Envelope command = 1;
 }
 
-// CommandHandled is a journal record that indicates a command has been
-// handled successfully.
+// CommandHandled is an operation that indicates a command has been handled
+// successfully.
 message CommandHandled {
   // CommandId is the ID of the command that was handled.
   dogma.protobuf.UUID command_id = 1;
@@ -41,8 +42,8 @@ message CommandHandled {
   uint64 lowest_possible_event_offset = 4;
 }
 
-// CommandHandlerFailed is a journal record that the handler returned an error
-// when attempting to handle a command.
+// CommandHandlerFailed is an operation that indicates the handler returned an
+// error when attempting to handle a command.
 message CommandHandlerFailed {
   // CommandId is the ID of the command that was being handled.
   dogma.protobuf.UUID command_id = 1;
@@ -51,7 +52,7 @@ message CommandHandlerFailed {
   string error = 2;
 }
 
-// EventsAppendedToStream is a journal record that indicates that the events
+// EventsAppendedToStream is an operation that indicates that the events
 // produced by a specific command have been appended to an event stream.
 message EventsAppendedToStream {
   // CommandId is the ID of the command that produced the events.

@@ -179,8 +179,8 @@ func (w *worker) appendEvents(
 			NewRecord().
 			SetStreamOffsetBefore(uint64(before)).
 			SetStreamOffsetAfter(uint64(after)).
-			SetAppendOperation(
-				&journalpb.AppendOperation{
+			SetEventsAppended(
+				&journalpb.EventsAppended{
 					Events: req.Events,
 				},
 			),
@@ -248,7 +248,7 @@ func (w *worker) findAppendRecord(
 			_ journal.Position,
 			rec *journalpb.Record,
 		) (*journalpb.Record, bool, error) {
-			if op := rec.GetAppendOperation(); op != nil {
+			if op := rec.GetEventsAppended(); op != nil {
 				targetID := req.Events[0].MessageId
 				candidateID := op.Events[0].MessageId
 				return rec, candidateID.Equal(targetID), nil

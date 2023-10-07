@@ -22,7 +22,8 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Record is a container for a journal record.
+// Record is a journal record that stores an operation that was performed by an
+// integration supervisor.
 type Record struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -132,8 +133,8 @@ func (*Record_CommandHandlerFailed) isRecord_Operation() {}
 
 func (*Record_EventsAppendedToStream) isRecord_Operation() {}
 
-// CommandEnqueued is a journal record that indicates a command has been
-// enqueued for handling.
+// CommandEnqueued is an operation that indicates a command has been enqueued
+// for handling.
 type CommandEnqueued struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -182,8 +183,8 @@ func (x *CommandEnqueued) GetCommand() *envelopepb.Envelope {
 	return nil
 }
 
-// CommandHandled is a journal record that indicates a command has been
-// handled successfully.
+// CommandHandled is an operation that indicates a command has been handled
+// successfully.
 type CommandHandled struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -261,8 +262,8 @@ func (x *CommandHandled) GetLowestPossibleEventOffset() uint64 {
 	return 0
 }
 
-// CommandHandlerFailed is a journal record that the handler returned an error
-// when attempting to handle a command.
+// CommandHandlerFailed is an operation that indicates the handler returned an
+// error when attempting to handle a command.
 type CommandHandlerFailed struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -320,7 +321,7 @@ func (x *CommandHandlerFailed) GetError() string {
 	return ""
 }
 
-// EventsAppendedToStream is a journal record that indicates that the events
+// EventsAppendedToStream is an operation that indicates that the events
 // produced by a specific command have been appended to an event stream.
 type EventsAppendedToStream struct {
 	state         protoimpl.MessageState

@@ -13,9 +13,9 @@ func NewRecord() *Record {
 	return &Record{}
 }
 
-// NewAppendOperation returns a new [AppendOperation].
-func NewAppendOperation() *AppendOperation {
-	return &AppendOperation{}
+// NewEventsAppended returns a new [EventsAppended].
+func NewEventsAppended() *EventsAppended {
+	return &EventsAppended{}
 }
 
 // Switch_Record_Operation dispatches to one of the given functions based on
@@ -26,11 +26,11 @@ func NewAppendOperation() *AppendOperation {
 // type of [error] and always return nil.
 func Switch_Record_Operation[T any](
 	x *Record,
-	caseAppendOperation func(*AppendOperation) T,
+	caseEventsAppended func(*EventsAppended) T,
 ) T {
 	switch v := x.Operation.(type) {
-	case *Record_AppendOperation:
-		return caseAppendOperation(v.AppendOperation)
+	case *Record_EventsAppended:
+		return caseEventsAppended(v.EventsAppended)
 	default:
 		panic("Switch_Record_Operation: x.Operation is nil")
 	}
@@ -54,19 +54,19 @@ func (x *Record) SetStreamOffsetAfter(v uint64) *Record {
 	return x
 }
 
-// SetAppendOperation sets the x.Operation field to a [Operation] value containing v, then returns x.
-func (x *Record) SetAppendOperation(v *AppendOperation) *Record {
+// SetEventsAppended sets the x.Operation field to a [Operation] value containing v, then returns x.
+func (x *Record) SetEventsAppended(v *EventsAppended) *Record {
 	if x == nil {
 		x = &Record{}
 	}
-	x.Operation = &Record_AppendOperation{AppendOperation: v}
+	x.Operation = &Record_EventsAppended{EventsAppended: v}
 	return x
 }
 
 // SetEvents sets the x.Events field to v, then returns x.
-func (x *AppendOperation) SetEvents(v []*envelopepb.Envelope) *AppendOperation {
+func (x *EventsAppended) SetEvents(v []*envelopepb.Envelope) *EventsAppended {
 	if x == nil {
-		x = &AppendOperation{}
+		x = &EventsAppended{}
 	}
 	x.Events = v
 	return x
