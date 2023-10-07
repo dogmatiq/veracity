@@ -16,11 +16,11 @@ import envelopepb "github.com/dogmatiq/enginekit/protobuf/envelopepb"
 // type of [error] and always return nil.
 func Switch_Record_Operation[T any](
 	x *Record,
-	caseAppend func(*AppendOperation) T,
+	caseAppendOperation func(*AppendOperation) T,
 ) T {
 	switch v := x.Operation.(type) {
-	case *Record_Append:
-		return caseAppend(v.Append)
+	case *Record_AppendOperation:
+		return caseAppendOperation(v.AppendOperation)
 	default:
 		panic("Switch_Record_Operation: x.Operation is nil")
 	}
@@ -36,9 +36,9 @@ func (x *Record) SetStreamOffsetAfter(v uint64) {
 	x.StreamOffsetAfter = v
 }
 
-// SetAppend sets the x.Operation field to a [Operation] value containing v
-func (x *Record) SetAppend(v *AppendOperation) {
-	x.Operation = &Record_Append{Append: v}
+// SetAppendOperation sets the x.Operation field to a [Operation] value containing v
+func (x *Record) SetAppendOperation(v *AppendOperation) {
+	x.Operation = &Record_AppendOperation{AppendOperation: v}
 }
 
 // SetEvents sets the x.Events field to v.

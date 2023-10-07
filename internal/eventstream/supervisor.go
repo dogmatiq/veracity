@@ -98,7 +98,7 @@ func (s *Supervisor) forwardAppendState(
 }
 
 // shutdownState signals all workers to shutdown and waits for them to finish.
-func (s *Supervisor) shutdownState(ctx context.Context) fsm.Action {
+func (s *Supervisor) shutdownState(context.Context) fsm.Action {
 	for _, w := range s.workers {
 		w.Shutdown.Signal()
 	}
