@@ -48,12 +48,12 @@ func GetLatest[
 		pos := end - 1
 		rec, err := Get[Record](ctx, j, pos)
 
-		if errors.Is(err, journal.ErrNotFound) {
-			// We didn't find the record, assuming the journal is not corrupted,
-			// that means that it was truncated after the call to Bounds() but
-			// before the call to Get(), so we re-read the bounds and try again.
+		if !errors.Is(err, journal.ErrNotFound) {
+			return pos, rec, true, err
 		}
 
-		return pos, rec, true, err
+		// We didn't find the record, assuming the journal is not corrupted,
+		// that means that it was truncated after the call to Bounds() but
+		// before the call to Get(), so we re-read the bounds and try again.
 	}
 }
