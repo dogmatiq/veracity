@@ -20,6 +20,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// ExecuteRequest is a request to execute a command.
 type ExecuteRequest struct {
 	Command *envelopepb.Envelope
 
@@ -28,9 +29,11 @@ type ExecuteRequest struct {
 	IsFirstAttempt bool
 }
 
+// ExecuteResponse is the response to an ExecuteRequest.
 type ExecuteResponse struct {
 }
 
+// Supervisor dispatches commands to a specific integration message handler.
 type Supervisor struct {
 	ExecuteQueue    messaging.ExchangeQueue[ExecuteRequest, ExecuteResponse]
 	Handler         dogma.IntegrationMessageHandler
@@ -48,6 +51,8 @@ type Supervisor struct {
 	shutdown                  signaling.Latch
 }
 
+// Run starts the supervisor. It runs until ctx is canceled, Shutdown() is
+// called, or an error occurs.
 func (s *Supervisor) Run(ctx context.Context) error {
 	var err error
 
@@ -178,14 +183,14 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 			ctx,
 			j,
 			s.pos,
-			&journalpb.Record{
-				Operation: &journalpb.Record_CommandHandlerFailed{
-					CommandHandlerFailed: &journalpb.CommandHandlerFailed{
+			journalpb.
+				NewRecord().
+				SetCommandHandlerFailed(
+					&journalpb.CommandHandlerFailed{
 						CommandId: cmd.GetMessageId(),
 						Error:     handlerErr.Error(),
 					},
-				},
-			},
+				),
 		); err != nil {
 			return err
 		}
@@ -226,11 +231,9 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 		ctx,
 		j,
 		s.pos,
-		&journalpb.Record{
-			Operation: &journalpb.Record_CommandHandled{
-				CommandHandled: rec,
-			},
-		},
+		journalpb.
+			NewRecord().
+			SetCommandHandled(rec),
 	); err != nil {
 		return err
 	}
@@ -271,13 +274,13 @@ func (s *Supervisor) recordEvents(
 		ctx,
 		j,
 		s.pos,
-		&journalpb.Record{
-			Operation: &journalpb.Record_EventsAppendedToStream{
-				EventsAppendedToStream: &journalpb.EventsAppendedToStream{
+		journalpb.
+			NewRecord().
+			SetEventsAppendedToStream(
+				&journalpb.EventsAppendedToStream{
 					CommandId: rec.GetCommandId(),
 				},
-			},
-		},
+			),
 	); err != nil {
 		return err
 	}
@@ -306,15 +309,18 @@ func (s *Supervisor) handleCommandState(
 		}
 	}
 
-	rec := &journalpb.Record{
-		Operation: &journalpb.Record_CommandEnqueued{
-			CommandEnqueued: &journalpb.CommandEnqueued{
-				Command: ex.Request.Command,
-			},
-		},
-	}
-
-	if err := protojournal.Append(ctx, s.journal, s.pos, rec); err != nil {
+	if err := protojournal.Append(
+		ctx,
+		s.journal,
+		s.pos,
+		journalpb.
+			NewRecord().
+			SetCommandEnqueued(
+				&journalpb.CommandEnqueued{
+					Command: ex.Request.Command,
+				},
+			),
+	); err != nil {
 		ex.Err(err)
 		return fsm.Fail(err)
 	}

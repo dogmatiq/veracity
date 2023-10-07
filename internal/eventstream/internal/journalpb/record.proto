@@ -13,6 +13,5 @@ message Record {
   oneof operation { AppendOperation append_operation = 3; }
 }
 
-// AppendOperation is an operation that indicates a set of events have been
-// appended to the stream.
+// AppendOperation is an operation that appends a set of events to a stream.
 message AppendOperation { repeated dogma.protobuf.Envelope events = 1; }

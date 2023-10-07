@@ -8,11 +8,14 @@ import (
 	"github.com/dogmatiq/veracity/internal/messaging"
 )
 
+// CommandExecutor is an implementation of [dogma.CommandExecutor] that
+// dispatches the command to an exchange queue.
 type CommandExecutor struct {
 	ExecuteQueue *messaging.ExchangeQueue[ExecuteRequest, ExecuteResponse]
 	Packer       *envelope.Packer
 }
 
+// ExecuteCommand enqueues a command.
 func (e *CommandExecutor) ExecuteCommand(ctx context.Context, c dogma.Command) error {
 	_, err := e.ExecuteQueue.Exchange(
 		ctx, ExecuteRequest{

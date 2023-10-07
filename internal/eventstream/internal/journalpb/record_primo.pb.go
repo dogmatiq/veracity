@@ -8,6 +8,16 @@ package journalpb
 
 import envelopepb "github.com/dogmatiq/enginekit/protobuf/envelopepb"
 
+// NewRecord returns a new [Record].
+func NewRecord() *Record {
+	return &Record{}
+}
+
+// NewAppendOperation returns a new [AppendOperation].
+func NewAppendOperation() *AppendOperation {
+	return &AppendOperation{}
+}
+
 // Switch_Record_Operation dispatches to one of the given functions based on
 // which value of the [Record] message's "Operation" one-of group is populated.
 //
@@ -26,22 +36,38 @@ func Switch_Record_Operation[T any](
 	}
 }
 
-// SetStreamOffsetBefore sets the x.StreamOffsetBefore field to v.
-func (x *Record) SetStreamOffsetBefore(v uint64) {
+// SetStreamOffsetBefore sets the x.StreamOffsetBefore field to v, then returns x.
+func (x *Record) SetStreamOffsetBefore(v uint64) *Record {
+	if x == nil {
+		x = &Record{}
+	}
 	x.StreamOffsetBefore = v
+	return x
 }
 
-// SetStreamOffsetAfter sets the x.StreamOffsetAfter field to v.
-func (x *Record) SetStreamOffsetAfter(v uint64) {
+// SetStreamOffsetAfter sets the x.StreamOffsetAfter field to v, then returns x.
+func (x *Record) SetStreamOffsetAfter(v uint64) *Record {
+	if x == nil {
+		x = &Record{}
+	}
 	x.StreamOffsetAfter = v
+	return x
 }
 
-// SetAppendOperation sets the x.Operation field to a [Operation] value containing v
-func (x *Record) SetAppendOperation(v *AppendOperation) {
+// SetAppendOperation sets the x.Operation field to a [Operation] value containing v, then returns x.
+func (x *Record) SetAppendOperation(v *AppendOperation) *Record {
+	if x == nil {
+		x = &Record{}
+	}
 	x.Operation = &Record_AppendOperation{AppendOperation: v}
+	return x
 }
 
-// SetEvents sets the x.Events field to v.
-func (x *AppendOperation) SetEvents(v []*envelopepb.Envelope) {
+// SetEvents sets the x.Events field to v, then returns x.
+func (x *AppendOperation) SetEvents(v []*envelopepb.Envelope) *AppendOperation {
+	if x == nil {
+		x = &AppendOperation{}
+	}
 	x.Events = v
+	return x
 }

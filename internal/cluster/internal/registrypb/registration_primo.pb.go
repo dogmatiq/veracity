@@ -11,22 +11,48 @@ import (
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// SetId sets the x.Id field to v.
-func (x *Node) SetId(v *uuidpb.UUID) {
+// NewNode returns a new [Node].
+func NewNode() *Node {
+	return &Node{}
+}
+
+// NewRegistration returns a new [Registration].
+func NewRegistration() *Registration {
+	return &Registration{}
+}
+
+// SetId sets the x.Id field to v, then returns x.
+func (x *Node) SetId(v *uuidpb.UUID) *Node {
+	if x == nil {
+		x = &Node{}
+	}
 	x.Id = v
+	return x
 }
 
-// SetAddresses sets the x.Addresses field to v.
-func (x *Node) SetAddresses(v []string) {
+// SetAddresses sets the x.Addresses field to v, then returns x.
+func (x *Node) SetAddresses(v []string) *Node {
+	if x == nil {
+		x = &Node{}
+	}
 	x.Addresses = v
+	return x
 }
 
-// SetNode sets the x.Node field to v.
-func (x *Registration) SetNode(v *Node) {
+// SetNode sets the x.Node field to v, then returns x.
+func (x *Registration) SetNode(v *Node) *Registration {
+	if x == nil {
+		x = &Registration{}
+	}
 	x.Node = v
+	return x
 }
 
-// SetExpiresAt sets the x.ExpiresAt field to v.
-func (x *Registration) SetExpiresAt(v *timestamppb.Timestamp) {
+// SetExpiresAt sets the x.ExpiresAt field to v, then returns x.
+func (x *Registration) SetExpiresAt(v *timestamppb.Timestamp) *Registration {
+	if x == nil {
+		x = &Registration{}
+	}
 	x.ExpiresAt = v
+	return x
 }

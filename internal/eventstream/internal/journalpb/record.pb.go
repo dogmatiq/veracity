@@ -106,8 +106,7 @@ type Record_AppendOperation struct {
 
 func (*Record_AppendOperation) isRecord_Operation() {}
 
-// AppendOperation is an operation that indicates a set of events have been
-// appended to the stream.
+// AppendOperation is an operation that appends a set of events to a stream.
 type AppendOperation struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

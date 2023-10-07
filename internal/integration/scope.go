@@ -12,5 +12,6 @@ func (s *scope) RecordEvent(e dogma.Event) {
 	s.evs = append(s.evs, e)
 }
 
-func (s *scope) Log(format string, args ...any) {
+func (s *scope) Log(string, ...any) {
+	// TODO
 }

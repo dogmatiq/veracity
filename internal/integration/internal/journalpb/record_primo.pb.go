@@ -11,6 +11,31 @@ import (
 	uuidpb "github.com/dogmatiq/enginekit/protobuf/uuidpb"
 )
 
+// NewRecord returns a new [Record].
+func NewRecord() *Record {
+	return &Record{}
+}
+
+// NewCommandEnqueued returns a new [CommandEnqueued].
+func NewCommandEnqueued() *CommandEnqueued {
+	return &CommandEnqueued{}
+}
+
+// NewCommandHandled returns a new [CommandHandled].
+func NewCommandHandled() *CommandHandled {
+	return &CommandHandled{}
+}
+
+// NewCommandHandlerFailed returns a new [CommandHandlerFailed].
+func NewCommandHandlerFailed() *CommandHandlerFailed {
+	return &CommandHandlerFailed{}
+}
+
+// NewEventsAppendedToStream returns a new [EventsAppendedToStream].
+func NewEventsAppendedToStream() *EventsAppendedToStream {
+	return &EventsAppendedToStream{}
+}
+
 // Switch_Record_Operation dispatches to one of the given functions based on
 // which value of the [Record] message's "Operation" one-of group is populated.
 //
@@ -38,72 +63,128 @@ func Switch_Record_Operation[T any](
 	}
 }
 
-// SetCommandEnqueued sets the x.Operation field to a [Operation] value containing v
-func (x *Record) SetCommandEnqueued(v *CommandEnqueued) {
+// SetCommandEnqueued sets the x.Operation field to a [Operation] value containing v, then returns x.
+func (x *Record) SetCommandEnqueued(v *CommandEnqueued) *Record {
+	if x == nil {
+		x = &Record{}
+	}
 	x.Operation = &Record_CommandEnqueued{CommandEnqueued: v}
+	return x
 }
 
-// SetCommandHandled sets the x.Operation field to a [Operation] value containing v
-func (x *Record) SetCommandHandled(v *CommandHandled) {
+// SetCommandHandled sets the x.Operation field to a [Operation] value containing v, then returns x.
+func (x *Record) SetCommandHandled(v *CommandHandled) *Record {
+	if x == nil {
+		x = &Record{}
+	}
 	x.Operation = &Record_CommandHandled{CommandHandled: v}
+	return x
 }
 
-// SetCommandHandlerFailed sets the x.Operation field to a [Operation] value containing v
-func (x *Record) SetCommandHandlerFailed(v *CommandHandlerFailed) {
+// SetCommandHandlerFailed sets the x.Operation field to a [Operation] value containing v, then returns x.
+func (x *Record) SetCommandHandlerFailed(v *CommandHandlerFailed) *Record {
+	if x == nil {
+		x = &Record{}
+	}
 	x.Operation = &Record_CommandHandlerFailed{CommandHandlerFailed: v}
+	return x
 }
 
-// SetEventsAppendedToStream sets the x.Operation field to a [Operation] value containing v
-func (x *Record) SetEventsAppendedToStream(v *EventsAppendedToStream) {
+// SetEventsAppendedToStream sets the x.Operation field to a [Operation] value containing v, then returns x.
+func (x *Record) SetEventsAppendedToStream(v *EventsAppendedToStream) *Record {
+	if x == nil {
+		x = &Record{}
+	}
 	x.Operation = &Record_EventsAppendedToStream{EventsAppendedToStream: v}
+	return x
 }
 
-// SetCommand sets the x.Command field to v.
-func (x *CommandEnqueued) SetCommand(v *envelopepb.Envelope) {
+// SetCommand sets the x.Command field to v, then returns x.
+func (x *CommandEnqueued) SetCommand(v *envelopepb.Envelope) *CommandEnqueued {
+	if x == nil {
+		x = &CommandEnqueued{}
+	}
 	x.Command = v
+	return x
 }
 
-// SetCommandId sets the x.CommandId field to v.
-func (x *CommandHandled) SetCommandId(v *uuidpb.UUID) {
+// SetCommandId sets the x.CommandId field to v, then returns x.
+func (x *CommandHandled) SetCommandId(v *uuidpb.UUID) *CommandHandled {
+	if x == nil {
+		x = &CommandHandled{}
+	}
 	x.CommandId = v
+	return x
 }
 
-// SetEvents sets the x.Events field to v.
-func (x *CommandHandled) SetEvents(v []*envelopepb.Envelope) {
+// SetEvents sets the x.Events field to v, then returns x.
+func (x *CommandHandled) SetEvents(v []*envelopepb.Envelope) *CommandHandled {
+	if x == nil {
+		x = &CommandHandled{}
+	}
 	x.Events = v
+	return x
 }
 
-// SetEventStreamId sets the x.EventStreamId field to v.
-func (x *CommandHandled) SetEventStreamId(v *uuidpb.UUID) {
+// SetEventStreamId sets the x.EventStreamId field to v, then returns x.
+func (x *CommandHandled) SetEventStreamId(v *uuidpb.UUID) *CommandHandled {
+	if x == nil {
+		x = &CommandHandled{}
+	}
 	x.EventStreamId = v
+	return x
 }
 
-// SetLowestPossibleEventOffset sets the x.LowestPossibleEventOffset field to v.
-func (x *CommandHandled) SetLowestPossibleEventOffset(v uint64) {
+// SetLowestPossibleEventOffset sets the x.LowestPossibleEventOffset field to v, then returns x.
+func (x *CommandHandled) SetLowestPossibleEventOffset(v uint64) *CommandHandled {
+	if x == nil {
+		x = &CommandHandled{}
+	}
 	x.LowestPossibleEventOffset = v
+	return x
 }
 
-// SetCommandId sets the x.CommandId field to v.
-func (x *CommandHandlerFailed) SetCommandId(v *uuidpb.UUID) {
+// SetCommandId sets the x.CommandId field to v, then returns x.
+func (x *CommandHandlerFailed) SetCommandId(v *uuidpb.UUID) *CommandHandlerFailed {
+	if x == nil {
+		x = &CommandHandlerFailed{}
+	}
 	x.CommandId = v
+	return x
 }
 
-// SetError sets the x.Error field to v.
-func (x *CommandHandlerFailed) SetError(v string) {
+// SetError sets the x.Error field to v, then returns x.
+func (x *CommandHandlerFailed) SetError(v string) *CommandHandlerFailed {
+	if x == nil {
+		x = &CommandHandlerFailed{}
+	}
 	x.Error = v
+	return x
 }
 
-// SetCommandId sets the x.CommandId field to v.
-func (x *EventsAppendedToStream) SetCommandId(v *uuidpb.UUID) {
+// SetCommandId sets the x.CommandId field to v, then returns x.
+func (x *EventsAppendedToStream) SetCommandId(v *uuidpb.UUID) *EventsAppendedToStream {
+	if x == nil {
+		x = &EventsAppendedToStream{}
+	}
 	x.CommandId = v
+	return x
 }
 
-// SetEventStreamId sets the x.EventStreamId field to v.
-func (x *EventsAppendedToStream) SetEventStreamId(v *uuidpb.UUID) {
+// SetEventStreamId sets the x.EventStreamId field to v, then returns x.
+func (x *EventsAppendedToStream) SetEventStreamId(v *uuidpb.UUID) *EventsAppendedToStream {
+	if x == nil {
+		x = &EventsAppendedToStream{}
+	}
 	x.EventStreamId = v
+	return x
 }
 
-// SetEventOffset sets the x.EventOffset field to v.
-func (x *EventsAppendedToStream) SetEventOffset(v uint64) {
+// SetEventOffset sets the x.EventOffset field to v, then returns x.
+func (x *EventsAppendedToStream) SetEventOffset(v uint64) *EventsAppendedToStream {
+	if x == nil {
+		x = &EventsAppendedToStream{}
+	}
 	x.EventOffset = v
+	return x
 }
