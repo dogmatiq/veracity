@@ -26,11 +26,6 @@ func NewCommandHandled() *CommandHandled {
 	return &CommandHandled{}
 }
 
-// NewCommandHandlerFailed returns a new [CommandHandlerFailed].
-func NewCommandHandlerFailed() *CommandHandlerFailed {
-	return &CommandHandlerFailed{}
-}
-
 // NewEventsAppendedToStream returns a new [EventsAppendedToStream].
 func NewEventsAppendedToStream() *EventsAppendedToStream {
 	return &EventsAppendedToStream{}
@@ -46,7 +41,6 @@ func Switch_Record_Operation[T any](
 	x *Record,
 	caseCommandEnqueued func(*CommandEnqueued) T,
 	caseCommandHandled func(*CommandHandled) T,
-	caseCommandHandlerFailed func(*CommandHandlerFailed) T,
 	caseEventsAppendedToStream func(*EventsAppendedToStream) T,
 ) T {
 	switch v := x.Operation.(type) {
@@ -54,8 +48,6 @@ func Switch_Record_Operation[T any](
 		return caseCommandEnqueued(v.CommandEnqueued)
 	case *Record_CommandHandled:
 		return caseCommandHandled(v.CommandHandled)
-	case *Record_CommandHandlerFailed:
-		return caseCommandHandlerFailed(v.CommandHandlerFailed)
 	case *Record_EventsAppendedToStream:
 		return caseEventsAppendedToStream(v.EventsAppendedToStream)
 	default:
@@ -78,15 +70,6 @@ func (x *Record) SetCommandHandled(v *CommandHandled) *Record {
 		x = &Record{}
 	}
 	x.Operation = &Record_CommandHandled{CommandHandled: v}
-	return x
-}
-
-// SetCommandHandlerFailed sets the x.Operation field to a [Operation] value containing v, then returns x.
-func (x *Record) SetCommandHandlerFailed(v *CommandHandlerFailed) *Record {
-	if x == nil {
-		x = &Record{}
-	}
-	x.Operation = &Record_CommandHandlerFailed{CommandHandlerFailed: v}
 	return x
 }
 
@@ -141,24 +124,6 @@ func (x *CommandHandled) SetLowestPossibleEventOffset(v uint64) *CommandHandled 
 		x = &CommandHandled{}
 	}
 	x.LowestPossibleEventOffset = v
-	return x
-}
-
-// SetCommandId sets the x.CommandId field to v, then returns x.
-func (x *CommandHandlerFailed) SetCommandId(v *uuidpb.UUID) *CommandHandlerFailed {
-	if x == nil {
-		x = &CommandHandlerFailed{}
-	}
-	x.CommandId = v
-	return x
-}
-
-// SetError sets the x.Error field to v, then returns x.
-func (x *CommandHandlerFailed) SetError(v string) *CommandHandlerFailed {
-	if x == nil {
-		x = &CommandHandlerFailed{}
-	}
-	x.Error = v
 	return x
 }
 

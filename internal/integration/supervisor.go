@@ -112,10 +112,6 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 					}
 					return nil
 				},
-				func(*journalpb.CommandHandlerFailed) error {
-					// ignore
-					return nil
-				},
 				func(op *journalpb.EventsAppendedToStream) error {
 					for i, candidate := range pendingEvents {
 						if proto.Equal(candidate.GetCommandId(), op.GetCommandId()) {
@@ -178,26 +174,8 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 
 	sc := &scope{}
 
-	if handlerErr := s.Handler.HandleCommand(ctx, sc, c); handlerErr != nil {
-		if err := protojournal.Append(
-			ctx,
-			j,
-			s.pos,
-			journalpb.
-				NewRecord().
-				SetCommandHandlerFailed(
-					&journalpb.CommandHandlerFailed{
-						CommandId: cmd.GetMessageId(),
-						Error:     handlerErr.Error(),
-					},
-				),
-		); err != nil {
-			return err
-		}
-
-		s.pos++
-
-		return handlerErr
+	if err := s.Handler.HandleCommand(ctx, sc, c); err != nil {
+		return err
 	}
 
 	if err := s.handledCmds.Set(

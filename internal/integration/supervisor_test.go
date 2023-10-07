@@ -182,60 +182,6 @@ func TestSupervisor(t *testing.T) {
 				},
 			},
 			{
-				Desc: "failure before appending CommandHandlerFailed record to the journal",
-				InduceFailure: func(deps *dependencies) {
-					var done atomic.Bool
-					handle := deps.Handler.HandleCommandFunc
-
-					deps.Handler.HandleCommandFunc = func(
-						ctx context.Context,
-						s dogma.IntegrationCommandScope,
-						c dogma.Command,
-					) error {
-						if done.CompareAndSwap(false, true) {
-							return errors.New("<error>")
-						}
-						return handle(ctx, s, c)
-					}
-
-					memory.FailBeforeJournalAppend(
-						deps.Journals,
-						JournalName(deps.Supervisor.HandlerIdentity.Key),
-						func(r *journalpb.Record) bool {
-							return r.GetCommandHandlerFailed() != nil
-						},
-						errors.New("<error>"),
-					)
-				},
-			},
-			{
-				Desc: "failure after appending CommandHandlerFailed record to the journal",
-				InduceFailure: func(deps *dependencies) {
-					var done atomic.Bool
-					handle := deps.Handler.HandleCommandFunc
-
-					deps.Handler.HandleCommandFunc = func(
-						ctx context.Context,
-						s dogma.IntegrationCommandScope,
-						c dogma.Command,
-					) error {
-						if done.CompareAndSwap(false, true) {
-							return errors.New("<error>")
-						}
-						return handle(ctx, s, c)
-					}
-
-					memory.FailAfterJournalAppend(
-						deps.Journals,
-						JournalName(deps.Supervisor.HandlerIdentity.Key),
-						func(r *journalpb.Record) bool {
-							return r.GetCommandHandlerFailed() != nil
-						},
-						errors.New("<error>"),
-					)
-				},
-			},
-			{
 				Desc: "failure before events appended to stream",
 				InduceFailure: func(deps *dependencies) {
 					var done atomic.Bool

@@ -12,8 +12,7 @@ message Record {
   oneof operation {
     CommandEnqueued command_enqueued = 1;
     CommandHandled command_handled = 2;
-    CommandHandlerFailed command_handler_failed = 3;
-    EventsAppendedToStream events_appended_to_stream = 4;
+    EventsAppendedToStream events_appended_to_stream = 3;
   }
 }
 
@@ -40,16 +39,6 @@ message CommandHandled {
   // LowestPossibleEventOffset is the next offset of the stream, at the time it
   // was selected.
   uint64 lowest_possible_event_offset = 4;
-}
-
-// CommandHandlerFailed is an operation that indicates the handler returned an
-// error when attempting to handle a command.
-message CommandHandlerFailed {
-  // CommandId is the ID of the command that was being handled.
-  dogma.protobuf.UUID command_id = 1;
-
-  // Error is the message of the error that the handler returned.
-  string error = 2;
 }
 
 // EventsAppendedToStream is an operation that indicates that the events
