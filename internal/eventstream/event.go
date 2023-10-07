@@ -10,8 +10,7 @@ type Offset uint64
 
 // Event is an event message that has been recorded on a stream.
 type Event struct {
-	*envelopepb.Envelope
-
 	StreamID *uuidpb.UUID
 	Offset   Offset
+	Envelope *envelopepb.Envelope
 }
