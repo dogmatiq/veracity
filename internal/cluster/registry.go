@@ -180,12 +180,6 @@ func (r *Registrar) deleteRegistration(
 	)
 }
 
-// MembershipChanged is an event that indicates a change in membership to the
-// cluster.
-type MembershipChanged struct {
-	Registered, Deregistered []Node
-}
-
 // RegistryObserver emits events about changes to the nodes in the registry.
 type RegistryObserver struct {
 	Keyspaces         kv.Store
