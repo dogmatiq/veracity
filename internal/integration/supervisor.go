@@ -87,7 +87,7 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 		) (ok bool, err error) {
 			s.pos = pos + 1
 
-			journalpb.Switch_Record_OneOf(
+			journalpb.Switch_Record_Operation(
 				record,
 				func(rec *journalpb.CommandEnqueued) error {
 					cmd := rec.GetCommand()
@@ -174,12 +174,19 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 	sc := &scope{}
 
 	if handlerErr := s.Handler.HandleCommand(ctx, sc, c); handlerErr != nil {
-		if err := protojournal.Append(ctx, j, s.pos, &journalpb.Record{OneOf: &journalpb.Record_CommandHandlerFailed{
-			CommandHandlerFailed: &journalpb.CommandHandlerFailed{
-				CommandId: cmd.GetMessageId(),
-				Error:     handlerErr.Error(),
+		if err := protojournal.Append(
+			ctx,
+			j,
+			s.pos,
+			&journalpb.Record{
+				Operation: &journalpb.Record_CommandHandlerFailed{
+					CommandHandlerFailed: &journalpb.CommandHandlerFailed{
+						CommandId: cmd.GetMessageId(),
+						Error:     handlerErr.Error(),
+					},
+				},
 			},
-		}}); err != nil {
+		); err != nil {
 			return err
 		}
 
@@ -215,11 +222,16 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 		LowestPossibleEventOffset: uint64(s.lowestPossibleEventOffset),
 	}
 
-	if err := protojournal.Append(ctx, j, s.pos, &journalpb.Record{
-		OneOf: &journalpb.Record_CommandHandled{
-			CommandHandled: rec,
+	if err := protojournal.Append(
+		ctx,
+		j,
+		s.pos,
+		&journalpb.Record{
+			Operation: &journalpb.Record_CommandHandled{
+				CommandHandled: rec,
+			},
 		},
-	}); err != nil {
+	); err != nil {
 		return err
 	}
 	s.pos++
@@ -260,7 +272,7 @@ func (s *Supervisor) recordEvents(
 		j,
 		s.pos,
 		&journalpb.Record{
-			OneOf: &journalpb.Record_EventsAppendedToStream{
+			Operation: &journalpb.Record_EventsAppendedToStream{
 				EventsAppendedToStream: &journalpb.EventsAppendedToStream{
 					CommandId: rec.GetCommandId(),
 				},
@@ -295,7 +307,7 @@ func (s *Supervisor) handleCommandState(
 	}
 
 	rec := &journalpb.Record{
-		OneOf: &journalpb.Record_CommandEnqueued{
+		Operation: &journalpb.Record_CommandEnqueued{
 			CommandEnqueued: &journalpb.CommandEnqueued{
 				Command: ex.Request.Command,
 			},

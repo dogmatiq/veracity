@@ -11,20 +11,20 @@ import (
 	uuidpb "github.com/dogmatiq/enginekit/protobuf/uuidpb"
 )
 
-// Switch_Record_OneOf dispatches to one of the given functions based on
-// which value of the [Record] message's "OneOf" one-of group is populated.
+// Switch_Record_Operation dispatches to one of the given functions based on
+// which value of the [Record] message's "Operation" one-of group is populated.
 //
-// It panics if x.OneOf field is nil; otherwise, it returns the value
+// It panics if x.Operation field is nil; otherwise, it returns the value
 // returned by the called function. If no return value is required, use a return
 // type of [error] and always return nil.
-func Switch_Record_OneOf[T any](
+func Switch_Record_Operation[T any](
 	x *Record,
 	caseCommandEnqueued func(*CommandEnqueued) T,
 	caseCommandHandled func(*CommandHandled) T,
 	caseCommandHandlerFailed func(*CommandHandlerFailed) T,
 	caseEventsAppendedToStream func(*EventsAppendedToStream) T,
 ) T {
-	switch v := x.OneOf.(type) {
+	switch v := x.Operation.(type) {
 	case *Record_CommandEnqueued:
 		return caseCommandEnqueued(v.CommandEnqueued)
 	case *Record_CommandHandled:
@@ -34,28 +34,28 @@ func Switch_Record_OneOf[T any](
 	case *Record_EventsAppendedToStream:
 		return caseEventsAppendedToStream(v.EventsAppendedToStream)
 	default:
-		panic("Switch_Record_OneOf: x.OneOf is nil")
+		panic("Switch_Record_Operation: x.Operation is nil")
 	}
 }
 
-// SetCommandEnqueued sets the x.OneOf field to a [OneOf] value containing v
+// SetCommandEnqueued sets the x.Operation field to a [Operation] value containing v
 func (x *Record) SetCommandEnqueued(v *CommandEnqueued) {
-	x.OneOf = &Record_CommandEnqueued{CommandEnqueued: v}
+	x.Operation = &Record_CommandEnqueued{CommandEnqueued: v}
 }
 
-// SetCommandHandled sets the x.OneOf field to a [OneOf] value containing v
+// SetCommandHandled sets the x.Operation field to a [Operation] value containing v
 func (x *Record) SetCommandHandled(v *CommandHandled) {
-	x.OneOf = &Record_CommandHandled{CommandHandled: v}
+	x.Operation = &Record_CommandHandled{CommandHandled: v}
 }
 
-// SetCommandHandlerFailed sets the x.OneOf field to a [OneOf] value containing v
+// SetCommandHandlerFailed sets the x.Operation field to a [Operation] value containing v
 func (x *Record) SetCommandHandlerFailed(v *CommandHandlerFailed) {
-	x.OneOf = &Record_CommandHandlerFailed{CommandHandlerFailed: v}
+	x.Operation = &Record_CommandHandlerFailed{CommandHandlerFailed: v}
 }
 
-// SetEventsAppendedToStream sets the x.OneOf field to a [OneOf] value containing v
+// SetEventsAppendedToStream sets the x.Operation field to a [Operation] value containing v
 func (x *Record) SetEventsAppendedToStream(v *EventsAppendedToStream) {
-	x.OneOf = &Record_EventsAppendedToStream{EventsAppendedToStream: v}
+	x.Operation = &Record_EventsAppendedToStream{EventsAppendedToStream: v}
 }
 
 // SetCommand sets the x.Command field to v.
