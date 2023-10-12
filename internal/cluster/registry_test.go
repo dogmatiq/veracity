@@ -6,6 +6,7 @@ import (
 
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	. "github.com/dogmatiq/veracity/internal/cluster"
+	"github.com/dogmatiq/veracity/internal/engineevent"
 	"github.com/dogmatiq/veracity/internal/test"
 	"github.com/dogmatiq/veracity/persistence/driver/memory"
 )
@@ -17,6 +18,7 @@ func TestRegistry(t *testing.T) {
 		deps struct {
 			Node              Node
 			Registrar         *Registrar
+			EventBus          *engineevent.Bus
 			MembershipChanged chan MembershipChanged
 			Observer          *RegistryObserver
 		},
@@ -38,12 +40,16 @@ func TestRegistry(t *testing.T) {
 			Logger:        test.NewLogger(t),
 		}
 
+		deps.EventBus = &engineevent.Bus{}
+		t.Cleanup(deps.EventBus.Close)
+
 		deps.MembershipChanged = make(chan MembershipChanged)
+		engineevent.Subscribe(deps.EventBus, deps.MembershipChanged)
 
 		deps.Observer = &RegistryObserver{
-			Keyspaces:         keyspaces,
-			MembershipChanged: deps.MembershipChanged,
-			PollInterval:      50 * time.Millisecond,
+			Keyspaces:    keyspaces,
+			EventBus:     deps.EventBus,
+			PollInterval: 50 * time.Millisecond,
 		}
 
 		return deps

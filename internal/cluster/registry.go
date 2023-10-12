@@ -8,6 +8,7 @@ import (
 
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/veracity/internal/cluster/internal/registrypb"
+	"github.com/dogmatiq/veracity/internal/engineevent"
 	"github.com/dogmatiq/veracity/internal/fsm"
 	"github.com/dogmatiq/veracity/internal/protobuf/protokv"
 	"github.com/dogmatiq/veracity/internal/signaling"
@@ -182,10 +183,10 @@ func (r *Registrar) deleteRegistration(
 
 // RegistryObserver emits events about changes to the nodes in the registry.
 type RegistryObserver struct {
-	Keyspaces         kv.Store
-	MembershipChanged chan<- MembershipChanged
-	Shutdown          signaling.Latch
-	PollInterval      time.Duration
+	Keyspaces    kv.Store
+	EventBus     *engineevent.Bus
+	Shutdown     signaling.Latch
+	PollInterval time.Duration
 
 	keyspace     kv.Keyspace
 	nodes        uuidpb.Map[Node]
@@ -262,7 +263,7 @@ func (o *RegistryObserver) publishState(ctx context.Context, ev MembershipChange
 		return fsm.Stop()
 	case <-o.readyForPoll.C:
 		return fsm.EnterState(o.pollState)
-	case o.MembershipChanged <- ev:
+	case o.EventBus.Publish() <- ev:
 		for _, node := range ev.Registered {
 			o.nodes.Set(node.ID, node)
 		}
