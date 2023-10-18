@@ -94,12 +94,11 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 
 			journalpb.Switch_Record_Operation(
 				record,
-				func(op *journalpb.CommandEnqueued) error {
+				func(op *journalpb.CommandEnqueued) {
 					cmd := op.GetCommand()
 					pendingCmds = append(pendingCmds, cmd)
-					return nil
 				},
-				func(op *journalpb.CommandHandled) error {
+				func(op *journalpb.CommandHandled) {
 					cmdID := op.GetCommandId()
 					for i, cmd := range pendingCmds {
 						if proto.Equal(cmd.GetMessageId(), cmdID) {
@@ -110,16 +109,14 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 					if len(op.GetEvents()) > 0 {
 						pendingEvents = append(pendingEvents, op)
 					}
-					return nil
 				},
-				func(op *journalpb.EventsAppendedToStream) error {
+				func(op *journalpb.EventsAppendedToStream) {
 					for i, candidate := range pendingEvents {
 						if proto.Equal(candidate.GetCommandId(), op.GetCommandId()) {
 							pendingEvents = slices.Delete(pendingEvents, i, i+1)
 							break
 						}
 					}
-					return nil
 				},
 			)
 
@@ -210,8 +207,9 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 		j,
 		s.pos,
 		journalpb.
-			NewRecord().
-			SetCommandHandled(op),
+			NewRecordBuilder().
+			WithCommandHandled(op).
+			Build(),
 	); err != nil {
 		return err
 	}
@@ -253,12 +251,13 @@ func (s *Supervisor) recordEvents(
 		j,
 		s.pos,
 		journalpb.
-			NewRecord().
-			SetEventsAppendedToStream(
+			NewRecordBuilder().
+			WithEventsAppendedToStream(
 				&journalpb.EventsAppendedToStream{
 					CommandId: op.GetCommandId(),
 				},
-			),
+			).
+			Build(),
 	); err != nil {
 		return err
 	}
@@ -292,12 +291,13 @@ func (s *Supervisor) handleCommandState(
 		s.journal,
 		s.pos,
 		journalpb.
-			NewRecord().
-			SetCommandEnqueued(
+			NewRecordBuilder().
+			WithCommandEnqueued(
 				&journalpb.CommandEnqueued{
 					Command: ex.Request.Command,
 				},
-			),
+			).
+			Build(),
 	); err != nil {
 		ex.Err(err)
 		return fsm.Fail(err)

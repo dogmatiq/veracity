@@ -176,14 +176,13 @@ func (w *worker) appendEvents(
 		w.Journal,
 		w.pos,
 		journalpb.
-			NewRecord().
-			SetStreamOffsetBefore(uint64(before)).
-			SetStreamOffsetAfter(uint64(after)).
-			SetEventsAppended(
-				&journalpb.EventsAppended{
-					Events: req.Events,
-				},
-			),
+			NewRecordBuilder().
+			WithStreamOffsetBefore(uint64(before)).
+			WithStreamOffsetAfter(uint64(after)).
+			WithEventsAppended(&journalpb.EventsAppended{
+				Events: req.Events,
+			}).
+			Build(),
 	); err != nil {
 		return AppendResponse{}, err
 	}

@@ -8,23 +8,118 @@ package journalpb
 
 import envelopepb "github.com/dogmatiq/enginekit/protobuf/envelopepb"
 
-// NewRecord returns a new [Record].
-func NewRecord() *Record {
-	return &Record{}
+type RecordBuilder struct {
+	prototype Record
 }
 
-// NewEventsAppended returns a new [EventsAppended].
-func NewEventsAppended() *EventsAppended {
-	return &EventsAppended{}
+// NewRecordBuilder returns a builder that constructs [Record] messages.
+func NewRecordBuilder() *RecordBuilder {
+	return &RecordBuilder{}
 }
 
-// Switch_Record_Operation dispatches to one of the given functions based on
-// which value of the [Record] message's "Operation" one-of group is populated.
+// From configures the builder to use x as the prototype for new messages,
+// then returns b.
 //
-// It panics if x.Operation field is nil; otherwise, it returns the value
-// returned by the called function. If no return value is required, use a return
-// type of [error] and always return nil.
-func Switch_Record_Operation[T any](
+// It performs a shallow copy of x, such that any changes made via the builder
+// do not modify x. It does not make a copy of the field values themselves.
+func (b *RecordBuilder) From(x *Record) *RecordBuilder {
+	b.prototype.StreamOffsetBefore = x.StreamOffsetBefore
+	b.prototype.StreamOffsetAfter = x.StreamOffsetAfter
+	b.prototype.Operation = x.Operation
+	return b
+}
+
+// Build returns a new [Record] containing the values configured via the builder.
+//
+// Each call returns a new message, such that future changes to the builder do
+// not modify previously constructed messages.
+func (b *RecordBuilder) Build() *Record {
+	return &Record{
+		StreamOffsetBefore: b.prototype.StreamOffsetBefore,
+		StreamOffsetAfter:  b.prototype.StreamOffsetAfter,
+		Operation:          b.prototype.Operation,
+	}
+}
+
+// WithStreamOffsetBefore configures the builder to set the StreamOffsetBefore field to v,
+// then returns b.
+func (b *RecordBuilder) WithStreamOffsetBefore(v uint64) *RecordBuilder {
+	b.prototype.StreamOffsetBefore = v
+	return b
+}
+
+// WithStreamOffsetAfter configures the builder to set the StreamOffsetAfter field to v,
+// then returns b.
+func (b *RecordBuilder) WithStreamOffsetAfter(v uint64) *RecordBuilder {
+	b.prototype.StreamOffsetAfter = v
+	return b
+}
+
+// WithEventsAppended configures the builder to set the Operation field to a
+// [Record_EventsAppended] value containing v, then returns b
+func (b *RecordBuilder) WithEventsAppended(v *EventsAppended) *RecordBuilder {
+	b.prototype.Operation = &Record_EventsAppended{EventsAppended: v}
+	return b
+}
+
+type EventsAppendedBuilder struct {
+	prototype EventsAppended
+}
+
+// NewEventsAppendedBuilder returns a builder that constructs [EventsAppended] messages.
+func NewEventsAppendedBuilder() *EventsAppendedBuilder {
+	return &EventsAppendedBuilder{}
+}
+
+// From configures the builder to use x as the prototype for new messages,
+// then returns b.
+//
+// It performs a shallow copy of x, such that any changes made via the builder
+// do not modify x. It does not make a copy of the field values themselves.
+func (b *EventsAppendedBuilder) From(x *EventsAppended) *EventsAppendedBuilder {
+	b.prototype.Events = x.Events
+	return b
+}
+
+// Build returns a new [EventsAppended] containing the values configured via the builder.
+//
+// Each call returns a new message, such that future changes to the builder do
+// not modify previously constructed messages.
+func (b *EventsAppendedBuilder) Build() *EventsAppended {
+	return &EventsAppended{
+		Events: b.prototype.Events,
+	}
+}
+
+// WithEvents configures the builder to set the Events field to v,
+// then returns b.
+func (b *EventsAppendedBuilder) WithEvents(v []*envelopepb.Envelope) *EventsAppendedBuilder {
+	b.prototype.Events = v
+	return b
+}
+
+// Switch_Record_Operation invokes one of the given functions based on
+// the value of x.Operation.
+//
+// It panics if x.Operation is nil.
+func Switch_Record_Operation(
+	x *Record,
+	caseEventsAppended func(*EventsAppended),
+) {
+	switch v := x.Operation.(type) {
+	case *Record_EventsAppended:
+		caseEventsAppended(v.EventsAppended)
+	default:
+		panic("Switch_Record_Operation: x.Operation is nil")
+	}
+}
+
+// Map_Record_Operation maps x.Operation to a value of type T by invoking
+// one of the given functions.
+//
+// It invokes the function that corresponds to the value of x.Operation,
+// and returns that function's result. It panics if x.Operation is nil.
+func Map_Record_Operation[T any](
 	x *Record,
 	caseEventsAppended func(*EventsAppended) T,
 ) T {
@@ -32,42 +127,27 @@ func Switch_Record_Operation[T any](
 	case *Record_EventsAppended:
 		return caseEventsAppended(v.EventsAppended)
 	default:
-		panic("Switch_Record_Operation: x.Operation is nil")
+		panic("Map_Record_Operation: x.Operation is nil")
 	}
 }
 
 // SetStreamOffsetBefore sets the x.StreamOffsetBefore field to v, then returns x.
-func (x *Record) SetStreamOffsetBefore(v uint64) *Record {
-	if x == nil {
-		x = &Record{}
-	}
+func (x *Record) SetStreamOffsetBefore(v uint64) {
 	x.StreamOffsetBefore = v
-	return x
 }
 
 // SetStreamOffsetAfter sets the x.StreamOffsetAfter field to v, then returns x.
-func (x *Record) SetStreamOffsetAfter(v uint64) *Record {
-	if x == nil {
-		x = &Record{}
-	}
+func (x *Record) SetStreamOffsetAfter(v uint64) {
 	x.StreamOffsetAfter = v
-	return x
 }
 
-// SetEventsAppended sets the x.Operation field to a [Operation] value containing v, then returns x.
-func (x *Record) SetEventsAppended(v *EventsAppended) *Record {
-	if x == nil {
-		x = &Record{}
-	}
+// SetEventsAppended sets the x.Operation field to a [Record_EventsAppended] value containing v,
+// then returns x.
+func (x *Record) SetEventsAppended(v *EventsAppended) {
 	x.Operation = &Record_EventsAppended{EventsAppended: v}
-	return x
 }
 
 // SetEvents sets the x.Events field to v, then returns x.
-func (x *EventsAppended) SetEvents(v []*envelopepb.Envelope) *EventsAppended {
-	if x == nil {
-		x = &EventsAppended{}
-	}
+func (x *EventsAppended) SetEvents(v []*envelopepb.Envelope) {
 	x.Events = v
-	return x
 }

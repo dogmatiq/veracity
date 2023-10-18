@@ -11,48 +11,112 @@ import (
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// NewNode returns a new [Node].
-func NewNode() *Node {
-	return &Node{}
+type NodeBuilder struct {
+	prototype Node
 }
 
-// NewRegistration returns a new [Registration].
-func NewRegistration() *Registration {
-	return &Registration{}
+// NewNodeBuilder returns a builder that constructs [Node] messages.
+func NewNodeBuilder() *NodeBuilder {
+	return &NodeBuilder{}
+}
+
+// From configures the builder to use x as the prototype for new messages,
+// then returns b.
+//
+// It performs a shallow copy of x, such that any changes made via the builder
+// do not modify x. It does not make a copy of the field values themselves.
+func (b *NodeBuilder) From(x *Node) *NodeBuilder {
+	b.prototype.Id = x.Id
+	b.prototype.Addresses = x.Addresses
+	return b
+}
+
+// Build returns a new [Node] containing the values configured via the builder.
+//
+// Each call returns a new message, such that future changes to the builder do
+// not modify previously constructed messages.
+func (b *NodeBuilder) Build() *Node {
+	return &Node{
+		Id:        b.prototype.Id,
+		Addresses: b.prototype.Addresses,
+	}
+}
+
+// WithId configures the builder to set the Id field to v,
+// then returns b.
+func (b *NodeBuilder) WithId(v *uuidpb.UUID) *NodeBuilder {
+	b.prototype.Id = v
+	return b
+}
+
+// WithAddresses configures the builder to set the Addresses field to v,
+// then returns b.
+func (b *NodeBuilder) WithAddresses(v []string) *NodeBuilder {
+	b.prototype.Addresses = v
+	return b
+}
+
+type RegistrationBuilder struct {
+	prototype Registration
+}
+
+// NewRegistrationBuilder returns a builder that constructs [Registration] messages.
+func NewRegistrationBuilder() *RegistrationBuilder {
+	return &RegistrationBuilder{}
+}
+
+// From configures the builder to use x as the prototype for new messages,
+// then returns b.
+//
+// It performs a shallow copy of x, such that any changes made via the builder
+// do not modify x. It does not make a copy of the field values themselves.
+func (b *RegistrationBuilder) From(x *Registration) *RegistrationBuilder {
+	b.prototype.Node = x.Node
+	b.prototype.ExpiresAt = x.ExpiresAt
+	return b
+}
+
+// Build returns a new [Registration] containing the values configured via the builder.
+//
+// Each call returns a new message, such that future changes to the builder do
+// not modify previously constructed messages.
+func (b *RegistrationBuilder) Build() *Registration {
+	return &Registration{
+		Node:      b.prototype.Node,
+		ExpiresAt: b.prototype.ExpiresAt,
+	}
+}
+
+// WithNode configures the builder to set the Node field to v,
+// then returns b.
+func (b *RegistrationBuilder) WithNode(v *Node) *RegistrationBuilder {
+	b.prototype.Node = v
+	return b
+}
+
+// WithExpiresAt configures the builder to set the ExpiresAt field to v,
+// then returns b.
+func (b *RegistrationBuilder) WithExpiresAt(v *timestamppb.Timestamp) *RegistrationBuilder {
+	b.prototype.ExpiresAt = v
+	return b
 }
 
 // SetId sets the x.Id field to v, then returns x.
-func (x *Node) SetId(v *uuidpb.UUID) *Node {
-	if x == nil {
-		x = &Node{}
-	}
+func (x *Node) SetId(v *uuidpb.UUID) {
 	x.Id = v
-	return x
 }
 
 // SetAddresses sets the x.Addresses field to v, then returns x.
-func (x *Node) SetAddresses(v []string) *Node {
-	if x == nil {
-		x = &Node{}
-	}
+func (x *Node) SetAddresses(v []string) {
 	x.Addresses = v
-	return x
 }
 
 // SetNode sets the x.Node field to v, then returns x.
-func (x *Registration) SetNode(v *Node) *Registration {
-	if x == nil {
-		x = &Registration{}
-	}
+func (x *Registration) SetNode(v *Node) {
 	x.Node = v
-	return x
 }
 
 // SetExpiresAt sets the x.ExpiresAt field to v, then returns x.
-func (x *Registration) SetExpiresAt(v *timestamppb.Timestamp) *Registration {
-	if x == nil {
-		x = &Registration{}
-	}
+func (x *Registration) SetExpiresAt(v *timestamppb.Timestamp) {
 	x.ExpiresAt = v
-	return x
 }
