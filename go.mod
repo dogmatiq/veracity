@@ -6,7 +6,7 @@ toolchain go1.21.1
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.23.0
-	github.com/aws/aws-sdk-go-v2/config v1.25.2
+	github.com/aws/aws-sdk-go-v2/config v1.25.3
 	github.com/aws/aws-sdk-go-v2/credentials v1.16.2
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.25.2
 	github.com/cespare/xxhash/v2 v2.2.0
