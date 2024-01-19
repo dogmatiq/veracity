@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.16.16
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.26.9
 	github.com/cespare/xxhash/v2 v2.2.0
-	github.com/dogmatiq/configkit v0.12.1
+	github.com/dogmatiq/configkit v0.12.2
 	github.com/dogmatiq/discoverkit v0.1.2
 	github.com/dogmatiq/dogma v0.12.1
 	github.com/dogmatiq/enginekit v0.0.0-20230922231755-43a18006bf1c
@@ -44,7 +44,7 @@ require (
 	github.com/aws/smithy-go v1.19.0 // indirect
 	github.com/dogmatiq/cosyne v0.2.0 // indirect
 	github.com/dogmatiq/iago v0.4.0 // indirect
-	github.com/dogmatiq/interopspec v0.5.2 // indirect
+	github.com/dogmatiq/interopspec v0.5.3 // indirect
 	github.com/dogmatiq/linger v1.1.0 // indirect
 	github.com/dogmatiq/projectionkit v0.6.5 // indirect
 	github.com/fxamacker/cbor/v2 v2.4.0 // indirect
@@ -52,7 +52,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-sql-driver/mysql v1.5.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
-	github.com/google/uuid v1.3.1 // indirect
+	github.com/google/uuid v1.5.0 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
 	github.com/jackc/pgconn v1.8.0 // indirect
 	github.com/jackc/pgio v1.0.0 // indirect
@@ -68,9 +68,9 @@ require (
 	github.com/rivo/uniseg v0.4.4 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.17.0 // indirect
-	golang.org/x/net v0.17.0 // indirect
-	golang.org/x/sys v0.15.0 // indirect
+	golang.org/x/crypto v0.18.0 // indirect
+	golang.org/x/net v0.20.0 // indirect
+	golang.org/x/sys v0.16.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231002182017-d307bd883b97 // indirect
