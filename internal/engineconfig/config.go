@@ -72,6 +72,9 @@ func New[Option ~func(*Config)](
 			context.Background(),
 			applicationVisitor{
 				Config: &c,
+				EventCoordinator: &EventCoordinator{
+					StreamID: uuidpb.Generate(),
+				},
 			},
 		)
 

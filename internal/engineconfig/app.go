@@ -14,10 +14,13 @@ import (
 	"github.com/dogmatiq/marshalkit/codec/protobuf"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/integration"
+	"github.com/dogmatiq/veracity/internal/projection"
 )
 
 type applicationVisitor struct {
 	*Config
+
+	EventCoordinator *EventCoordinator
 
 	marshaler marshalkit.ValueMarshaler
 	packer    *envelope.Packer
@@ -65,6 +68,7 @@ func (c applicationVisitor) VisitRichIntegration(_ context.Context, cfg configki
 		HandlerIdentity: marshalIdentity(cfg.Identity()),
 		Journals:        c.Persistence.Journals,
 		Packer:          c.packer,
+		EventRecorder:   c.EventCoordinator,
 	}
 
 	exec := &integration.CommandExecutor{
@@ -85,7 +89,16 @@ func (c applicationVisitor) VisitRichIntegration(_ context.Context, cfg configki
 	return nil
 }
 
-func (c applicationVisitor) VisitRichProjection(context.Context, configkit.RichProjection) error {
+func (c applicationVisitor) VisitRichProjection(ctx context.Context, cfg configkit.RichProjection) error {
+	sup := &projection.Supervisor{
+		Handler:       cfg.Handler(),
+		Packer:        c.packer,
+		EventConsumer: c.EventCoordinator,
+		StreamIDs:     []*uuidpb.UUID{c.EventCoordinator.StreamID},
+	}
+
+	c.Tasks = append(c.Tasks, sup.Run)
+
 	return nil
 }
 
