@@ -2,6 +2,7 @@ package engineconfig
 
 import (
 	"context"
+	"errors"
 
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/veracity/internal/eventstream"
@@ -9,6 +10,8 @@ import (
 
 // EventCoordinator is a test implementation for appending and consuming events.
 type EventCoordinator struct {
+	StreamID *uuidpb.UUID
+
 	events []eventstream.Event
 }
 
@@ -39,7 +42,7 @@ func (c *EventCoordinator) AppendEvents(
 func (c *EventCoordinator) SelectEventStream(
 	ctx context.Context,
 ) (streamID *uuidpb.UUID, offset eventstream.Offset, err error) {
-	return uuidpb.Generate(), 0, nil
+	return c.StreamID, eventstream.Offset(len(c.events)), nil
 }
 
 // Consume consumes from an event stream.
@@ -49,5 +52,13 @@ func (c *EventCoordinator) Consume(
 	offset eventstream.Offset,
 	events chan<- eventstream.Event,
 ) error {
-	panic("not implemented")
+	if len(c.events) <= int(offset) {
+		return errors.New("invalid offset")
+	}
+
+	for _, event := range c.events[offset:] {
+		events <- event
+	}
+
+	return nil
 }
