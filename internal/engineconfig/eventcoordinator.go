@@ -2,7 +2,7 @@ package engineconfig
 
 import (
 	"context"
-	"errors"
+	"fmt"
 
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/veracity/internal/eventstream"
@@ -24,7 +24,7 @@ func (c *EventCoordinator) AppendEvents(
 	endOffset := beginOffset + 1
 	for _, env := range req.Events {
 		c.events = append(c.events, eventstream.Event{
-			StreamID: req.StreamID,
+			StreamID: c.StreamID,
 			Offset:   eventstream.Offset(endOffset),
 			Envelope: env,
 		})
@@ -52,8 +52,8 @@ func (c *EventCoordinator) Consume(
 	offset eventstream.Offset,
 	events chan<- eventstream.Event,
 ) error {
-	if len(c.events) <= int(offset) {
-		return errors.New("invalid offset")
+	if len(c.events) < int(offset) {
+		return fmt.Errorf("invalid offset %d", offset)
 	}
 
 	for _, event := range c.events[offset:] {
