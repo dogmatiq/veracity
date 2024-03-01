@@ -13,6 +13,8 @@ type EventCoordinator struct {
 	StreamID *uuidpb.UUID
 
 	events []eventstream.Event
+
+	newEventsOffset chan int
 }
 
 // AppendEvents appends events.
@@ -29,6 +31,9 @@ func (c *EventCoordinator) AppendEvents(
 			Envelope: env,
 		})
 		endOffset++
+	}
+	if len(req.Events) > 0 {
+		c.newEventsOffset <- endOffset
 	}
 
 	return eventstream.AppendResponse{
@@ -55,10 +60,14 @@ func (c *EventCoordinator) Consume(
 	if len(c.events) < int(offset) {
 		return fmt.Errorf("invalid offset %d", offset)
 	}
-
-	for _, event := range c.events[offset:] {
-		events <- event
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case newOffset := <-c.newEventsOffset:
+			for _, event := range c.events[len(c.events)-newOffset:] {
+				events <- event
+			}
+		}
 	}
-
-	return nil
 }
