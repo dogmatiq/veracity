@@ -100,9 +100,8 @@ func (r TaskRunner) RepeatedlyUntilSuccess() *Task {
 					return err
 				} else if err == nil {
 					return nil
-				} else {
-					r.t.Logf("restarting %q because it returned an error: %s", r.name, err)
 				}
+				r.t.Logf("restarting %q because it returned an error: %s", r.name, err)
 			}
 		},
 		func(err error) {

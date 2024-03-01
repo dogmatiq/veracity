@@ -5,10 +5,10 @@ import (
 	"errors"
 
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
+	"github.com/dogmatiq/persistencekit/journal"
 	"github.com/dogmatiq/veracity/internal/fsm"
 	"github.com/dogmatiq/veracity/internal/messaging"
 	"github.com/dogmatiq/veracity/internal/signaling"
-	"github.com/dogmatiq/veracity/persistence/journal"
 	"golang.org/x/exp/slog"
 )
 

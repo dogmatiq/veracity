@@ -4,12 +4,12 @@ import (
 	"context"
 	"time"
 
+	"github.com/dogmatiq/persistencekit/journal"
 	"github.com/dogmatiq/veracity/internal/eventstream/internal/journalpb"
 	"github.com/dogmatiq/veracity/internal/fsm"
 	"github.com/dogmatiq/veracity/internal/messaging"
 	"github.com/dogmatiq/veracity/internal/protobuf/protojournal"
 	"github.com/dogmatiq/veracity/internal/signaling"
-	"github.com/dogmatiq/veracity/persistence/journal"
 	"golang.org/x/exp/slog"
 )
 

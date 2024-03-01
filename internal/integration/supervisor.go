@@ -7,6 +7,8 @@ import (
 	"github.com/dogmatiq/enginekit/protobuf/envelopepb"
 	"github.com/dogmatiq/enginekit/protobuf/identitypb"
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
+	"github.com/dogmatiq/persistencekit/journal"
+	"github.com/dogmatiq/persistencekit/kv"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/eventstream"
 	"github.com/dogmatiq/veracity/internal/fsm"
@@ -14,8 +16,6 @@ import (
 	"github.com/dogmatiq/veracity/internal/messaging"
 	"github.com/dogmatiq/veracity/internal/protobuf/protojournal"
 	"github.com/dogmatiq/veracity/internal/signaling"
-	"github.com/dogmatiq/veracity/persistence/journal"
-	"github.com/dogmatiq/veracity/persistence/kv"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 )

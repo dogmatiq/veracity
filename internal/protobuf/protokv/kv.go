@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/dogmatiq/persistencekit/kv"
 	"github.com/dogmatiq/veracity/internal/protobuf/typedproto"
-	"github.com/dogmatiq/veracity/persistence/kv"
 	"google.golang.org/protobuf/proto"
 )
 

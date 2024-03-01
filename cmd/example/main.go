@@ -7,16 +7,17 @@ import (
 	"syscall"
 
 	"github.com/dogmatiq/example"
+	"github.com/dogmatiq/persistencekit/driver/memory/memoryjournal"
+	"github.com/dogmatiq/persistencekit/driver/memory/memorykv"
 	"github.com/dogmatiq/veracity"
-	"github.com/dogmatiq/veracity/persistence/driver/memory"
 	"golang.org/x/exp/slog"
 )
 
 func main() {
 	e := veracity.New(
 		&example.App{},
-		veracity.WithJournalStore(&memory.JournalStore{}),
-		veracity.WithKeyValueStore(&memory.KeyValueStore{}),
+		veracity.WithJournalStore(&memoryjournal.Store{}),
+		veracity.WithKeyValueStore(&memorykv.Store{}),
 		veracity.WithLogger(
 			slog.New(
 				slog.NewJSONHandler(

@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/dogmatiq/persistencekit/journal"
 	"github.com/dogmatiq/veracity/internal/protobuf/typedproto"
-	"github.com/dogmatiq/veracity/persistence/journal"
 	"google.golang.org/protobuf/proto"
 )
 

@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
+	"github.com/dogmatiq/persistencekit/driver/memory/memorykv"
 	. "github.com/dogmatiq/veracity/internal/cluster"
 	"github.com/dogmatiq/veracity/internal/test"
-	"github.com/dogmatiq/veracity/persistence/driver/memory"
 )
 
 func TestRegistry(t *testing.T) {
@@ -21,7 +21,7 @@ func TestRegistry(t *testing.T) {
 			Observer          *RegistryObserver
 		},
 	) {
-		keyspaces := &memory.KeyValueStore{}
+		keyspaces := &memorykv.Store{}
 
 		deps.Node = Node{
 			ID: uuidpb.Generate(),

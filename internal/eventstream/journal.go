@@ -4,9 +4,9 @@ import (
 	"context"
 
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
+	"github.com/dogmatiq/persistencekit/journal"
 	"github.com/dogmatiq/veracity/internal/eventstream/internal/journalpb"
 	"github.com/dogmatiq/veracity/internal/protobuf/protojournal"
-	"github.com/dogmatiq/veracity/persistence/journal"
 )
 
 // JournalName returns the name of the journal that contains the state
@@ -27,8 +27,7 @@ func searchByOffset(off Offset) protojournal.CompareFunc[*journalpb.Record] {
 			return +1, nil
 		} else if rec.StreamOffsetAfter <= uint64(off) {
 			return -1, nil
-		} else {
-			return 0, nil
 		}
+		return 0, nil
 	}
 }

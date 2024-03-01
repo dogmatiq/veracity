@@ -10,27 +10,27 @@ import (
 	"github.com/dogmatiq/enginekit/protobuf/identitypb"
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	. "github.com/dogmatiq/marshalkit/fixtures"
+	"github.com/dogmatiq/persistencekit/driver/memory/memoryjournal"
+	"github.com/dogmatiq/persistencekit/journal"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	. "github.com/dogmatiq/veracity/internal/eventstream"
 	"github.com/dogmatiq/veracity/internal/eventstream/internal/journalpb"
 	"github.com/dogmatiq/veracity/internal/protobuf/protojournal"
 	"github.com/dogmatiq/veracity/internal/test"
-	"github.com/dogmatiq/veracity/persistence/driver/memory"
-	"github.com/dogmatiq/veracity/persistence/journal"
 )
 
 func TestAppend(t *testing.T) {
 	t.Parallel()
 
 	type dependencies struct {
-		Journals   *memory.JournalStore
+		Journals   *memoryjournal.Store
 		Supervisor *Supervisor
 		Events     <-chan Event
 		Packer     *envelope.Packer
 	}
 
 	setup := func(t test.TestingT) (deps dependencies) {
-		deps.Journals = &memory.JournalStore{}
+		deps.Journals = &memoryjournal.Store{}
 
 		events := make(chan Event, 100)
 
@@ -67,7 +67,7 @@ func TestAppend(t *testing.T) {
 			{
 				Desc: "failure to open journal",
 				InduceFailure: func(deps *dependencies) {
-					memory.FailOnJournalOpen(
+					test.FailOnJournalOpen(
 						deps.Journals,
 						JournalName(streamID),
 						errors.New("<error>"),
@@ -77,7 +77,7 @@ func TestAppend(t *testing.T) {
 			{
 				Desc: "failure before appending to journal",
 				InduceFailure: func(deps *dependencies) {
-					memory.FailBeforeJournalAppend(
+					test.FailBeforeJournalAppend(
 						deps.Journals,
 						JournalName(streamID),
 						func(*journalpb.Record) bool {
@@ -90,7 +90,7 @@ func TestAppend(t *testing.T) {
 			{
 				Desc: "failure after appending to journal",
 				InduceFailure: func(deps *dependencies) {
-					memory.FailAfterJournalAppend(
+					test.FailAfterJournalAppend(
 						deps.Journals,
 						JournalName(streamID),
 						func(*journalpb.Record) bool {

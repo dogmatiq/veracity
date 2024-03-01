@@ -9,9 +9,9 @@ import (
 	"github.com/dogmatiq/enginekit/protobuf/identitypb"
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/ferrite"
+	"github.com/dogmatiq/persistencekit/journal"
+	"github.com/dogmatiq/persistencekit/kv"
 	"github.com/dogmatiq/veracity/internal/telemetry"
-	"github.com/dogmatiq/veracity/persistence/journal"
-	"github.com/dogmatiq/veracity/persistence/kv"
 	"google.golang.org/grpc"
 )
 

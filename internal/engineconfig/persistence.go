@@ -4,9 +4,9 @@ import (
 	"net/url"
 
 	"github.com/dogmatiq/ferrite"
+	"github.com/dogmatiq/persistencekit/journal"
+	"github.com/dogmatiq/persistencekit/kv"
 	"github.com/dogmatiq/veracity/internal/telemetry/instrumentedpersistence"
-	"github.com/dogmatiq/veracity/persistence/journal"
-	"github.com/dogmatiq/veracity/persistence/kv"
 )
 
 // journalStoreDSN is the DSN describing which journal store to use.
@@ -20,12 +20,12 @@ var keyValueStoreDSN = ferrite.
 	Optional(ferrite.WithRegistry(FerriteRegistry))
 
 // journalStoreFromDSN returns the journal store described by the given DSN.
-func journalStoreFromDSN(dsn *url.URL) journal.Store {
+func journalStoreFromDSN(*url.URL) journal.Store {
 	panic("not implemented")
 }
 
 // keyValueStoreFromDSN returns the key/value store described by the given DSN.
-func keyValueStoreFromDSN(dsn *url.URL) kv.Store {
+func keyValueStoreFromDSN(*url.URL) kv.Store {
 	panic("not implemented")
 }
 

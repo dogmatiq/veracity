@@ -1,9 +1,9 @@
-package memory
+package test
 
 import (
-	"context"
 	"errors"
-	"sync"
+
+	"github.com/dogmatiq/persistencekit/driver/memory/memorykv"
 )
 
 // FailBeforeKeyspaceSet configures the keyspace with the given name to return
@@ -12,22 +12,11 @@ import (
 //
 // The error is returned before the set is actually performed.
 func FailBeforeKeyspaceSet(
-	s *KeyValueStore,
+	s *memorykv.Store,
 	name string,
 	pred func(k, v []byte) bool,
 ) {
-	j, err := s.Open(context.Background(), name)
-	if err != nil {
-		panic(err)
-	}
-	defer j.Close()
-
-	h := j.(*keyspaceHandle)
-
-	h.state.Lock()
-	defer h.state.Unlock()
-
-	h.state.BeforeSet = failSetOnce(pred)
+	s.BeforeSet = failSetOnce(name, pred)
 }
 
 // FailAfterKeyspaceSet configures the keyspace with the given name to return an
@@ -36,34 +25,28 @@ func FailBeforeKeyspaceSet(
 //
 // The error is returned after the set is actually performed.
 func FailAfterKeyspaceSet(
-	s *KeyValueStore,
+	s *memorykv.Store,
 	name string,
 	pred func(k, v []byte) bool,
 ) {
-	j, err := s.Open(context.Background(), name)
-	if err != nil {
-		panic(err)
-	}
-	defer j.Close()
-
-	h := j.(*keyspaceHandle)
-
-	h.state.Lock()
-	defer h.state.Unlock()
-
-	h.state.AfterSet = failSetOnce(pred)
+	s.AfterSet = failSetOnce(name, pred)
 }
 
-func failSetOnce(pred func(k, v []byte) bool) func(k, v []byte) error {
-	var once sync.Once
+func failSetOnce(
+	name string,
+	pred func(k, v []byte) bool,
+) func(ks string, k, v []byte) error {
+	fail := FailOnce(errors.New("<error>"))
 
-	return func(k, v []byte) (err error) {
-		if pred(k, v) {
-			once.Do(func() {
-				err = errors.New("<error>")
-			})
+	return func(ks string, k, v []byte) error {
+		if ks != name {
+			return nil
 		}
 
-		return err
+		if pred(k, v) {
+			return fail()
+		}
+
+		return nil
 	}
 }

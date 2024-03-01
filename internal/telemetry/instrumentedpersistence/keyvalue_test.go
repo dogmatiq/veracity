@@ -3,13 +3,13 @@ package instrumentedpersistence_test
 import (
 	"testing"
 
+	"github.com/dogmatiq/persistencekit/driver/memory/memorykv"
+	"github.com/dogmatiq/persistencekit/kv"
 	"github.com/dogmatiq/veracity/internal/telemetry"
 	. "github.com/dogmatiq/veracity/internal/telemetry/instrumentedpersistence"
 	"github.com/dogmatiq/veracity/internal/test"
-	"github.com/dogmatiq/veracity/persistence/driver/memory"
-	"github.com/dogmatiq/veracity/persistence/kv"
-	"go.opentelemetry.io/otel/metric/noop"
-	"go.opentelemetry.io/otel/trace"
+	noopmetric "go.opentelemetry.io/otel/metric/noop"
+	nooptrace "go.opentelemetry.io/otel/trace/noop"
 )
 
 func TestKeyValueStore(t *testing.T) {
@@ -17,10 +17,10 @@ func TestKeyValueStore(t *testing.T) {
 		t,
 		func(t *testing.T) kv.Store {
 			return &KeyValueStore{
-				Next: &memory.KeyValueStore{},
+				Next: &memorykv.Store{},
 				Telemetry: &telemetry.Provider{
-					TracerProvider: trace.NewNoopTracerProvider(),
-					MeterProvider:  noop.NewMeterProvider(),
+					TracerProvider: nooptrace.NewTracerProvider(),
+					MeterProvider:  noopmetric.NewMeterProvider(),
 					Logger:         test.NewLogger(t),
 				},
 			}

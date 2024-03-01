@@ -2,9 +2,9 @@ package veracity
 
 import (
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
+	"github.com/dogmatiq/persistencekit/journal"
+	"github.com/dogmatiq/persistencekit/kv"
 	"github.com/dogmatiq/veracity/internal/engineconfig"
-	"github.com/dogmatiq/veracity/persistence/journal"
-	"github.com/dogmatiq/veracity/persistence/kv"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/exp/slog"

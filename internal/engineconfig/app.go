@@ -51,16 +51,15 @@ func (c applicationVisitor) VisitRichApplication(ctx context.Context, cfg config
 	return cfg.RichHandlers().AcceptRichVisitor(ctx, c)
 }
 
-func (c applicationVisitor) VisitRichAggregate(ctx context.Context, cfg configkit.RichAggregate) error {
+func (c applicationVisitor) VisitRichAggregate(context.Context, configkit.RichAggregate) error {
 	return nil
 }
 
-func (c applicationVisitor) VisitRichProcess(ctx context.Context, cfg configkit.RichProcess) error {
+func (c applicationVisitor) VisitRichProcess(context.Context, configkit.RichProcess) error {
 	return nil
 }
 
-func (c applicationVisitor) VisitRichIntegration(ctx context.Context, cfg configkit.RichIntegration) error {
-
+func (c applicationVisitor) VisitRichIntegration(_ context.Context, cfg configkit.RichIntegration) error {
 	sup := &integration.Supervisor{
 		Handler:         cfg.Handler(),
 		HandlerIdentity: marshalIdentity(cfg.Identity()),
@@ -86,7 +85,7 @@ func (c applicationVisitor) VisitRichIntegration(ctx context.Context, cfg config
 	return nil
 }
 
-func (c applicationVisitor) VisitRichProjection(ctx context.Context, cfg configkit.RichProjection) error {
+func (c applicationVisitor) VisitRichProjection(context.Context, configkit.RichProjection) error {
 	return nil
 }
 

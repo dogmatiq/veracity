@@ -3,8 +3,8 @@ package instrumentedpersistence
 import (
 	"context"
 
+	"github.com/dogmatiq/persistencekit/kv"
 	"github.com/dogmatiq/veracity/internal/telemetry"
-	"github.com/dogmatiq/veracity/persistence/kv"
 	"go.opentelemetry.io/otel/metric"
 )
 
