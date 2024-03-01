@@ -8,13 +8,31 @@ import (
 )
 
 // EventCoordinator is a test implementation for appending and consuming events.
-type EventCoordinator struct{}
+type EventCoordinator struct {
+	events []eventstream.Event
+}
 
 // AppendEvents appends events.
 func (c *EventCoordinator) AppendEvents(
 	ctx context.Context,
 	req eventstream.AppendRequest,
 ) (eventstream.AppendResponse, error) {
+	beginOffset := len(c.events)
+	endOffset := beginOffset + 1
+	for _, env := range req.Events {
+		c.events = append(c.events, eventstream.Event{
+			StreamID: req.StreamID,
+			Offset:   eventstream.Offset(endOffset),
+			Envelope: env,
+		})
+		endOffset++
+	}
+
+	return eventstream.AppendResponse{
+		BeginOffset:            eventstream.Offset(beginOffset),
+		EndOffset:              eventstream.Offset(endOffset),
+		AppendedByPriorAttempt: false,
+	}, nil
 }
 
 // SelectEventStream selects an event stream.
