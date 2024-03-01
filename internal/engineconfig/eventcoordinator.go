@@ -12,9 +12,15 @@ import (
 type EventCoordinator struct {
 	StreamID *uuidpb.UUID
 
-	events []eventstream.Event
-
+	events          []eventstream.Event
 	newEventsOffset chan int
+}
+
+func NewEventCoordinator(streamID *uuidpb.UUID) *EventCoordinator {
+	return &EventCoordinator{
+		StreamID:        streamID,
+		newEventsOffset: make(chan int, 1),
+	}
 }
 
 // AppendEvents appends events.
