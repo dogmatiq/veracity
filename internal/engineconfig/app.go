@@ -68,6 +68,7 @@ func (c applicationVisitor) VisitRichIntegration(_ context.Context, cfg configki
 		HandlerIdentity: marshalIdentity(cfg.Identity()),
 		Journals:        c.Persistence.Journals,
 		Packer:          c.packer,
+		Keyspaces:       c.Config.Persistence.Keyspaces,
 		EventRecorder:   c.EventCoordinator,
 	}
 
