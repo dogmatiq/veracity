@@ -79,7 +79,6 @@ func (e *Engine) Run(ctx context.Context) error {
 	})
 
 	for _, task := range e.config.Tasks {
-		task := task // capture loop variable
 		g.Go(func() error {
 			return task(ctx)
 		})

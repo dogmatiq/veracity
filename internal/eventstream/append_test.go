@@ -104,8 +104,6 @@ func TestAppend(t *testing.T) {
 		}
 
 		for _, c := range cases {
-			c := c // capture loop variable
-
 			t.Run(c.Desc, func(t *testing.T) {
 				tctx := test.WithContext(t)
 				deps := setup(tctx)
