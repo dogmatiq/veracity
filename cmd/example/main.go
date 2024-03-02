@@ -2,11 +2,10 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
-
-	"log/slog"
 
 	"github.com/dogmatiq/example"
 	"github.com/dogmatiq/persistencekit/driver/memory/memoryjournal"
