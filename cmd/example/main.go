@@ -6,11 +6,12 @@ import (
 	"os/signal"
 	"syscall"
 
+	"log/slog"
+
 	"github.com/dogmatiq/example"
 	"github.com/dogmatiq/persistencekit/driver/memory/memoryjournal"
 	"github.com/dogmatiq/persistencekit/driver/memory/memorykv"
 	"github.com/dogmatiq/veracity"
-	"golang.org/x/exp/slog"
 )
 
 func main() {

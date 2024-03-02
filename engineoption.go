@@ -1,13 +1,14 @@
 package veracity
 
 import (
+	"log/slog"
+
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/persistencekit/journal"
 	"github.com/dogmatiq/persistencekit/kv"
 	"github.com/dogmatiq/veracity/internal/engineconfig"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/exp/slog"
 	"google.golang.org/grpc"
 )
 

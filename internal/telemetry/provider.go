@@ -1,10 +1,11 @@
 package telemetry
 
 import (
+	"log/slog"
+	"slices"
+
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/exp/slices"
-	"golang.org/x/exp/slog"
 )
 
 // Provider provides Recorder instances scoped to particular subsystems.

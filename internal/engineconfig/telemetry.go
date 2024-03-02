@@ -1,11 +1,12 @@
 package engineconfig
 
 import (
+	"log/slog"
+
 	"github.com/dogmatiq/veracity/internal/telemetry"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/exp/slog"
 )
 
 func (c *Config) finalizeTelemetry() {

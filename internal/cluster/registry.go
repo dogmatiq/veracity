@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -12,7 +13,6 @@ import (
 	"github.com/dogmatiq/veracity/internal/fsm"
 	"github.com/dogmatiq/veracity/internal/protobuf/protokv"
 	"github.com/dogmatiq/veracity/internal/signaling"
-	"golang.org/x/exp/slog"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -84,7 +84,7 @@ func (r *Registrar) register(ctx context.Context) error {
 		return err
 	}
 
-	r.Logger.DebugCtx(
+	r.Logger.DebugContext(
 		ctx,
 		"cluster node registered",
 		slog.String("node_id", r.Node.ID.AsString()),
@@ -102,7 +102,7 @@ func (r *Registrar) deregister(ctx context.Context) error {
 		return err
 	}
 
-	r.Logger.DebugCtx(
+	r.Logger.DebugContext(
 		ctx,
 		"cluster node deregistered",
 		slog.String("node_id", r.Node.ID.AsString()),
@@ -137,7 +137,7 @@ func (r *Registrar) renew(ctx context.Context) error {
 		return err
 	}
 
-	r.Logger.DebugCtx(
+	r.Logger.DebugContext(
 		ctx,
 		"cluster node registration renewed",
 		slog.String("node_id", r.Node.ID.AsString()),

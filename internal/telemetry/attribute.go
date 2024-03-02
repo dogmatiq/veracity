@@ -2,12 +2,12 @@ package telemetry
 
 import (
 	"fmt"
+	"log/slog"
 	"math"
 	"reflect"
 
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/exp/constraints"
-	"golang.org/x/exp/slog"
 )
 
 // Attr is a telemetry attribute.

@@ -1,9 +1,8 @@
 package messaging
 
 import (
+	"slices"
 	"sync"
-
-	"golang.org/x/exp/slices"
 )
 
 // Topic is a source of messages of type T.

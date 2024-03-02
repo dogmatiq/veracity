@@ -6,6 +6,7 @@ import (
 
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/persistencekit/driver/memory/memorykv"
+	"github.com/dogmatiq/spruce"
 	. "github.com/dogmatiq/veracity/internal/cluster"
 	"github.com/dogmatiq/veracity/internal/test"
 )
@@ -35,7 +36,7 @@ func TestRegistry(t *testing.T) {
 			Keyspaces:     keyspaces,
 			Node:          deps.Node,
 			RenewInterval: 10 * time.Millisecond,
-			Logger:        test.NewLogger(t),
+			Logger:        spruce.NewLogger(t),
 		}
 
 		deps.MembershipChanged = make(chan MembershipChanged)

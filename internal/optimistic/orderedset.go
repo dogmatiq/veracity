@@ -1,9 +1,10 @@
 package optimistic
 
 import (
+	"slices"
+
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"golang.org/x/exp/constraints"
-	"golang.org/x/exp/slices"
 )
 
 // OrderedSet is a read-optimized lock-free ordered set.

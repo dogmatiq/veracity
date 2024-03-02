@@ -1,9 +1,10 @@
 package telemetry
 
 import (
+	"log/slog"
+
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/exp/slog"
 )
 
 // Recorder records traces, metrics and logs for a particular subsystem.

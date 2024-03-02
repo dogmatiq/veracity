@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"slices"
 
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/enginekit/protobuf/envelopepb"
@@ -16,7 +17,6 @@ import (
 	"github.com/dogmatiq/veracity/internal/messaging"
 	"github.com/dogmatiq/veracity/internal/protobuf/protojournal"
 	"github.com/dogmatiq/veracity/internal/signaling"
-	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 )
 

@@ -2,6 +2,7 @@ package eventstream
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/dogmatiq/persistencekit/journal"
@@ -10,7 +11,6 @@ import (
 	"github.com/dogmatiq/veracity/internal/messaging"
 	"github.com/dogmatiq/veracity/internal/protobuf/protojournal"
 	"github.com/dogmatiq/veracity/internal/signaling"
-	"golang.org/x/exp/slog"
 )
 
 const defaultIdleTimeout = 5 * time.Minute
@@ -46,8 +46,8 @@ type worker struct {
 // It processes requests until ctx is canceled, r.Shutdown is latched, or
 // an error occurrs.
 func (w *worker) Run(ctx context.Context) (err error) {
-	w.Logger.DebugCtx(ctx, "event stream worker started")
-	defer w.Logger.DebugCtx(ctx, "event stream worker stopped")
+	w.Logger.DebugContext(ctx, "event stream worker started")
+	defer w.Logger.DebugContext(ctx, "event stream worker stopped")
 
 	pos, rec, ok, err := protojournal.GetLatest[*journalpb.Record](ctx, w.Journal)
 	if err != nil {
@@ -151,7 +151,7 @@ func (w *worker) appendEvents(
 
 		if ok {
 			for i, e := range req.Events {
-				w.Logger.WarnCtx(
+				w.Logger.WarnContext(
 					ctx,
 					"ignored event that has already been appended to the stream",
 					slog.Uint64("stream_offset", uint64(rec.StreamOffsetBefore)+uint64(i)),
@@ -188,7 +188,7 @@ func (w *worker) appendEvents(
 	}
 
 	for i, e := range req.Events {
-		w.Logger.InfoCtx(
+		w.Logger.InfoContext(
 			ctx,
 			"appended event to the stream",
 			slog.Uint64("stream_offset", uint64(before)+uint64(i)),

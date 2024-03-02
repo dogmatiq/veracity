@@ -12,6 +12,7 @@ import (
 	. "github.com/dogmatiq/marshalkit/fixtures"
 	"github.com/dogmatiq/persistencekit/driver/memory/memoryjournal"
 	"github.com/dogmatiq/persistencekit/journal"
+	"github.com/dogmatiq/spruce"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	. "github.com/dogmatiq/veracity/internal/eventstream"
 	"github.com/dogmatiq/veracity/internal/eventstream/internal/journalpb"
@@ -37,7 +38,7 @@ func TestAppend(t *testing.T) {
 		deps.Supervisor = &Supervisor{
 			Journals: deps.Journals,
 			Events:   events,
-			Logger:   test.NewLogger(t),
+			Logger:   spruce.NewLogger(t),
 		}
 
 		deps.Events = events

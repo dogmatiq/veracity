@@ -1,12 +1,11 @@
 package optimistic_test
 
 import (
+	"slices"
 	"testing"
 
 	. "github.com/dogmatiq/veracity/internal/optimistic"
 	"github.com/dogmatiq/veracity/internal/test"
-	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 	"pgregory.net/rapid"
 )
 
@@ -16,6 +15,13 @@ func TestOrderedSet(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		var set OrderedSet[int8, OrderedComparator[int8]]
 		members := map[int8]struct{}{}
+		keys := func() []int8 {
+			var keys []int8
+			for k := range members {
+				keys = append(keys, k)
+			}
+			return keys
+		}
 
 		t.Repeat(
 			map[string]func(*rapid.T){
@@ -27,7 +33,7 @@ func TestOrderedSet(t *testing.T) {
 						len(members),
 					)
 
-					sorted := maps.Keys(members)
+					sorted := keys()
 					slices.Sort(sorted)
 
 					test.Expect(
@@ -56,7 +62,7 @@ func TestOrderedSet(t *testing.T) {
 					}
 
 					m := rapid.
-						SampledFrom(maps.Keys(members)).
+						SampledFrom(keys()).
 						Draw(t, "member")
 
 					set.Add(m)
@@ -67,7 +73,7 @@ func TestOrderedSet(t *testing.T) {
 					}
 
 					m := rapid.
-						SampledFrom(maps.Keys(members)).
+						SampledFrom(keys()).
 						Draw(t, "member")
 
 					set.Delete(m)

@@ -6,7 +6,6 @@ import (
 	"github.com/dogmatiq/ferrite"
 	"github.com/dogmatiq/persistencekit/journal"
 	"github.com/dogmatiq/persistencekit/kv"
-	"github.com/dogmatiq/veracity/internal/telemetry/instrumentedpersistence"
 )
 
 // journalStoreDSN is the DSN describing which journal store to use.
@@ -52,13 +51,17 @@ func (c *Config) finalizePersistence() {
 		panic("no key/value store is configured, set VERACITY_KV_DSN or provide the WithKeyValueStore() option")
 	}
 
-	c.Persistence.Journals = &instrumentedpersistence.JournalStore{
-		Next:      c.Persistence.Journals,
-		Telemetry: c.Telemetry,
-	}
+	c.Persistence.Journals = journal.WithTelemetry(
+		c.Persistence.Journals,
+		c.Telemetry.TracerProvider,
+		c.Telemetry.MeterProvider,
+		c.Telemetry.Logger,
+	)
 
-	c.Persistence.Keyspaces = &instrumentedpersistence.KeyValueStore{
-		Next:      c.Persistence.Keyspaces,
-		Telemetry: c.Telemetry,
-	}
+	c.Persistence.Keyspaces = kv.WithTelemetry(
+		c.Persistence.Keyspaces,
+		c.Telemetry.TracerProvider,
+		c.Telemetry.MeterProvider,
+		c.Telemetry.Logger,
+	)
 }
