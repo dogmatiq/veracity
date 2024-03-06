@@ -21,7 +21,7 @@ require (
 	golang.org/x/exp v0.0.0-20230810033253-352e893a4cad
 	golang.org/x/sync v0.6.0
 	google.golang.org/grpc v1.62.1
-	google.golang.org/protobuf v1.32.0
+	google.golang.org/protobuf v1.33.0
 	pgregory.net/rapid v1.1.0
 )
 
