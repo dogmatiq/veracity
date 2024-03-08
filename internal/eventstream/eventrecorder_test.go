@@ -1,6 +1,7 @@
 package eventstream_test
 
 import (
+	"errors"
 	"testing"
 
 	. "github.com/dogmatiq/dogma/fixtures"
@@ -106,6 +107,31 @@ func TestEventRecorder(t *testing.T) {
 	t.Run("it propagates failures", func(t *testing.T) {
 		t.Parallel()
 
-		// TODO
+		tctx := test.WithContext(t)
+		deps := setup(tctx)
+
+		streamID := uuidpb.Generate()
+
+		ev := deps.Packer.Pack(MessageE1)
+
+		test.
+			RunInBackground(t, "supervisor", deps.Supervisor.Run).
+			FailBeforeTestEnds()
+
+		test.FailOnJournalOpen(deps.Journals, JournalName(streamID), errors.New("<error>"))
+
+		_, err := deps.Recorder.AppendEvents(
+			tctx,
+			AppendRequest{
+				StreamID: streamID,
+				Events: []*envelopepb.Envelope{
+					ev,
+				},
+				IsFirstAttempt: true,
+			},
+		)
+		if err == nil {
+			t.Fatal("expected err")
+		}
 	})
 }
