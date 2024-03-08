@@ -9,7 +9,9 @@ type Action struct {
 func Stop() Action {
 	return Action{func(m *fsm) {
 		m.current = nil
-		m.err = m.ctx.Err()
+		if m.err == nil {
+			m.err = m.ctx.Err()
+		}
 	}}
 }
 
