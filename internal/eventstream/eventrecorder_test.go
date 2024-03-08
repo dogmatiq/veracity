@@ -23,6 +23,7 @@ func TestEventRecorder(t *testing.T) {
 		Supervisor *Supervisor
 		Events     <-chan Event
 		Packer     *envelope.Packer
+		Recorder   *EventRecorder
 	}
 
 	setup := func(t test.TestingT) (deps dependencies) {
@@ -43,6 +44,10 @@ func TestEventRecorder(t *testing.T) {
 			Marshaler:   Marshaler,
 		}
 
+		deps.Recorder = &EventRecorder{
+			AppendQueue: &deps.Supervisor.AppendQueue,
+		}
+
 		return deps
 	}
 
@@ -58,14 +63,14 @@ func TestEventRecorder(t *testing.T) {
 
 		streamID := uuidpb.Generate()
 
-		res, err := deps.Supervisor.AppendQueue.Exchange(
+		ev := deps.Packer.Pack(MessageE1)
+
+		res, err := deps.Recorder.AppendEvents(
 			tctx,
 			AppendRequest{
 				StreamID: streamID,
 				Events: []*envelopepb.Envelope{
-					deps.Packer.Pack(MessageE1),
-					deps.Packer.Pack(MessageE2),
-					deps.Packer.Pack(MessageE3),
+					ev,
 				},
 				IsFirstAttempt: true,
 			},
@@ -74,15 +79,28 @@ func TestEventRecorder(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		test.Expect(
+			t,
+			"unexpected response",
+			res,
+			AppendResponse{
+				BeginOffset: 0,
+				EndOffset:   1,
+			},
+		)
+
+		test.ExpectChannelToReceive(
+			t,
+			deps.Events,
+			Event{
+				StreamID: streamID,
+				Offset:   0,
+				Envelope: ev,
+			},
+		)
 		deps.Supervisor.Shutdown()
 		supervisor.StopAndWait()
 
-		test.Expect(
-			t,
-			"xxxxxxx",
-			len(deps.Supervisor.Events),
-			3,
-		)
 	})
 
 	t.Run("it propagates failures", func(t *testing.T) {
