@@ -9,7 +9,7 @@ require (
 	github.com/dogmatiq/dogma v0.12.1
 	github.com/dogmatiq/enginekit v0.0.0-20230922231755-43a18006bf1c
 	github.com/dogmatiq/example v0.0.0-20230606031437-2bd84c72050b
-	github.com/dogmatiq/ferrite v1.2.1
+	github.com/dogmatiq/ferrite v1.3.0
 	github.com/dogmatiq/marshalkit v0.7.3
 	github.com/dogmatiq/persistencekit v0.2.1
 	github.com/dogmatiq/primo v0.2.0
@@ -37,7 +37,7 @@ require (
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-runewidth v0.0.15 // indirect
-	github.com/rivo/uniseg v0.4.4 // indirect
+	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/net v0.20.0 // indirect
