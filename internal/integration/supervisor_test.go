@@ -30,8 +30,8 @@ import (
 func TestSupervisor(t *testing.T) {
 	type dependencies struct {
 		Packer        *envelope.Packer
-		Journals      *memoryjournal.Store
-		Keyspaces     *memorykv.Store
+		Journals      *memoryjournal.BinaryStore
+		Keyspaces     *memorykv.BinaryStore
 		Handler       *IntegrationMessageHandler
 		EventRecorder *eventRecorderStub
 		Supervisor    *Supervisor
@@ -41,9 +41,9 @@ func TestSupervisor(t *testing.T) {
 	setup := func(test.TestingT) (deps dependencies) {
 		deps.Packer = newPacker()
 
-		deps.Journals = &memoryjournal.Store{}
+		deps.Journals = &memoryjournal.BinaryStore{}
 
-		deps.Keyspaces = &memorykv.Store{}
+		deps.Keyspaces = &memorykv.BinaryStore{}
 
 		deps.Handler = &IntegrationMessageHandler{}
 

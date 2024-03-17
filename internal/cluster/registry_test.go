@@ -22,7 +22,7 @@ func TestRegistry(t *testing.T) {
 			Observer          *RegistryObserver
 		},
 	) {
-		keyspaces := &memorykv.Store{}
+		keyspaces := &memorykv.BinaryStore{}
 
 		deps.Node = Node{
 			ID: uuidpb.Generate(),

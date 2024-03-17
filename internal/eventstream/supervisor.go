@@ -18,7 +18,7 @@ var errShuttingDown = errors.New("event stream sub-system is shutting down")
 
 // A Supervisor coordinates event stream workers.
 type Supervisor struct {
-	Journals    journal.Store
+	Journals    journal.BinaryStore
 	AppendQueue messaging.ExchangeQueue[AppendRequest, AppendResponse]
 	Events      chan<- Event
 	Logger      *slog.Logger

@@ -27,7 +27,7 @@ func Search[
 	Struct typedproto.MessageStruct,
 ](
 	ctx context.Context,
-	j journal.Journal,
+	j journal.BinaryJournal,
 	begin, end journal.Position,
 	cmp CompareFunc[Record],
 ) (journal.Position, Record, bool, error) {

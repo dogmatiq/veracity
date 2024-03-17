@@ -18,7 +18,7 @@ const defaultIdleTimeout = 5 * time.Minute
 // A worker manages the state of an event stream.
 type worker struct {
 	// Journal stores the event stream's state.
-	Journal journal.Journal
+	Journal journal.BinaryJournal
 
 	// AppendQueue is a queue of requests to append events to the stream.
 	AppendQueue messaging.ExchangeQueue[AppendRequest, AppendResponse]

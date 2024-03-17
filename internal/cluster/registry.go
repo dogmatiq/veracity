@@ -34,13 +34,13 @@ const (
 // Registrar registers and periodically renews a node's registration with the
 // registry.
 type Registrar struct {
-	Keyspaces     kv.Store
+	Keyspaces     kv.BinaryStore
 	Node          Node
 	RenewInterval time.Duration
 	Shutdown      signaling.Latch
 	Logger        *slog.Logger
 
-	keyspace kv.Keyspace
+	keyspace kv.BinaryKeyspace
 	interval time.Duration
 }
 
@@ -182,12 +182,12 @@ func (r *Registrar) deleteRegistration(
 
 // RegistryObserver emits events about changes to the nodes in the registry.
 type RegistryObserver struct {
-	Keyspaces         kv.Store
+	Keyspaces         kv.BinaryStore
 	MembershipChanged chan<- MembershipChanged
 	Shutdown          signaling.Latch
 	PollInterval      time.Duration
 
-	keyspace     kv.Keyspace
+	keyspace     kv.BinaryKeyspace
 	nodes        uuidpb.Map[Node]
 	readyForPoll *time.Ticker
 }

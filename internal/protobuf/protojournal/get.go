@@ -15,7 +15,7 @@ func Get[
 	Struct typedproto.MessageStruct,
 ](
 	ctx context.Context,
-	j journal.Journal,
+	j journal.BinaryJournal,
 	pos journal.Position,
 ) (Record, error) {
 	data, err := j.Get(ctx, pos)
@@ -37,7 +37,7 @@ func GetLatest[
 	Struct typedproto.MessageStruct,
 ](
 	ctx context.Context,
-	j journal.Journal,
+	j journal.BinaryJournal,
 ) (journal.Position, Record, bool, error) {
 	for {
 		begin, end, err := j.Bounds(ctx)

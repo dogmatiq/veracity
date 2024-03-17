@@ -34,8 +34,8 @@ type Config struct {
 	Tasks     []func(context.Context) error
 
 	Persistence struct {
-		Journals  journal.Store
-		Keyspaces kv.Store
+		Journals  journal.BinaryStore
+		Keyspaces kv.BinaryStore
 	}
 
 	GRPC struct {

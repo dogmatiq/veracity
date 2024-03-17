@@ -19,7 +19,7 @@ func Get[
 	S typedproto.MessageStruct,
 ](
 	ctx context.Context,
-	ks kv.Keyspace,
+	ks kv.BinaryKeyspace,
 	k []byte,
 ) (T, bool, error) {
 	data, err := ks.Get(ctx, k)
@@ -41,7 +41,7 @@ func Set[
 	S typedproto.MessageStruct,
 ](
 	ctx context.Context,
-	ks kv.Keyspace,
+	ks kv.BinaryKeyspace,
 	k []byte,
 	v T,
 ) error {
@@ -58,7 +58,7 @@ func Range[
 	S typedproto.MessageStruct,
 ](
 	ctx context.Context,
-	ks kv.Keyspace,
+	ks kv.BinaryKeyspace,
 	fn RangeFunc[T],
 ) error {
 	return ks.Range(

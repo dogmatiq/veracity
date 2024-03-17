@@ -79,7 +79,7 @@ func WithLogger(l *slog.Logger) EngineOption {
 
 // WithJournalStore is an [EngineOption] that sets the journal store used by the
 // engine.
-func WithJournalStore(s journal.Store) EngineOption {
+func WithJournalStore(s journal.BinaryStore) EngineOption {
 	return func(cfg *engineconfig.Config) {
 		cfg.Persistence.Journals = s
 	}
@@ -87,7 +87,7 @@ func WithJournalStore(s journal.Store) EngineOption {
 
 // WithKeyValueStore is an [EngineOption] that sets the key/value store used by
 // the engine.
-func WithKeyValueStore(s kv.Store) EngineOption {
+func WithKeyValueStore(s kv.BinaryStore) EngineOption {
 	return func(cfg *engineconfig.Config) {
 		cfg.Persistence.Keyspaces = s
 	}

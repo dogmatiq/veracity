@@ -12,7 +12,7 @@ import (
 //
 // The error is returned before the set is actually performed.
 func FailBeforeKeyspaceSet(
-	s *memorykv.Store,
+	s *memorykv.BinaryStore,
 	name string,
 	pred func(k, v []byte) bool,
 ) {
@@ -25,7 +25,7 @@ func FailBeforeKeyspaceSet(
 //
 // The error is returned after the set is actually performed.
 func FailAfterKeyspaceSet(
-	s *memorykv.Store,
+	s *memorykv.BinaryStore,
 	name string,
 	pred func(k, v []byte) bool,
 ) {

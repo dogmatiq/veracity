@@ -10,7 +10,7 @@ import (
 // FailOnJournalOpen configures the journal with the given name to return an
 // error on the next call to Open().
 func FailOnJournalOpen(
-	s *memoryjournal.Store,
+	s *memoryjournal.BinaryStore,
 	name string,
 	err error,
 ) {
@@ -29,7 +29,7 @@ func FailOnJournalOpen(
 //
 // The error is returned before the append is actually performed.
 func FailBeforeJournalAppend[R proto.Message](
-	s *memoryjournal.Store,
+	s *memoryjournal.BinaryStore,
 	name string,
 	pred func(R) bool,
 	err error,
@@ -43,7 +43,7 @@ func FailBeforeJournalAppend[R proto.Message](
 //
 // The error is returned after the append is actually performed.
 func FailAfterJournalAppend[R proto.Message](
-	s *memoryjournal.Store,
+	s *memoryjournal.BinaryStore,
 	name string,
 	pred func(R) bool,
 	err error,

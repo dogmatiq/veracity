@@ -19,12 +19,12 @@ var keyValueStoreDSN = ferrite.
 	Optional(ferrite.WithRegistry(FerriteRegistry))
 
 // journalStoreFromDSN returns the journal store described by the given DSN.
-func journalStoreFromDSN(*url.URL) journal.Store {
+func journalStoreFromDSN(*url.URL) journal.BinaryStore {
 	panic("not implemented")
 }
 
 // keyValueStoreFromDSN returns the key/value store described by the given DSN.
-func keyValueStoreFromDSN(*url.URL) kv.Store {
+func keyValueStoreFromDSN(*url.URL) kv.BinaryStore {
 	panic("not implemented")
 }
 

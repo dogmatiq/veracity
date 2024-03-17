@@ -16,8 +16,8 @@ import (
 func main() {
 	e := veracity.New(
 		&example.App{},
-		veracity.WithJournalStore(&memoryjournal.Store{}),
-		veracity.WithKeyValueStore(&memorykv.Store{}),
+		veracity.WithJournalStore(&memoryjournal.BinaryStore{}),
+		veracity.WithKeyValueStore(&memorykv.BinaryStore{}),
 		veracity.WithLogger(
 			slog.New(
 				slog.NewJSONHandler(

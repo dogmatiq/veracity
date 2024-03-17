@@ -14,7 +14,7 @@ func Append[
 	Struct typedproto.MessageStruct,
 ](
 	ctx context.Context,
-	j journal.Journal,
+	j journal.BinaryJournal,
 	end journal.Position,
 	rec Record,
 ) error {

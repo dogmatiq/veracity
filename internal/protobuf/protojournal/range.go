@@ -23,7 +23,7 @@ func Range[
 	Struct typedproto.MessageStruct,
 ](
 	ctx context.Context,
-	j journal.Journal,
+	j journal.BinaryJournal,
 	begin journal.Position,
 	fn RangeFunc[Record],
 ) error {

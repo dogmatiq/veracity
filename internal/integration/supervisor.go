@@ -38,16 +38,16 @@ type Supervisor struct {
 	ExecuteQueue    messaging.ExchangeQueue[ExecuteRequest, ExecuteResponse]
 	Handler         dogma.IntegrationMessageHandler
 	HandlerIdentity *identitypb.Identity
-	Journals        journal.Store
-	Keyspaces       kv.Store
+	Journals        journal.BinaryStore
+	Keyspaces       kv.BinaryStore
 	Packer          *envelope.Packer
 	EventRecorder   EventRecorder
 
 	eventStreamID             *uuidpb.UUID
 	lowestPossibleEventOffset eventstream.Offset
-	journal                   journal.Journal
+	journal                   journal.BinaryJournal
 	pos                       journal.Position
-	handledCmds               kv.Keyspace
+	handledCmds               kv.BinaryKeyspace
 	shutdown                  signaling.Latch
 }
 
@@ -171,7 +171,7 @@ func (s *Supervisor) Shutdown() {
 	s.shutdown.Signal()
 }
 
-func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope, j journal.Journal) error {
+func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope, j journal.BinaryJournal) error {
 	c, err := s.Packer.Unpack(cmd)
 	if err != nil {
 		return err
@@ -228,7 +228,7 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 
 func (s *Supervisor) recordEvents(
 	ctx context.Context,
-	j journal.Journal,
+	j journal.BinaryJournal,
 	op *journalpb.CommandHandled,
 	isFirstAttempt bool,
 ) error {

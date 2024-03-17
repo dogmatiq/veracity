@@ -24,7 +24,7 @@ func Scan[
 	Struct typedproto.MessageStruct,
 ](
 	ctx context.Context,
-	j journal.Journal,
+	j journal.BinaryJournal,
 	begin journal.Position,
 	scan ScanFunc[T, Record],
 ) (value T, ok bool, err error) {
@@ -48,7 +48,7 @@ func ScanFromSearchResult[
 	Struct typedproto.MessageStruct,
 ](
 	ctx context.Context,
-	j journal.Journal,
+	j journal.BinaryJournal,
 	begin, end journal.Position,
 	cmp CompareFunc[Record],
 	scan ScanFunc[T, Record],
