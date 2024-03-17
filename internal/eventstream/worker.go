@@ -9,7 +9,6 @@ import (
 	"github.com/dogmatiq/veracity/internal/eventstream/internal/journalpb"
 	"github.com/dogmatiq/veracity/internal/fsm"
 	"github.com/dogmatiq/veracity/internal/messaging"
-	"github.com/dogmatiq/veracity/internal/protobuf/protojournal"
 	"github.com/dogmatiq/veracity/internal/signaling"
 )
 
@@ -18,7 +17,7 @@ const defaultIdleTimeout = 5 * time.Minute
 // A worker manages the state of an event stream.
 type worker struct {
 	// Journal stores the event stream's state.
-	Journal journal.BinaryJournal
+	Journal Journal
 
 	// AppendQueue is a queue of requests to append events to the stream.
 	AppendQueue messaging.ExchangeQueue[AppendRequest, AppendResponse]
@@ -49,7 +48,7 @@ func (w *worker) Run(ctx context.Context) (err error) {
 	w.Logger.DebugContext(ctx, "event stream worker started")
 	defer w.Logger.DebugContext(ctx, "event stream worker stopped")
 
-	pos, rec, ok, err := protojournal.GetLatest[*journalpb.Record](ctx, w.Journal)
+	pos, rec, ok, err := journal.LastRecord(ctx, w.Journal)
 	if err != nil {
 		return err
 	}
@@ -144,12 +143,7 @@ func (w *worker) appendEvents(
 	req AppendRequest,
 ) (AppendResponse, error) {
 	if w.mightBeDuplicates(req) {
-		rec, ok, err := w.findAppendRecord(ctx, req)
-		if err != nil {
-			return AppendResponse{}, err
-		}
-
-		if ok {
+		if rec, err := w.findAppendRecord(ctx, req); err == nil {
 			for i, e := range req.Events {
 				w.Logger.WarnContext(
 					ctx,
@@ -165,15 +159,16 @@ func (w *worker) appendEvents(
 				EndOffset:              Offset(rec.StreamOffsetAfter),
 				AppendedByPriorAttempt: true,
 			}, nil
+		} else if err != journal.ErrNotFound {
+			return AppendResponse{}, err
 		}
 	}
 
 	before := w.off
 	after := w.off + Offset(len(req.Events))
 
-	if err := protojournal.Append(
+	if err := w.Journal.Append(
 		ctx,
-		w.Journal,
 		w.pos,
 		journalpb.
 			NewRecordBuilder().
@@ -235,8 +230,8 @@ func (w *worker) mightBeDuplicates(req AppendRequest) bool {
 func (w *worker) findAppendRecord(
 	ctx context.Context,
 	req AppendRequest,
-) (*journalpb.Record, bool, error) {
-	return protojournal.ScanFromSearchResult(
+) (*journalpb.Record, error) {
+	return journal.ScanFromSearchResult(
 		ctx,
 		w.Journal,
 		0,

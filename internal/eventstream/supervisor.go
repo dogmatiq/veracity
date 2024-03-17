@@ -6,7 +6,6 @@ import (
 	"log/slog"
 
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
-	"github.com/dogmatiq/persistencekit/journal"
 	"github.com/dogmatiq/veracity/internal/fsm"
 	"github.com/dogmatiq/veracity/internal/messaging"
 	"github.com/dogmatiq/veracity/internal/signaling"
@@ -18,7 +17,7 @@ var errShuttingDown = errors.New("event stream sub-system is shutting down")
 
 // A Supervisor coordinates event stream workers.
 type Supervisor struct {
-	Journals    journal.BinaryStore
+	Journals    JournalStore
 	AppendQueue messaging.ExchangeQueue[AppendRequest, AppendResponse]
 	Events      chan<- Event
 	Logger      *slog.Logger

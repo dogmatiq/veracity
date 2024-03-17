@@ -92,7 +92,7 @@ func TestSupervisor(t *testing.T) {
 			{
 				Desc: "failure before appending CommandEnqueued record to the journal",
 				InduceFailure: func(deps *dependencies) {
-					test.FailBeforeJournalAppend(
+					test.XXX_FailBeforeJournalAppend(
 						deps.Journals,
 						JournalName(deps.Supervisor.HandlerIdentity.Key),
 						func(r *journalpb.Record) bool {
@@ -105,7 +105,7 @@ func TestSupervisor(t *testing.T) {
 			{
 				Desc: "failure after appending CommandEnqueued record to the journal",
 				InduceFailure: func(deps *dependencies) {
-					test.FailAfterJournalAppend(
+					test.XXX_FailAfterJournalAppend(
 						deps.Journals,
 						JournalName(deps.Supervisor.HandlerIdentity.Key),
 						func(r *journalpb.Record) bool {
@@ -159,7 +159,7 @@ func TestSupervisor(t *testing.T) {
 			{
 				Desc: "failure before appending CommandHandled record to the journal",
 				InduceFailure: func(deps *dependencies) {
-					test.FailBeforeJournalAppend(
+					test.XXX_FailBeforeJournalAppend(
 						deps.Journals,
 						JournalName(deps.Supervisor.HandlerIdentity.Key),
 						func(r *journalpb.Record) bool {
@@ -172,7 +172,7 @@ func TestSupervisor(t *testing.T) {
 			{
 				Desc: "failure after appending CommandHandled record to the journal",
 				InduceFailure: func(deps *dependencies) {
-					test.FailAfterJournalAppend(
+					test.XXX_FailAfterJournalAppend(
 						deps.Journals,
 						JournalName(deps.Supervisor.HandlerIdentity.Key),
 						func(r *journalpb.Record) bool {
@@ -228,7 +228,7 @@ func TestSupervisor(t *testing.T) {
 				Desc:                              "failure before appending EventsAppendedToStream record to the journal",
 				ExpectMultipleEventAppendRequests: true,
 				InduceFailure: func(deps *dependencies) {
-					test.FailBeforeJournalAppend(
+					test.XXX_FailBeforeJournalAppend(
 						deps.Journals,
 						JournalName(deps.Supervisor.HandlerIdentity.Key),
 						func(r *journalpb.Record) bool {
@@ -241,7 +241,7 @@ func TestSupervisor(t *testing.T) {
 			{
 				Desc: "failure after appending EventsAppendedToStream record to the journal",
 				InduceFailure: func(deps *dependencies) {
-					test.FailAfterJournalAppend(
+					test.XXX_FailAfterJournalAppend(
 						deps.Journals,
 						JournalName(deps.Supervisor.HandlerIdentity.Key),
 						func(r *journalpb.Record) bool {

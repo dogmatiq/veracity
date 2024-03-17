@@ -16,7 +16,6 @@ import (
 	"github.com/dogmatiq/veracity/internal/envelope"
 	. "github.com/dogmatiq/veracity/internal/eventstream"
 	"github.com/dogmatiq/veracity/internal/eventstream/internal/journalpb"
-	"github.com/dogmatiq/veracity/internal/protobuf/protojournal"
 	"github.com/dogmatiq/veracity/internal/test"
 )
 
@@ -24,14 +23,14 @@ func TestAppend(t *testing.T) {
 	t.Parallel()
 
 	type dependencies struct {
-		Journals   *memoryjournal.BinaryStore
+		Journals   *memoryjournal.Store[*journalpb.Record]
 		Supervisor *Supervisor
 		Events     <-chan Event
 		Packer     *envelope.Packer
 	}
 
 	setup := func(t test.TestingT) (deps dependencies) {
-		deps.Journals = &memoryjournal.BinaryStore{}
+		deps.Journals = &memoryjournal.Store[*journalpb.Record]{}
 
 		events := make(chan Event, 100)
 
@@ -176,9 +175,8 @@ func TestAppend(t *testing.T) {
 
 				var events []*envelopepb.Envelope
 
-				if err := protojournal.Range(
+				if err := j.Range(
 					tctx,
-					j,
 					1,
 					func(
 						ctx context.Context,
