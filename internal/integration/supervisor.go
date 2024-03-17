@@ -72,15 +72,25 @@ func (s *Supervisor) Run(ctx context.Context) error {
 }
 
 func (s *Supervisor) initState(ctx context.Context) fsm.Action {
-	var pendingCmds []*envelopepb.Envelope
-	var pendingEvents []*journalpb.CommandHandled
-	var err error
-
-	s.pos, _, err = s.journal.Bounds(ctx)
+	begin, end, err := s.journal.Bounds(ctx)
 	if err != nil {
 		return fsm.Fail(err)
 	}
 
+	s.pos = begin
+
+	if s.pos == end {
+		return fsm.EnterState(s.idleState)
+	}
+
+	var (
+		unhandled  []*envelopepb.Envelope
+		unrecorded []*journalpb.CommandHandled
+	)
+
+	// Range over the journal to build a list of pending work consisting of:
+	// 	- enqueued but unhandled commands
+	// 	- events that have not been recorded to an event stream
 	if err := protojournal.Range(
 		ctx,
 		s.journal,
@@ -95,25 +105,23 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 			journalpb.Switch_Record_Operation(
 				record,
 				func(op *journalpb.CommandEnqueued) {
-					cmd := op.GetCommand()
-					pendingCmds = append(pendingCmds, cmd)
+					unhandled = append(unhandled, op.GetCommand())
 				},
 				func(op *journalpb.CommandHandled) {
-					cmdID := op.GetCommandId()
-					for i, cmd := range pendingCmds {
-						if proto.Equal(cmd.GetMessageId(), cmdID) {
-							pendingCmds = slices.Delete(pendingCmds, i, i+1)
+					for i, env := range unhandled {
+						if proto.Equal(env.GetMessageId(), op.GetCommandId()) {
+							unhandled = slices.Delete(unhandled, i, i+1)
 							break
 						}
 					}
 					if len(op.GetEvents()) > 0 {
-						pendingEvents = append(pendingEvents, op)
+						unrecorded = append(unrecorded, op)
 					}
 				},
 				func(op *journalpb.EventsAppendedToStream) {
-					for i, candidate := range pendingEvents {
-						if proto.Equal(candidate.GetCommandId(), op.GetCommandId()) {
-							pendingEvents = slices.Delete(pendingEvents, i, i+1)
+					for i, rec := range unrecorded {
+						if proto.Equal(rec.GetCommandId(), op.GetCommandId()) {
+							unrecorded = slices.Delete(unrecorded, i, i+1)
 							break
 						}
 					}
@@ -126,13 +134,13 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 		return fsm.Fail(err)
 	}
 
-	for _, op := range pendingEvents {
+	for _, op := range unrecorded {
 		if err := s.recordEvents(ctx, s.journal, op, false); err != nil {
 			return fsm.Fail(err)
 		}
 	}
 
-	for _, cmd := range pendingCmds {
+	for _, cmd := range unhandled {
 		if err := s.handleCommand(ctx, cmd, s.journal); err != nil {
 			return fsm.Fail(err)
 		}
