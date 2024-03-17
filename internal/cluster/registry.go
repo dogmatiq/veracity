@@ -11,7 +11,6 @@ import (
 	"github.com/dogmatiq/persistencekit/kv"
 	"github.com/dogmatiq/veracity/internal/cluster/internal/registrypb"
 	"github.com/dogmatiq/veracity/internal/fsm"
-	"github.com/dogmatiq/veracity/internal/protobuf/protokv"
 	"github.com/dogmatiq/veracity/internal/signaling"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -22,9 +21,6 @@ const (
 	//
 	// The registration period is always set to 2 * DefaultRenewInterval.
 	DefaultRenewInterval = 10 * time.Second
-
-	// RegistryKeyspace is the name of the keyspace that contains registry data.
-	RegistryKeyspace = "cluster.registry"
 
 	// DefaultRegistryPollInterval is the default interval at which the registry
 	// polls the underlying key-value store for changes.
@@ -40,14 +36,14 @@ type Registrar struct {
 	Shutdown      signaling.Latch
 	Logger        *slog.Logger
 
-	keyspace kv.BinaryKeyspace
+	keyspace kv.Keyspace[*uuidpb.UUID, *registrypb.Registration]
 	interval time.Duration
 }
 
 // Run starts the registrar.
 func (r *Registrar) Run(ctx context.Context) error {
 	var err error
-	r.keyspace, err = r.Keyspaces.Open(ctx, RegistryKeyspace)
+	r.keyspace, err = newKVStore(r.Keyspaces).Open(ctx, registryKeyspace)
 	if err != nil {
 		return err
 	}
@@ -113,15 +109,11 @@ func (r *Registrar) deregister(ctx context.Context) error {
 
 // renew updates a node's registration expiry time.
 func (r *Registrar) renew(ctx context.Context) error {
-	reg, ok, err := protokv.Get[*registrypb.Registration](
-		ctx,
-		r.keyspace,
-		r.Node.ID.AsBytes(),
-	)
+	reg, err := r.keyspace.Get(ctx, r.Node.ID)
 	if err != nil {
 		return err
 	}
-	if !ok {
+	if reg == nil {
 		return errors.New("cluster node not registered")
 	}
 
@@ -153,10 +145,10 @@ func (r *Registrar) saveRegistration(
 	ctx context.Context,
 ) (time.Time, error) {
 	expiresAt := time.Now().Add(r.interval * 2)
-	err := protokv.Set(
+
+	return expiresAt, r.keyspace.Set(
 		ctx,
-		r.keyspace,
-		r.Node.ID.AsBytes(),
+		r.Node.ID,
 		&registrypb.Registration{
 			Node: &registrypb.Node{
 				Id:        r.Node.ID,
@@ -165,19 +157,13 @@ func (r *Registrar) saveRegistration(
 			ExpiresAt: timestamppb.New(expiresAt),
 		},
 	)
-
-	return expiresAt, err
 }
 
 // deleteRegistration removes a registration from the registry.
 func (r *Registrar) deleteRegistration(
 	ctx context.Context,
 ) error {
-	return r.keyspace.Set(
-		ctx,
-		r.Node.ID.AsBytes(),
-		nil,
-	)
+	return r.keyspace.Set(ctx, r.Node.ID, nil)
 }
 
 // RegistryObserver emits events about changes to the nodes in the registry.
@@ -187,7 +173,7 @@ type RegistryObserver struct {
 	Shutdown          signaling.Latch
 	PollInterval      time.Duration
 
-	keyspace     kv.BinaryKeyspace
+	keyspace     kv.Keyspace[*uuidpb.UUID, *registrypb.Registration]
 	nodes        uuidpb.Map[Node]
 	readyForPoll *time.Ticker
 }
@@ -195,7 +181,7 @@ type RegistryObserver struct {
 // Run starts the observer.
 func (o *RegistryObserver) Run(ctx context.Context) error {
 	var err error
-	o.keyspace, err = o.Keyspaces.Open(ctx, RegistryKeyspace)
+	o.keyspace, err = newKVStore(o.Keyspaces).Open(ctx, registryKeyspace)
 	if err != nil {
 		return err
 	}
@@ -279,12 +265,11 @@ func (o *RegistryObserver) publishState(ctx context.Context, ev MembershipChange
 func (o *RegistryObserver) loadNodes(ctx context.Context) (uuidpb.Map[Node], error) {
 	nodes := uuidpb.Map[Node]{}
 
-	return nodes, protokv.Range(
+	return nodes, o.keyspace.Range(
 		ctx,
-		o.keyspace,
 		func(
 			ctx context.Context,
-			k []byte,
+			id *uuidpb.UUID,
 			reg *registrypb.Registration,
 		) (bool, error) {
 			if reg.ExpiresAt.AsTime().After(time.Now()) {
@@ -295,7 +280,7 @@ func (o *RegistryObserver) loadNodes(ctx context.Context) (uuidpb.Map[Node], err
 						Addresses: reg.Node.Addresses,
 					},
 				)
-			} else if err := o.keyspace.Set(ctx, k, nil); err != nil {
+			} else if err := o.keyspace.Set(ctx, id, nil); err != nil {
 				return false, err
 			}
 

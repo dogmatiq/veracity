@@ -23,14 +23,14 @@ func TestAppend(t *testing.T) {
 	t.Parallel()
 
 	type dependencies struct {
-		Journals   *memoryjournal.Store[*journalpb.Record]
+		Journals   *memoryjournal.BinaryStore
 		Supervisor *Supervisor
 		Events     <-chan Event
 		Packer     *envelope.Packer
 	}
 
 	setup := func(t test.TestingT) (deps dependencies) {
-		deps.Journals = &memoryjournal.Store[*journalpb.Record]{}
+		deps.Journals = &memoryjournal.BinaryStore{}
 
 		events := make(chan Event, 100)
 
@@ -168,7 +168,7 @@ func TestAppend(t *testing.T) {
 
 				t.Log("ensure that the event was appended to the stream exactly once")
 
-				j, err := deps.Journals.Open(tctx, JournalName(streamID))
+				j, err := NewJournalStore(deps.Journals).Open(tctx, JournalName(streamID))
 				if err != nil {
 					t.Fatal(err)
 				}

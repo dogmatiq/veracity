@@ -10,6 +10,7 @@ import (
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/persistencekit/journal"
 	"github.com/dogmatiq/persistencekit/kv"
+	"github.com/dogmatiq/persistencekit/marshaler"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/eventstream"
 	"github.com/dogmatiq/veracity/internal/fsm"
@@ -37,16 +38,16 @@ type Supervisor struct {
 	ExecuteQueue    messaging.ExchangeQueue[ExecuteRequest, ExecuteResponse]
 	Handler         dogma.IntegrationMessageHandler
 	HandlerIdentity *identitypb.Identity
-	Journals        JournalStore
+	Journals        journal.BinaryStore
 	Keyspaces       kv.BinaryStore
 	Packer          *envelope.Packer
 	EventRecorder   EventRecorder
 
 	eventStreamID             *uuidpb.UUID
 	lowestPossibleEventOffset eventstream.Offset
-	journal                   Journal
+	journal                   journal.Journal[*journalpb.Record]
 	pos                       journal.Position
-	handledCmds               kv.BinaryKeyspace
+	handled                   kv.Keyspace[*uuidpb.UUID, bool]
 	shutdown                  signaling.Latch
 }
 
@@ -55,17 +56,28 @@ type Supervisor struct {
 func (s *Supervisor) Run(ctx context.Context) error {
 	var err error
 
-	s.journal, err = s.Journals.Open(ctx, JournalName(s.HandlerIdentity.Key))
+	journals := journal.NewMarshalingStore(
+		s.Journals,
+		marshaler.NewProto[*journalpb.Record](),
+	)
+
+	s.journal, err = journals.Open(ctx, journalName(s.HandlerIdentity.Key))
 	if err != nil {
 		return err
 	}
 	defer s.journal.Close()
 
-	s.handledCmds, err = s.Keyspaces.Open(ctx, HandledCommandsKeyspaceName(s.HandlerIdentity.Key))
+	keyspaces := kv.NewMarshalingStore(
+		s.Keyspaces,
+		marshaler.NewProto[*uuidpb.UUID](),
+		marshaler.Bool,
+	)
+
+	s.handled, err = keyspaces.Open(ctx, handledCommandsKeyspaceName(s.HandlerIdentity.Key))
 	if err != nil {
 		return err
 	}
-	defer s.journal.Close()
+	defer s.handled.Close()
 
 	return fsm.Start(ctx, s.initState)
 }
@@ -181,11 +193,7 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 		return err
 	}
 
-	if err := s.handledCmds.Set(
-		ctx,
-		cmd.GetMessageId().AsBytes(),
-		[]byte{1},
-	); err != nil {
+	if err := s.handled.Set(ctx, cmd.GetMessageId(), true); err != nil {
 		return err
 	}
 
@@ -275,10 +283,7 @@ func (s *Supervisor) handleCommandState(
 	ex messaging.Exchange[ExecuteRequest, ExecuteResponse],
 ) fsm.Action {
 	if !ex.Request.IsFirstAttempt {
-		alreadyHandled, err := s.handledCmds.Has(
-			ctx,
-			ex.Request.Command.GetMessageId().AsBytes(),
-		)
+		alreadyHandled, err := s.handled.Has(ctx, ex.Request.Command.GetMessageId())
 		if err != nil {
 			ex.Err(err)
 			return fsm.Fail(err)
@@ -313,10 +318,4 @@ func (s *Supervisor) handleCommandState(
 	}
 
 	return fsm.EnterState(s.idleState)
-}
-
-// HandledCommandsKeyspaceName returns the name of the keyspace that contains
-// the set of handled command IDs.
-func HandledCommandsKeyspaceName(key *uuidpb.UUID) string {
-	return "integration:" + key.AsString() + ":handled-commands"
 }

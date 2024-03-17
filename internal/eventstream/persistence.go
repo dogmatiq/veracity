@@ -5,29 +5,22 @@ import (
 
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/persistencekit/journal"
-	"github.com/dogmatiq/persistencekit/marshal"
+	"github.com/dogmatiq/persistencekit/marshaler"
 	"github.com/dogmatiq/veracity/internal/eventstream/internal/journalpb"
 )
 
-// JournalStore is the [journal.Store] type used to store event stream state.
-// Each event stream has its own journal.
-type JournalStore = journal.Store[*journalpb.Record]
-
-// Journal is a journal of event stream records for a single event stream.
-type Journal = journal.Journal[*journalpb.Record]
-
-// NewJournalStore returns a new [JournalStore] that uses s for its underlying
+// newJournalStore returns a new [journal.Store] that uses s for its underlying
 // storage.
-func NewJournalStore(s journal.BinaryStore) JournalStore {
+func newJournalStore(s journal.BinaryStore) journal.Store[*journalpb.Record] {
 	return journal.NewMarshalingStore(
 		s,
-		marshal.ProtocolBuffers[*journalpb.Record]{},
+		marshaler.NewProto[*journalpb.Record](),
 	)
 }
 
-// JournalName returns the name of the journal that contains the state
+// journalName returns the name of the journal that contains the state
 // of the event stream with the given ID.
-func JournalName(streamID *uuidpb.UUID) string {
+func journalName(streamID *uuidpb.UUID) string {
 	return "eventstream:" + streamID.AsString()
 }
 

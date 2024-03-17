@@ -11,7 +11,7 @@ require (
 	github.com/dogmatiq/example v0.0.0-20230606031437-2bd84c72050b
 	github.com/dogmatiq/ferrite v1.3.0
 	github.com/dogmatiq/marshalkit v0.7.3
-	github.com/dogmatiq/persistencekit v0.7.1-0.20240317044652-8e6daf523e36
+	github.com/dogmatiq/persistencekit v0.8.0
 	github.com/dogmatiq/primo v0.2.0
 	github.com/dogmatiq/spruce v0.1.0
 	github.com/google/go-cmp v0.6.0

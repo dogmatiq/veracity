@@ -5,7 +5,7 @@ import (
 
 	"github.com/dogmatiq/enginekit/protobuf/envelopepb"
 	"github.com/dogmatiq/marshalkit"
-	"github.com/dogmatiq/veracity/internal/protobuf/typedproto"
+	"google.golang.org/protobuf/proto"
 )
 
 // Transcoder re-encodes messages to different media-types on the fly.
@@ -47,7 +47,7 @@ func (t *Transcoder) Transcode(env *envelopepb.Envelope) (*envelopepb.Envelope, 
 		return nil, ok, err
 	}
 
-	env = typedproto.Clone(env)
+	env = proto.Clone(env).(*envelopepb.Envelope)
 	env.MediaType = packet.MediaType
 	env.Data = packet.Data
 
