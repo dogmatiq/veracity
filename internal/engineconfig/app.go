@@ -63,7 +63,7 @@ func (c applicationVisitor) VisitRichIntegration(_ context.Context, cfg configki
 	sup := &integration.Supervisor{
 		Handler:         cfg.Handler(),
 		HandlerIdentity: marshalIdentity(cfg.Identity()),
-		Journals:        c.Persistence.Journals,
+		Journals:        integration.NewJournalStore(c.Persistence.Journals),
 		Packer:          c.packer,
 	}
 

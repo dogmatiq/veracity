@@ -30,7 +30,7 @@ import (
 func TestSupervisor(t *testing.T) {
 	type dependencies struct {
 		Packer        *envelope.Packer
-		Journals      *memoryjournal.BinaryStore
+		Journals      *memoryjournal.Store[*journalpb.Record]
 		Keyspaces     *memorykv.BinaryStore
 		Handler       *IntegrationMessageHandler
 		EventRecorder *eventRecorderStub
@@ -41,7 +41,7 @@ func TestSupervisor(t *testing.T) {
 	setup := func(test.TestingT) (deps dependencies) {
 		deps.Packer = newPacker()
 
-		deps.Journals = &memoryjournal.BinaryStore{}
+		deps.Journals = &memoryjournal.Store[*journalpb.Record]{}
 
 		deps.Keyspaces = &memorykv.BinaryStore{}
 
@@ -92,7 +92,7 @@ func TestSupervisor(t *testing.T) {
 			{
 				Desc: "failure before appending CommandEnqueued record to the journal",
 				InduceFailure: func(deps *dependencies) {
-					test.XXX_FailBeforeJournalAppend(
+					test.FailBeforeJournalAppend(
 						deps.Journals,
 						JournalName(deps.Supervisor.HandlerIdentity.Key),
 						func(r *journalpb.Record) bool {
@@ -105,7 +105,7 @@ func TestSupervisor(t *testing.T) {
 			{
 				Desc: "failure after appending CommandEnqueued record to the journal",
 				InduceFailure: func(deps *dependencies) {
-					test.XXX_FailAfterJournalAppend(
+					test.FailAfterJournalAppend(
 						deps.Journals,
 						JournalName(deps.Supervisor.HandlerIdentity.Key),
 						func(r *journalpb.Record) bool {
@@ -159,7 +159,7 @@ func TestSupervisor(t *testing.T) {
 			{
 				Desc: "failure before appending CommandHandled record to the journal",
 				InduceFailure: func(deps *dependencies) {
-					test.XXX_FailBeforeJournalAppend(
+					test.FailBeforeJournalAppend(
 						deps.Journals,
 						JournalName(deps.Supervisor.HandlerIdentity.Key),
 						func(r *journalpb.Record) bool {
@@ -172,7 +172,7 @@ func TestSupervisor(t *testing.T) {
 			{
 				Desc: "failure after appending CommandHandled record to the journal",
 				InduceFailure: func(deps *dependencies) {
-					test.XXX_FailAfterJournalAppend(
+					test.FailAfterJournalAppend(
 						deps.Journals,
 						JournalName(deps.Supervisor.HandlerIdentity.Key),
 						func(r *journalpb.Record) bool {
@@ -228,7 +228,7 @@ func TestSupervisor(t *testing.T) {
 				Desc:                              "failure before appending EventsAppendedToStream record to the journal",
 				ExpectMultipleEventAppendRequests: true,
 				InduceFailure: func(deps *dependencies) {
-					test.XXX_FailBeforeJournalAppend(
+					test.FailBeforeJournalAppend(
 						deps.Journals,
 						JournalName(deps.Supervisor.HandlerIdentity.Key),
 						func(r *journalpb.Record) bool {
@@ -241,7 +241,7 @@ func TestSupervisor(t *testing.T) {
 			{
 				Desc: "failure after appending EventsAppendedToStream record to the journal",
 				InduceFailure: func(deps *dependencies) {
-					test.XXX_FailAfterJournalAppend(
+					test.FailAfterJournalAppend(
 						deps.Journals,
 						JournalName(deps.Supervisor.HandlerIdentity.Key),
 						func(r *journalpb.Record) bool {

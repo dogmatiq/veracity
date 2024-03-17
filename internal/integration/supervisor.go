@@ -15,7 +15,6 @@ import (
 	"github.com/dogmatiq/veracity/internal/fsm"
 	"github.com/dogmatiq/veracity/internal/integration/internal/journalpb"
 	"github.com/dogmatiq/veracity/internal/messaging"
-	"github.com/dogmatiq/veracity/internal/protobuf/protojournal"
 	"github.com/dogmatiq/veracity/internal/signaling"
 	"google.golang.org/protobuf/proto"
 )
@@ -38,14 +37,14 @@ type Supervisor struct {
 	ExecuteQueue    messaging.ExchangeQueue[ExecuteRequest, ExecuteResponse]
 	Handler         dogma.IntegrationMessageHandler
 	HandlerIdentity *identitypb.Identity
-	Journals        journal.BinaryStore
+	Journals        JournalStore
 	Keyspaces       kv.BinaryStore
 	Packer          *envelope.Packer
 	EventRecorder   EventRecorder
 
 	eventStreamID             *uuidpb.UUID
 	lowestPossibleEventOffset eventstream.Offset
-	journal                   journal.BinaryJournal
+	journal                   Journal
 	pos                       journal.Position
 	handledCmds               kv.BinaryKeyspace
 	shutdown                  signaling.Latch
@@ -91,9 +90,8 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 	// Range over the journal to build a list of pending work consisting of:
 	// 	- enqueued but unhandled commands
 	// 	- events that have not been recorded to an event stream
-	if err := protojournal.Range(
+	if err := s.journal.Range(
 		ctx,
-		s.journal,
 		s.pos,
 		func(
 			ctx context.Context,
@@ -135,13 +133,13 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 	}
 
 	for _, op := range unrecorded {
-		if err := s.recordEvents(ctx, s.journal, op, false); err != nil {
+		if err := s.recordEvents(ctx, op, false); err != nil {
 			return fsm.Fail(err)
 		}
 	}
 
 	for _, cmd := range unhandled {
-		if err := s.handleCommand(ctx, cmd, s.journal); err != nil {
+		if err := s.handleCommand(ctx, cmd); err != nil {
 			return fsm.Fail(err)
 		}
 	}
@@ -171,7 +169,7 @@ func (s *Supervisor) Shutdown() {
 	s.shutdown.Signal()
 }
 
-func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope, j journal.BinaryJournal) error {
+func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope) error {
 	c, err := s.Packer.Unpack(cmd)
 	if err != nil {
 		return err
@@ -210,9 +208,8 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 		LowestPossibleEventOffset: uint64(s.lowestPossibleEventOffset),
 	}
 
-	if err := protojournal.Append(
+	if err := s.journal.Append(
 		ctx,
-		j,
 		s.pos,
 		journalpb.
 			NewRecordBuilder().
@@ -223,12 +220,11 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 	}
 	s.pos++
 
-	return s.recordEvents(ctx, j, op, true)
+	return s.recordEvents(ctx, op, true)
 }
 
 func (s *Supervisor) recordEvents(
 	ctx context.Context,
-	j journal.BinaryJournal,
 	op *journalpb.CommandHandled,
 	isFirstAttempt bool,
 ) error {
@@ -254,9 +250,8 @@ func (s *Supervisor) recordEvents(
 		s.lowestPossibleEventOffset = res.EndOffset
 	}
 
-	if err := protojournal.Append(
+	if err := s.journal.Append(
 		ctx,
-		j,
 		s.pos,
 		journalpb.
 			NewRecordBuilder().
@@ -294,9 +289,8 @@ func (s *Supervisor) handleCommandState(
 		}
 	}
 
-	if err := protojournal.Append(
+	if err := s.journal.Append(
 		ctx,
-		s.journal,
 		s.pos,
 		journalpb.
 			NewRecordBuilder().
@@ -314,17 +308,11 @@ func (s *Supervisor) handleCommandState(
 	s.pos++
 	ex.Ok(ExecuteResponse{})
 
-	if err := s.handleCommand(ctx, ex.Request.Command, s.journal); err != nil {
+	if err := s.handleCommand(ctx, ex.Request.Command); err != nil {
 		return fsm.Fail(err)
 	}
 
 	return fsm.EnterState(s.idleState)
-}
-
-// JournalName returns the name of the journal that contains the state
-// of the integration handler with the given key.
-func JournalName(key *uuidpb.UUID) string {
-	return "integration:" + key.AsString()
 }
 
 // HandledCommandsKeyspaceName returns the name of the keyspace that contains
