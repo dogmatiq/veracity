@@ -32,23 +32,21 @@ func (p *Partitioner) Route(workload *uuidpb.UUID) *uuidpb.UUID {
 	}
 
 	var (
-		hash         xxhash.Digest
-		winningNode  *uuidpb.UUID
-		winningScore uint64
+		hash   xxhash.Digest
+		winner *uuidpb.UUID
+		score  uint64
 	)
 
 	for _, node := range nodes {
+		hash.Reset()
 		hash.Write(node.AsBytes())
 		hash.Write(workload.AsBytes())
 
-		score := hash.Sum64()
-		hash.Reset()
-
-		if score > winningScore {
-			winningNode = node
-			winningScore = score
+		if s := hash.Sum64(); s > score {
+			winner = node
+			score = s
 		}
 	}
 
-	return winningNode
+	return winner
 }
