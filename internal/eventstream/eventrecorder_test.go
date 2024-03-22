@@ -62,7 +62,17 @@ func TestEventRecorder(t *testing.T) {
 			RunInBackground(t, "supervisor", deps.Supervisor.Run).
 			UntilStopped()
 
-		streamID := uuidpb.Generate()
+		streamID, offset, err := deps.Recorder.SelectEventStream(tctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		test.Expect(
+			t,
+			"unexpected offset",
+			offset,
+			0,
+		)
 
 		ev := deps.Packer.Pack(MessageE1)
 
@@ -110,7 +120,17 @@ func TestEventRecorder(t *testing.T) {
 		tctx := test.WithContext(t)
 		deps := setup(tctx)
 
-		streamID := uuidpb.Generate()
+		streamID, offset, err := deps.Recorder.SelectEventStream(tctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		test.Expect(
+			t,
+			"unexpected offset",
+			offset,
+			0,
+		)
 
 		ev := deps.Packer.Pack(MessageE1)
 
@@ -120,7 +140,7 @@ func TestEventRecorder(t *testing.T) {
 
 		test.FailOnJournalOpen(deps.Journals, JournalName(streamID), errors.New("<error>"))
 
-		_, err := deps.Recorder.AppendEvents(
+		_, err = deps.Recorder.AppendEvents(
 			tctx,
 			AppendRequest{
 				StreamID: streamID,

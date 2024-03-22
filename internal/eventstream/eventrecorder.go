@@ -16,5 +16,5 @@ func (e *EventRecorder) AppendEvents(ctx context.Context, req AppendRequest) (Ap
 }
 
 func (e *EventRecorder) SelectEventStream(context.Context) (streamID *uuidpb.UUID, offset Offset, err error) {
-	return nil, 0, nil
+	return uuidpb.Generate(), 0, nil
 }
