@@ -7,7 +7,9 @@ import (
 )
 
 type EventConsumer struct {
-	// eventLen func
+	// TODO: add an ability to read historical events from supervisor journals
+	// along with the ability to current events from Events channel.
+	Events chan Event // eventLen func
 }
 
 func (c *EventConsumer) Consume(
@@ -16,21 +18,12 @@ func (c *EventConsumer) Consume(
 	offset Offset,
 	events chan<- Event,
 ) error {
-	// if c.eventLen() < int(offset) {
-	// 	return fmt.Errorf("invalid offset %d", offset)
-	// }
-
-	// for {
-	// 	select {
-	// 	case <-ctx.Done():
-	// 		return ctx.Err()
-	// 	case newOffset := <-c.newEventsOffset:
-	// 		c.mu.RLock()
-	// 		for _, event := range c.events[(len(c.events)+1)-newOffset:] {
-	// 			events <- event
-	// 		}
-	// 		c.mu.RUnlock()
-	// 	}
-	// }
-	return nil
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case e := <-c.Events:
+			events <- e
+		}
+	}
 }

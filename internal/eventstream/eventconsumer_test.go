@@ -1,7 +1,7 @@
 package eventstream_test
 
 import (
-	"errors"
+	"context"
 	"testing"
 
 	. "github.com/dogmatiq/dogma/fixtures"
@@ -45,7 +45,9 @@ func TestEventConsumer(t *testing.T) {
 			Marshaler:   Marshaler,
 		}
 
-		deps.Consumer = &EventConsumer{}
+		deps.Consumer = &EventConsumer{
+			Events: events,
+		}
 
 		return deps
 	}
@@ -61,112 +63,64 @@ func TestEventConsumer(t *testing.T) {
 			RunInBackground(t, "supervisor", deps.Supervisor.Run).
 			UntilStopped()
 
-		res, err := deps.Supervisor.AppendQueue.Exchange(
+		ev1 := deps.Packer.Pack(MessageE1)
+		ev2 := deps.Packer.Pack(MessageE2)
+		ev3 := deps.Packer.Pack(MessageE3)
+
+		if _, err := deps.Supervisor.AppendQueue.Exchange(
 			tctx,
 			AppendRequest{
-				StreamID: streamID,
-				Events: []*envelopepb.Envelope{
-					deps.Packer.Pack(MessageE1),
-					deps.Packer.Pack(MessageE2),
-					deps.Packer.Pack(MessageE3),
-				},
+				StreamID:       streamID,
+				Events:         []*envelopepb.Envelope{ev1, ev2, ev3},
 				IsFirstAttempt: true,
 			},
-		)
-		if err != nil {
+		); err != nil {
 			t.Fatal(err)
 		}
 
-		err = deps.Consumer.Consume(tctx, streamID, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		test.Expect(
-			t,
-			"unexpected offset",
-			offset,
-			0,
-		)
-
-		ev := deps.Packer.Pack(MessageE1)
-
-		res, err := deps.Recorder.AppendEvents(
-			tctx,
-			AppendRequest{
-				StreamID: streamID,
-				Events: []*envelopepb.Envelope{
-					ev,
+		events := make(chan Event, 100)
+		consumer := test.
+			RunInBackground(
+				t,
+				"consumer",
+				func(ctx context.Context) error {
+					return deps.Consumer.Consume(ctx, streamID, 0, events)
 				},
-				IsFirstAttempt: true,
-			},
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
+			).
+			UntilStopped()
 
-		test.Expect(
+		test.ExpectChannelToReceive(
 			t,
-			"unexpected response",
-			res,
-			AppendResponse{
-				BeginOffset: 0,
-				EndOffset:   1,
+			events,
+			Event{
+				StreamID: streamID,
+				Offset:   0,
+				Envelope: ev1,
 			},
 		)
 
 		test.ExpectChannelToReceive(
 			t,
-			deps.Events,
+			events,
 			Event{
 				StreamID: streamID,
-				Offset:   0,
-				Envelope: ev,
+				Offset:   1,
+				Envelope: ev2,
 			},
 		)
+
+		test.ExpectChannelToReceive(
+			t,
+			events,
+			Event{
+				StreamID: streamID,
+				Offset:   2,
+				Envelope: ev3,
+			},
+		)
+
 		deps.Supervisor.Shutdown()
 		supervisor.StopAndWait()
-
-	})
-
-	t.Run("it propagates failures", func(t *testing.T) {
-		t.Parallel()
-
-		tctx := test.WithContext(t)
-		deps := setup(tctx)
-
-		streamID, offset, err := deps.Recorder.SelectEventStream(tctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		test.Expect(
-			t,
-			"unexpected offset",
-			offset,
-			0,
-		)
-
-		ev := deps.Packer.Pack(MessageE1)
-
-		test.
-			RunInBackground(t, "supervisor", deps.Supervisor.Run).
-			FailBeforeTestEnds()
-
-		test.FailOnJournalOpen(deps.Journals, JournalName(streamID), errors.New("<error>"))
-
-		_, err = deps.Recorder.AppendEvents(
-			tctx,
-			AppendRequest{
-				StreamID: streamID,
-				Events: []*envelopepb.Envelope{
-					ev,
-				},
-				IsFirstAttempt: true,
-			},
-		)
-		if err == nil {
-			t.Fatal("expected err")
-		}
+		consumer.StopAndWait()
 	})
 }
