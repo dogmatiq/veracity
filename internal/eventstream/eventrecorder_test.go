@@ -20,7 +20,7 @@ func TestEventRecorder(t *testing.T) {
 	t.Parallel()
 
 	type dependencies struct {
-		Journals   *memoryjournal.Store
+		Journals   *memoryjournal.BinaryStore
 		Supervisor *Supervisor
 		Events     <-chan Event
 		Packer     *envelope.Packer
@@ -28,7 +28,7 @@ func TestEventRecorder(t *testing.T) {
 	}
 
 	setup := func(t test.TestingT) (deps dependencies) {
-		deps.Journals = &memoryjournal.Store{}
+		deps.Journals = &memoryjournal.BinaryStore{}
 
 		events := make(chan Event, 100)
 
