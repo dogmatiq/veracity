@@ -4,9 +4,9 @@ go 1.22
 
 require (
 	github.com/cespare/xxhash/v2 v2.2.0
-	github.com/dogmatiq/configkit v0.12.2
+	github.com/dogmatiq/configkit v0.13.0
 	github.com/dogmatiq/discoverkit v0.1.2
-	github.com/dogmatiq/dogma v0.12.1
+	github.com/dogmatiq/dogma v0.13.0
 	github.com/dogmatiq/enginekit v0.0.0-20230922231755-43a18006bf1c
 	github.com/dogmatiq/example v0.0.0-20230606031437-2bd84c72050b
 	github.com/dogmatiq/ferrite v1.3.0
@@ -41,8 +41,8 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/net v0.20.0 // indirect
-	golang.org/x/sys v0.16.0 // indirect
+	golang.org/x/net v0.22.0 // indirect
+	golang.org/x/sys v0.18.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240123012728-ef4313101c80 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

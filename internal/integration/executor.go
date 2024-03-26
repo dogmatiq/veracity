@@ -16,7 +16,11 @@ type CommandExecutor struct {
 }
 
 // ExecuteCommand enqueues a command.
-func (e *CommandExecutor) ExecuteCommand(ctx context.Context, c dogma.Command) error {
+func (e *CommandExecutor) ExecuteCommand(
+	ctx context.Context,
+	c dogma.Command,
+	_ ...dogma.ExecuteCommandOption,
+) error {
 	_, err := e.ExecuteQueue.Exchange(
 		ctx, ExecuteRequest{
 			Command:        e.Packer.Pack(c),
