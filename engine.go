@@ -31,7 +31,11 @@ func New(app dogma.Application, options ...EngineOption) *Engine {
 //
 // It may be called without calling [Engine.Run]. In this mode of operation, the
 // engine acts solely as a router that forwards messages to worker nodes.
-func (e *Engine) ExecuteCommand(ctx context.Context, c dogma.Command) error {
+func (e *Engine) ExecuteCommand(
+	ctx context.Context,
+	c dogma.Command,
+	options ...dogma.ExecuteCommandOption,
+) error {
 	if c == nil {
 		panic("command must not be nil")
 	}
@@ -45,7 +49,7 @@ func (e *Engine) ExecuteCommand(ctx context.Context, c dogma.Command) error {
 		panic(fmt.Sprintf("command is unrecognized: %T", c))
 	}
 
-	return x.ExecuteCommand(ctx, c)
+	return x.ExecuteCommand(ctx, c, options...)
 }
 
 // Run joins the cluster as a worker that handles the application's messages.
