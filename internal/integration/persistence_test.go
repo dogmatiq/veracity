@@ -1,6 +1,6 @@
 package integration
 
 var (
-	JournalName                 = journalName
+	//deprecated
 	HandledCommandsKeyspaceName = handledCommandsKeyspaceName
 )

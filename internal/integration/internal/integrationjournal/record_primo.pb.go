@@ -2,9 +2,9 @@
 // versions:
 // 	protoc-gen-go-primo v
 // 	protoc              v4.25.3
-// source: github.com/dogmatiq/veracity/internal/integration/internal/journalpb/record.proto
+// source: github.com/dogmatiq/veracity/internal/integration/internal/integrationjournal/record.proto
 
-package journalpb
+package integrationjournal
 
 import (
 	envelopepb "github.com/dogmatiq/enginekit/protobuf/envelopepb"

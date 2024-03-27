@@ -14,7 +14,7 @@ import (
 	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/eventstream"
 	"github.com/dogmatiq/veracity/internal/fsm"
-	"github.com/dogmatiq/veracity/internal/integration/internal/journalpb"
+	"github.com/dogmatiq/veracity/internal/integration/internal/integrationjournal"
 	"github.com/dogmatiq/veracity/internal/messaging"
 	"github.com/dogmatiq/veracity/internal/signaling"
 	"google.golang.org/protobuf/proto"
@@ -45,7 +45,7 @@ type Supervisor struct {
 
 	eventStreamID             *uuidpb.UUID
 	lowestPossibleEventOffset eventstream.Offset
-	journal                   journal.Journal[*journalpb.Record]
+	journal                   journal.Journal[*integrationjournal.Record]
 	pos                       journal.Position
 	handled                   kv.Keyspace[*uuidpb.UUID, bool]
 	shutdown                  signaling.Latch
@@ -56,12 +56,7 @@ type Supervisor struct {
 func (s *Supervisor) Run(ctx context.Context) error {
 	var err error
 
-	journals := journal.NewMarshalingStore(
-		s.Journals,
-		marshaler.NewProto[*journalpb.Record](),
-	)
-
-	s.journal, err = journals.Open(ctx, journalName(s.HandlerIdentity.Key))
+	s.journal, err = integrationjournal.Open(ctx, s.Journals, s.HandlerIdentity.Key)
 	if err != nil {
 		return err
 	}
@@ -96,7 +91,7 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 
 	var (
 		unhandled  []*envelopepb.Envelope
-		unrecorded []*journalpb.CommandHandled
+		unrecorded []*integrationjournal.CommandHandled
 	)
 
 	// Range over the journal to build a list of pending work consisting of:
@@ -108,16 +103,16 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 		func(
 			ctx context.Context,
 			pos journal.Position,
-			record *journalpb.Record,
+			record *integrationjournal.Record,
 		) (ok bool, err error) {
 			s.pos = pos + 1
 
-			journalpb.Switch_Record_Operation(
+			integrationjournal.Switch_Record_Operation(
 				record,
-				func(op *journalpb.CommandEnqueued) {
+				func(op *integrationjournal.CommandEnqueued) {
 					unhandled = append(unhandled, op.GetCommand())
 				},
-				func(op *journalpb.CommandHandled) {
+				func(op *integrationjournal.CommandHandled) {
 					for i, env := range unhandled {
 						if proto.Equal(env.GetMessageId(), op.GetCommandId()) {
 							unhandled = slices.Delete(unhandled, i, i+1)
@@ -128,7 +123,7 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 						unrecorded = append(unrecorded, op)
 					}
 				},
-				func(op *journalpb.EventsAppendedToStream) {
+				func(op *integrationjournal.EventsAppendedToStream) {
 					for i, rec := range unrecorded {
 						if proto.Equal(rec.GetCommandId(), op.GetCommandId()) {
 							unrecorded = slices.Delete(unrecorded, i, i+1)
@@ -209,7 +204,7 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 		}
 	}
 
-	op := &journalpb.CommandHandled{
+	op := &integrationjournal.CommandHandled{
 		CommandId:                 cmd.GetMessageId(),
 		Events:                    envs,
 		EventStreamId:             s.eventStreamID,
@@ -219,7 +214,7 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 	if err := s.journal.Append(
 		ctx,
 		s.pos,
-		journalpb.
+		integrationjournal.
 			NewRecordBuilder().
 			WithCommandHandled(op).
 			Build(),
@@ -233,7 +228,7 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 
 func (s *Supervisor) recordEvents(
 	ctx context.Context,
-	op *journalpb.CommandHandled,
+	op *integrationjournal.CommandHandled,
 	isFirstAttempt bool,
 ) error {
 	if len(op.GetEvents()) == 0 {
@@ -261,10 +256,10 @@ func (s *Supervisor) recordEvents(
 	if err := s.journal.Append(
 		ctx,
 		s.pos,
-		journalpb.
+		integrationjournal.
 			NewRecordBuilder().
 			WithEventsAppendedToStream(
-				&journalpb.EventsAppendedToStream{
+				&integrationjournal.EventsAppendedToStream{
 					CommandId: op.GetCommandId(),
 				},
 			).
@@ -297,10 +292,10 @@ func (s *Supervisor) handleCommandState(
 	if err := s.journal.Append(
 		ctx,
 		s.pos,
-		journalpb.
+		integrationjournal.
 			NewRecordBuilder().
 			WithCommandEnqueued(
-				&journalpb.CommandEnqueued{
+				&integrationjournal.CommandEnqueued{
 					Command: ex.Request.Command,
 				},
 			).
