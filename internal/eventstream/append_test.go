@@ -15,7 +15,7 @@ import (
 	"github.com/dogmatiq/spruce"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	. "github.com/dogmatiq/veracity/internal/eventstream"
-	"github.com/dogmatiq/veracity/internal/eventstream/internal/journalpb"
+	"github.com/dogmatiq/veracity/internal/eventstream/internal/eventstreamjournal"
 	"github.com/dogmatiq/veracity/internal/test"
 )
 
@@ -69,7 +69,7 @@ func TestAppend(t *testing.T) {
 				InduceFailure: func(deps *dependencies) {
 					test.FailOnJournalOpen(
 						deps.Journals,
-						JournalName(streamID),
+						eventstreamjournal.Name(streamID),
 						errors.New("<error>"),
 					)
 				},
@@ -79,8 +79,8 @@ func TestAppend(t *testing.T) {
 				InduceFailure: func(deps *dependencies) {
 					test.FailBeforeJournalAppend(
 						deps.Journals,
-						JournalName(streamID),
-						func(*journalpb.Record) bool {
+						eventstreamjournal.Name(streamID),
+						func(*eventstreamjournal.Record) bool {
 							return true
 						},
 						errors.New("<error>"),
@@ -92,8 +92,8 @@ func TestAppend(t *testing.T) {
 				InduceFailure: func(deps *dependencies) {
 					test.FailAfterJournalAppend(
 						deps.Journals,
-						JournalName(streamID),
-						func(*journalpb.Record) bool {
+						eventstreamjournal.Name(streamID),
+						func(*eventstreamjournal.Record) bool {
 							return true
 						},
 						errors.New("<error>"),
@@ -168,7 +168,7 @@ func TestAppend(t *testing.T) {
 
 				t.Log("ensure that the event was appended to the stream exactly once")
 
-				j, err := NewJournalStore(deps.Journals).Open(tctx, JournalName(streamID))
+				j, err := eventstreamjournal.Open(tctx, deps.Journals, streamID)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -181,7 +181,7 @@ func TestAppend(t *testing.T) {
 					func(
 						ctx context.Context,
 						_ journal.Position,
-						rec *journalpb.Record,
+						rec *eventstreamjournal.Record,
 					) (bool, error) {
 						events = append(
 							events,

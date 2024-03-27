@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/dogmatiq/persistencekit/journal"
-	"github.com/dogmatiq/veracity/internal/eventstream/internal/journalpb"
+	"github.com/dogmatiq/veracity/internal/eventstream/internal/eventstreamjournal"
 	"github.com/dogmatiq/veracity/internal/fsm"
 	"github.com/dogmatiq/veracity/internal/messaging"
 	"github.com/dogmatiq/veracity/internal/signaling"
@@ -17,7 +17,7 @@ const defaultIdleTimeout = 5 * time.Minute
 // A worker manages the state of an event stream.
 type worker struct {
 	// Journal stores the event stream's state.
-	Journal journal.Journal[*journalpb.Record]
+	Journal journal.Journal[*eventstreamjournal.Record]
 
 	// AppendQueue is a queue of requests to append events to the stream.
 	AppendQueue messaging.ExchangeQueue[AppendRequest, AppendResponse]
@@ -170,11 +170,11 @@ func (w *worker) appendEvents(
 	if err := w.Journal.Append(
 		ctx,
 		w.pos,
-		journalpb.
+		eventstreamjournal.
 			NewRecordBuilder().
 			WithStreamOffsetBefore(uint64(before)).
 			WithStreamOffsetAfter(uint64(after)).
-			WithEventsAppended(&journalpb.EventsAppended{
+			WithEventsAppended(&eventstreamjournal.EventsAppended{
 				Events: req.Events,
 			}).
 			Build(),
@@ -230,18 +230,18 @@ func (w *worker) mightBeDuplicates(req AppendRequest) bool {
 func (w *worker) findAppendRecord(
 	ctx context.Context,
 	req AppendRequest,
-) (*journalpb.Record, error) {
+) (*eventstreamjournal.Record, error) {
 	return journal.ScanFromSearchResult(
 		ctx,
 		w.Journal,
 		0,
 		w.pos,
-		searchByOffset(req.LowestPossibleOffset),
+		eventstreamjournal.SearchByOffset(uint64(req.LowestPossibleOffset)),
 		func(
 			ctx context.Context,
 			_ journal.Position,
-			rec *journalpb.Record,
-		) (*journalpb.Record, bool, error) {
+			rec *eventstreamjournal.Record,
+		) (*eventstreamjournal.Record, bool, error) {
 			if op := rec.GetEventsAppended(); op != nil {
 				targetID := req.Events[0].MessageId
 				candidateID := op.Events[0].MessageId

@@ -7,7 +7,7 @@ import (
 
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/persistencekit/journal"
-	"github.com/dogmatiq/veracity/internal/eventstream/internal/journalpb"
+	"github.com/dogmatiq/veracity/internal/eventstream/internal/eventstreamjournal"
 	"github.com/dogmatiq/veracity/internal/fsm"
 	"github.com/dogmatiq/veracity/internal/messaging"
 	"github.com/dogmatiq/veracity/internal/signaling"
@@ -24,7 +24,6 @@ type Supervisor struct {
 	Events      chan<- Event
 	Logger      *slog.Logger
 
-	journals      journal.Store[*journalpb.Record]
 	shutdown      signaling.Latch
 	workers       uuidpb.Map[*worker]
 	workerStopped chan workerResult
@@ -138,11 +137,7 @@ func (s *Supervisor) startWorkerForStreamID(
 	ctx context.Context,
 	streamID *uuidpb.UUID,
 ) (*worker, error) {
-	if s.journals == nil {
-		s.journals = newJournalStore(s.Journals)
-	}
-
-	j, err := s.journals.Open(ctx, journalName(streamID))
+	j, err := eventstreamjournal.Open(ctx, s.Journals, streamID)
 	if err != nil {
 		return nil, err
 	}

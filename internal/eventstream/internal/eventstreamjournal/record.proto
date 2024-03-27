@@ -1,7 +1,7 @@
 syntax = "proto3";
 package veracity.eventstream.journal.v1;
 
-option go_package = "github.com/dogmatiq/veracity/internal/eventstream/internal/journalpb";
+option go_package = "github.com/dogmatiq/veracity/internal/eventstream/internal/eventstreamjournal";
 
 import "github.com/dogmatiq/enginekit/protobuf/envelopepb/envelope.proto";
 
