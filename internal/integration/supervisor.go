@@ -10,11 +10,11 @@ import (
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/persistencekit/journal"
 	"github.com/dogmatiq/persistencekit/kv"
-	"github.com/dogmatiq/persistencekit/marshaler"
 	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/eventstream"
 	"github.com/dogmatiq/veracity/internal/fsm"
 	"github.com/dogmatiq/veracity/internal/integration/internal/integrationjournal"
+	"github.com/dogmatiq/veracity/internal/integration/internal/integrationkv"
 	"github.com/dogmatiq/veracity/internal/messaging"
 	"github.com/dogmatiq/veracity/internal/signaling"
 	"google.golang.org/protobuf/proto"
@@ -62,13 +62,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	}
 	defer s.journal.Close()
 
-	keyspaces := kv.NewMarshalingStore(
-		s.Keyspaces,
-		marshaler.NewProto[*uuidpb.UUID](),
-		marshaler.Bool,
-	)
-
-	s.handled, err = keyspaces.Open(ctx, handledCommandsKeyspaceName(s.HandlerIdentity.Key))
+	s.handled, err = integrationkv.OpenHandledCommands(ctx, s.Keyspaces, s.HandlerIdentity.Key)
 	if err != nil {
 		return err
 	}

@@ -21,6 +21,7 @@ import (
 	"github.com/dogmatiq/veracity/internal/eventstream"
 	. "github.com/dogmatiq/veracity/internal/integration"
 	"github.com/dogmatiq/veracity/internal/integration/internal/integrationjournal"
+	"github.com/dogmatiq/veracity/internal/integration/internal/integrationkv"
 	"github.com/dogmatiq/veracity/internal/test"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -256,7 +257,7 @@ func TestSupervisor(t *testing.T) {
 				InduceFailure: func(deps *dependencies) {
 					test.FailBeforeKeyspaceSet(
 						deps.Keyspaces,
-						HandledCommandsKeyspaceName(deps.Supervisor.HandlerIdentity.Key),
+						integrationkv.HandledCommandsKeyspace(deps.Supervisor.HandlerIdentity.Key),
 						func(k, v []byte) bool {
 							return true
 						},
@@ -268,7 +269,7 @@ func TestSupervisor(t *testing.T) {
 				InduceFailure: func(deps *dependencies) {
 					test.FailAfterKeyspaceSet(
 						deps.Keyspaces,
-						HandledCommandsKeyspaceName(deps.Supervisor.HandlerIdentity.Key),
+						integrationkv.HandledCommandsKeyspace(deps.Supervisor.HandlerIdentity.Key),
 						func(k, v []byte) bool {
 							return true
 						},
