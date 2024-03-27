@@ -11,7 +11,7 @@ require (
 	github.com/dogmatiq/example v0.0.0-20230606031437-2bd84c72050b
 	github.com/dogmatiq/ferrite v1.3.0
 	github.com/dogmatiq/marshalkit v0.7.3
-	github.com/dogmatiq/persistencekit v0.9.1
+	github.com/dogmatiq/persistencekit v0.9.2
 	github.com/dogmatiq/primo v0.2.0
 	github.com/dogmatiq/spruce v0.1.0
 	github.com/google/go-cmp v0.6.0
@@ -27,7 +27,7 @@ require (
 
 require (
 	github.com/dogmatiq/cosyne v0.2.0 // indirect
-	github.com/dogmatiq/dyad v0.2.2 // indirect
+	github.com/dogmatiq/dyad v1.0.0 // indirect
 	github.com/dogmatiq/iago v0.4.0 // indirect
 	github.com/dogmatiq/interopspec v0.5.3 // indirect
 	github.com/dogmatiq/linger v1.1.0 // indirect
