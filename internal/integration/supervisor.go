@@ -23,10 +23,6 @@ import (
 // ExecuteRequest is a request to execute a command.
 type ExecuteRequest struct {
 	Command *envelopepb.Envelope
-
-	// IsFirstAttempt indicates whether or not this is the first request
-	// attempting to execute this specific command.
-	IsFirstAttempt bool
 }
 
 // ExecuteResponse is the response to an ExecuteRequest.
@@ -134,7 +130,7 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 	}
 
 	for _, op := range unrecorded {
-		if err := s.recordEvents(ctx, op, false); err != nil {
+		if err := s.recordEvents(ctx, op); err != nil {
 			return fsm.Fail(err)
 		}
 	}
@@ -217,13 +213,12 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 	}
 	s.pos++
 
-	return s.recordEvents(ctx, op, true)
+	return s.recordEvents(ctx, op)
 }
 
 func (s *Supervisor) recordEvents(
 	ctx context.Context,
 	op *integrationjournal.CommandHandled,
-	isFirstAttempt bool,
 ) error {
 	if len(op.GetEvents()) == 0 {
 		return nil
@@ -232,11 +227,9 @@ func (s *Supervisor) recordEvents(
 	res, err := s.EventRecorder.AppendEvents(
 		ctx,
 		eventstream.AppendRequest{
-			StreamID: op.GetEventStreamId(),
-			Events:   op.GetEvents(),
-			// TODO rename GetStreamOffset in proto
+			StreamID:             op.GetEventStreamId(),
+			Events:               op.GetEvents(),
 			LowestPossibleOffset: eventstream.Offset(op.GetLowestPossibleEventOffset()),
-			IsFirstAttempt:       isFirstAttempt,
 		},
 	)
 	if err != nil {
@@ -271,16 +264,16 @@ func (s *Supervisor) handleCommandState(
 	ctx context.Context,
 	ex messaging.Exchange[ExecuteRequest, ExecuteResponse],
 ) fsm.Action {
-	if !ex.Request.IsFirstAttempt {
-		alreadyHandled, err := s.handled.Has(ctx, ex.Request.Command.GetMessageId())
-		if err != nil {
-			ex.Err(err)
-			return fsm.Fail(err)
-		}
-		if alreadyHandled {
-			ex.Ok(ExecuteResponse{})
-			return fsm.EnterState(s.idleState)
-		}
+	// TODO: there are optimizations to be made here (i.e. in-memory list of
+	// recent commands, bloom filter, etc).
+	alreadyHandled, err := s.handled.Has(ctx, ex.Request.Command.GetMessageId())
+	if err != nil {
+		ex.Err(err)
+		return fsm.Fail(err)
+	}
+	if alreadyHandled {
+		ex.Ok(ExecuteResponse{})
+		return fsm.EnterState(s.idleState)
 	}
 
 	if err := s.journal.Append(

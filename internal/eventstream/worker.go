@@ -205,19 +205,9 @@ func (w *worker) appendEvents(
 // mightBeDuplicates returns true if it's possible that the events in req have
 // already been appended to the stream.
 func (w *worker) mightBeDuplicates(req AppendRequest) bool {
-	// The events can't be duplicates if there has never been a prior attempt to
-	// append them.
-	if req.IsFirstAttempt {
-		return false
-	}
-
 	// The events can't be duplicates if the lowest possible offset that
 	// they could have been appended is the current end of the stream.
-	if req.LowestPossibleOffset == w.off {
-		return false
-	}
-
-	return true
+	return req.LowestPossibleOffset < w.off
 }
 
 // findAppendRecord searches the journal to find the record that contains the

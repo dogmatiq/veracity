@@ -23,7 +23,6 @@ import (
 	"github.com/dogmatiq/veracity/internal/integration/internal/integrationjournal"
 	"github.com/dogmatiq/veracity/internal/integration/internal/integrationkv"
 	"github.com/dogmatiq/veracity/internal/test"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -336,14 +335,11 @@ func TestSupervisor(t *testing.T) {
 					RepeatedlyUntilSuccess()
 
 				req := ExecuteRequest{
-					Command:        cmd,
-					IsFirstAttempt: true,
+					Command: cmd,
 				}
 
 				for {
 					_, err := deps.Supervisor.ExecuteQueue.Exchange(tctx, req)
-
-					req.IsFirstAttempt = false
 
 					if tctx.Err() != nil {
 						t.Fatal(tctx.Err())
@@ -402,7 +398,7 @@ func TestSupervisor(t *testing.T) {
 						handled,
 					)
 
-				firstAppendRequest := test.
+				appendRequest := test.
 					ExpectChannelToReceive(
 						t,
 						appendRequests,
@@ -413,10 +409,6 @@ func TestSupervisor(t *testing.T) {
 							"causation_id",
 							"correlation_id",
 						),
-						cmpopts.IgnoreFields(
-							eventstream.AppendRequest{},
-							"IsFirstAttempt",
-						),
 					)
 
 				deps.Supervisor.Shutdown()
@@ -424,13 +416,10 @@ func TestSupervisor(t *testing.T) {
 				close(appendRequests)
 
 				if c.ExpectMultipleEventAppendRequests {
-					subsequentAppendRequest := firstAppendRequest
-					subsequentAppendRequest.IsFirstAttempt = false
-
 					test.ExpectChannelToReceive(
 						t,
 						appendRequests,
-						subsequentAppendRequest,
+						appendRequest,
 					)
 
 					for req := range appendRequests {
@@ -438,7 +427,7 @@ func TestSupervisor(t *testing.T) {
 							tctx,
 							"unexpected event stream append request",
 							req,
-							subsequentAppendRequest,
+							appendRequest,
 						)
 					}
 				} else {
@@ -471,8 +460,6 @@ func TestSupervisor(t *testing.T) {
 				supervisor = test.
 					RunInBackground(t, "supervisor", secondSupervisor.Run).
 					BeforeTestEnds()
-
-				req.IsFirstAttempt = false
 
 				if _, err := secondSupervisor.ExecuteQueue.Exchange(tctx, req); err != nil {
 					t.Fatal(err)
@@ -613,7 +600,6 @@ func TestSupervisor(t *testing.T) {
 							Data:              MessageE1Packet.Data,
 						},
 					},
-					IsFirstAttempt:       true,
 					LowestPossibleOffset: 10,
 				},
 				protocmp.IgnoreFields(
@@ -641,7 +627,6 @@ func TestSupervisor(t *testing.T) {
 							Data:              MessageE2Packet.Data,
 						},
 					},
-					IsFirstAttempt:       true,
 					LowestPossibleOffset: 11,
 				},
 				protocmp.IgnoreFields(

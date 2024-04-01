@@ -122,7 +122,6 @@ func TestAppend(t *testing.T) {
 							deps.Packer.Pack(MessageE2),
 							deps.Packer.Pack(MessageE3),
 						},
-						IsFirstAttempt: true,
 					},
 				)
 				if err != nil {
@@ -142,9 +141,8 @@ func TestAppend(t *testing.T) {
 				event := deps.Packer.Pack(MessageE1)
 
 				req := AppendRequest{
-					StreamID:       streamID,
-					Events:         []*envelopepb.Envelope{event},
-					IsFirstAttempt: true,
+					StreamID: streamID,
+					Events:   []*envelopepb.Envelope{event},
 				}
 
 				attempt := 1
@@ -157,7 +155,6 @@ func TestAppend(t *testing.T) {
 						break
 					}
 
-					req.IsFirstAttempt = false
 					req.LowestPossibleOffset = res.EndOffset
 				}
 

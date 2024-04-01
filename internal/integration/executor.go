@@ -23,8 +23,7 @@ func (e *CommandExecutor) ExecuteCommand(
 ) error {
 	_, err := e.ExecuteQueue.Exchange(
 		ctx, ExecuteRequest{
-			Command:        e.Packer.Pack(c),
-			IsFirstAttempt: true,
+			Command: e.Packer.Pack(c),
 		},
 	)
 	return err

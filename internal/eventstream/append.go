@@ -14,12 +14,8 @@ type AppendRequest struct {
 	// empty.
 	Events []*envelopepb.Envelope
 
-	// IsFirstAttempt indicates whether or not this is the first request
-	// attempting to append these specific events.
-	IsFirstAttempt bool
-
-	// When IsFirstAttempt is false, LowestPossibleOffset is the lowest offset
-	// within the stream at which these events may have already been appended.
+	// LowestPossibleOffset is the lowest offset within the stream at which
+	// these events may have already been appended.
 	LowestPossibleOffset Offset
 }
 
