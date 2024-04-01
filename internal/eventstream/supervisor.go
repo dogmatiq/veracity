@@ -13,15 +13,17 @@ import (
 	"github.com/dogmatiq/veracity/internal/signaling"
 )
 
-// errShuttingDown is sent in response to append requests that are not serviced
+// errShuttingDown is sent in response to requests that are not serviced
 // because of an error within the event stream supervisor or a worker.
 var errShuttingDown = errors.New("event stream sub-system is shutting down")
 
 // A Supervisor coordinates event stream workers.
 type Supervisor struct {
-	Journals    journal.BinaryStore
-	AppendQueue messaging.ExchangeQueue[AppendRequest, AppendResponse]
-	Logger      *slog.Logger
+	Journals         journal.BinaryStore
+	AppendQueue      messaging.ExchangeQueue[AppendRequest, AppendResponse]
+	SubscribeQueue   messaging.RequestQueue[*Subscriber]
+	UnsubscribeQueue messaging.RequestQueue[*Subscriber]
+	Logger           *slog.Logger
 
 	shutdown      signaling.Latch
 	workers       uuidpb.Map[*worker]
@@ -64,12 +66,18 @@ func (s *Supervisor) idleState(ctx context.Context) fsm.Action {
 		return fsm.StayInCurrentState()
 
 	case ex := <-s.AppendQueue.Recv():
-		return fsm.With(ex).EnterState(s.forwardAppendState)
+		return fsm.With(ex).EnterState(s.appendState)
+
+	case req := <-s.SubscribeQueue.Recv():
+		return fsm.With(req).EnterState(s.subscribeState)
+
+	case req := <-s.UnsubscribeQueue.Recv():
+		return fsm.With(req).EnterState(s.unsubscribeState)
 	}
 }
 
-// forwardAppendState forwards an append request to the appropriate worker.
-func (s *Supervisor) forwardAppendState(
+// appendState forwards an append request to the appropriate worker.
+func (s *Supervisor) appendState(
 	ctx context.Context,
 	ex messaging.Exchange[AppendRequest, AppendResponse],
 ) fsm.Action {
@@ -79,20 +87,59 @@ func (s *Supervisor) forwardAppendState(
 		return fsm.Fail(err)
 	}
 
+	return forwardToWorker(ctx, s, w.AppendQueue.Send(), ex)
+}
+
+// subscribeState forwards a subscribe request to the appropriate worker.
+func (s *Supervisor) subscribeState(
+	ctx context.Context,
+	req messaging.Request[*Subscriber],
+) fsm.Action {
+	w, err := s.workerByStreamID(ctx, req.Request.StreamID)
+	if err != nil {
+		req.Err(errShuttingDown)
+		return fsm.Fail(err)
+	}
+
+	return forwardToWorker(ctx, s, w.SubscribeQueue.Send(), req)
+}
+
+// unsubscribeState forwards an unsubscribe request to the appropriate worker.
+func (s *Supervisor) unsubscribeState(
+	ctx context.Context,
+	req messaging.Request[*Subscriber],
+) fsm.Action {
+	w, ok := s.workers.TryGet(req.Request.StreamID)
+	if !ok {
+		req.Ok()
+		return fsm.EnterState(s.idleState)
+	}
+
+	return forwardToWorker(ctx, s, w.UnsubscribeQueue.Send(), req)
+}
+
+func forwardToWorker[
+	T interface{ Err(error) },
+](
+	ctx context.Context,
+	s *Supervisor,
+	q chan<- T,
+	v T,
+) fsm.Action {
 	select {
 	case <-ctx.Done():
-		ex.Err(errShuttingDown)
+		v.Err(errShuttingDown)
 		return fsm.Stop()
 
 	case res := <-s.workerStopped:
 		s.workers.Delete(res.StreamID)
 		if res.Err != nil {
-			ex.Err(errShuttingDown)
+			v.Err(errShuttingDown)
 			return fsm.Fail(res.Err)
 		}
 		return fsm.StayInCurrentState()
 
-	case w.AppendQueue.Send() <- ex:
+	case q <- v:
 		return fsm.EnterState(s.idleState)
 	}
 }
@@ -142,7 +189,8 @@ func (s *Supervisor) startWorkerForStreamID(
 	}
 
 	w := &worker{
-		Journal: j,
+		StreamID: streamID,
+		Journal:  j,
 		Logger: s.Logger.With(
 			slog.String("stream_id", streamID.AsString()),
 		),
