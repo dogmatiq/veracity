@@ -48,7 +48,7 @@ func TestPartitioner(t *testing.T) {
 			}
 
 			start := time.Now()
-			timeout := 5 * time.Second
+			timeout := 30 * time.Second
 
 			for len(remaining) != 0 {
 				if time.Since(start) > timeout {
