@@ -25,7 +25,6 @@ func TestAppend(t *testing.T) {
 	type dependencies struct {
 		Journals   *memoryjournal.BinaryStore
 		Supervisor *Supervisor
-		Events     <-chan Event
 		Packer     *envelope.Packer
 	}
 
