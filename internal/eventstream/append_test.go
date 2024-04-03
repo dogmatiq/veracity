@@ -32,15 +32,10 @@ func TestAppend(t *testing.T) {
 	setup := func(t test.TestingT) (deps dependencies) {
 		deps.Journals = &memoryjournal.BinaryStore{}
 
-		events := make(chan Event, 100)
-
 		deps.Supervisor = &Supervisor{
 			Journals: deps.Journals,
-			Events:   events,
 			Logger:   spruce.NewLogger(t),
 		}
-
-		deps.Events = events
 
 		deps.Packer = &envelope.Packer{
 			Application: identitypb.New("<app>", uuidpb.Generate()),

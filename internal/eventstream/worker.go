@@ -22,10 +22,6 @@ type worker struct {
 	// AppendQueue is a queue of requests to append events to the stream.
 	AppendQueue messaging.ExchangeQueue[AppendRequest, AppendResponse]
 
-	// Events is a channel to which events are published when they are appended
-	// to the stream.
-	Events chan<- Event
-
 	// Shutdown signals the worker to stop when it next becomes idle.
 	Shutdown signaling.Latch
 
@@ -106,31 +102,6 @@ func (w *worker) handleAppendState(
 
 	if res.AppendedByPriorAttempt {
 		return fsm.EnterState(w.idleState)
-	}
-
-	return fsm.With2(ex.Request, res).EnterState(w.publishEventsState)
-}
-
-// publishEventsState publishes appended events to w.Events.
-func (w *worker) publishEventsState(
-	ctx context.Context,
-	req AppendRequest,
-	res AppendResponse,
-) fsm.Action {
-	for i, e := range req.Events {
-		e := Event{
-			Envelope: e,
-			StreamID: req.StreamID,
-			Offset:   res.BeginOffset + Offset(i),
-		}
-
-		select {
-		case <-ctx.Done():
-			return fsm.Stop()
-
-		case w.Events <- e:
-			continue
-		}
 	}
 
 	return fsm.EnterState(w.idleState)

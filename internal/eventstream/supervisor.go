@@ -21,7 +21,6 @@ var errShuttingDown = errors.New("event stream sub-system is shutting down")
 type Supervisor struct {
 	Journals    journal.BinaryStore
 	AppendQueue messaging.ExchangeQueue[AppendRequest, AppendResponse]
-	Events      chan<- Event
 	Logger      *slog.Logger
 
 	shutdown      signaling.Latch
@@ -144,7 +143,6 @@ func (s *Supervisor) startWorkerForStreamID(
 
 	w := &worker{
 		Journal: j,
-		Events:  s.Events,
 		Logger: s.Logger.With(
 			slog.String("stream_id", streamID.AsString()),
 		),
