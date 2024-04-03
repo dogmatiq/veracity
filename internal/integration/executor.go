@@ -21,7 +21,7 @@ func (e *CommandExecutor) ExecuteCommand(
 	c dogma.Command,
 	_ ...dogma.ExecuteCommandOption,
 ) error {
-	_, err := e.ExecuteQueue.Exchange(
+	_, err := e.ExecuteQueue.Do(
 		ctx, ExecuteRequest{
 			Command: e.Packer.Pack(c),
 		},

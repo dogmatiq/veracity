@@ -339,7 +339,7 @@ func TestSupervisor(t *testing.T) {
 				}
 
 				for {
-					_, err := deps.Supervisor.ExecuteQueue.Exchange(tctx, req)
+					_, err := deps.Supervisor.ExecuteQueue.Do(tctx, req)
 
 					if tctx.Err() != nil {
 						t.Fatal(tctx.Err())
@@ -461,7 +461,7 @@ func TestSupervisor(t *testing.T) {
 					RunInBackground(t, "supervisor", secondSupervisor.Run).
 					BeforeTestEnds()
 
-				if _, err := secondSupervisor.ExecuteQueue.Exchange(tctx, req); err != nil {
+				if _, err := secondSupervisor.ExecuteQueue.Do(tctx, req); err != nil {
 					t.Fatal(err)
 				}
 
