@@ -7,7 +7,7 @@ require (
 	github.com/dogmatiq/configkit v0.13.0
 	github.com/dogmatiq/discoverkit v0.1.2
 	github.com/dogmatiq/dogma v0.13.0
-	github.com/dogmatiq/enginekit v0.10.0
+	github.com/dogmatiq/enginekit v0.10.2
 	github.com/dogmatiq/example v0.0.0-20230606031437-2bd84c72050b
 	github.com/dogmatiq/ferrite v1.3.0
 	github.com/dogmatiq/marshalkit v0.7.3
@@ -27,6 +27,7 @@ require (
 
 require (
 	github.com/dogmatiq/cosyne v0.2.0 // indirect
+	github.com/dogmatiq/dapper v0.5.3 // indirect
 	github.com/dogmatiq/dyad v1.0.0 // indirect
 	github.com/dogmatiq/iago v0.4.0 // indirect
 	github.com/dogmatiq/interopspec v0.5.3 // indirect

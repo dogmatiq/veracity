@@ -41,14 +41,14 @@ func TestPartitioner(t *testing.T) {
 			p := &Partitioner{}
 			remaining := uuidpb.Set{}
 
-			for i := 0; i < 10; i++ {
+			for range 10 {
 				id := uuidpb.Generate()
 				p.AddNode(id)
 				remaining.Add(id)
 			}
 
 			start := time.Now()
-			timeout := 30 * time.Second
+			timeout := 5 * time.Second
 
 			for len(remaining) != 0 {
 				if time.Since(start) > timeout {
@@ -64,14 +64,14 @@ func TestPartitioner(t *testing.T) {
 			t.Parallel()
 
 			p := &Partitioner{}
-			for i := 0; i < 10; i++ {
+			for range 10 {
 				p.AddNode(uuidpb.Generate())
 			}
 
 			workload := uuidpb.Generate()
 			expect := p.Route(workload)
 
-			for i := 0; i < 10; i++ {
+			for i := range 10 {
 				actual := p.Route(workload)
 				if !actual.Equal(expect) {
 					t.Fatalf("attempt #%d: got %q, want %q", i+1, actual, expect)
@@ -83,7 +83,7 @@ func TestPartitioner(t *testing.T) {
 			t.Parallel()
 
 			p := &Partitioner{}
-			for i := 0; i < 10; i++ {
+			for range 10 {
 				p.AddNode(uuidpb.Generate())
 			}
 
