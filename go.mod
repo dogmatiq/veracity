@@ -3,7 +3,7 @@ module github.com/dogmatiq/veracity
 go 1.22
 
 require (
-	github.com/cespare/xxhash/v2 v2.2.0
+	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/dogmatiq/configkit v0.13.0
 	github.com/dogmatiq/discoverkit v0.1.2
 	github.com/dogmatiq/dogma v0.13.0
