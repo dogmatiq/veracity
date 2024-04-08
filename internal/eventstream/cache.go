@@ -30,7 +30,7 @@ func (w *worker) findInCache(offset Offset) int {
 // growCache grows the cache capacity to fit an additional n events. It removes
 // old events if necessary.
 //
-// It returns the number of events that may be added to the cache.
+// It returns the difference between n and the actual capacity of the cache.
 func (w *worker) growCache(n int) int {
 	begin := 0
 	end := len(w.recentEvents)
@@ -39,10 +39,12 @@ func (w *worker) growCache(n int) int {
 		panic("cache is over capacity, always use appendToCache() to add events")
 	}
 
-	if n >= maxCacheCapacity {
+	capacity := n
+
+	if capacity >= maxCacheCapacity {
 		// We've requested the entire cache, so just clear it entirely.
 		end = 0
-		n = maxCacheCapacity
+		capacity = maxCacheCapacity
 	} else {
 		// Otherwise, first remove any events that are older than the cache TTL.
 		for index, event := range w.recentEvents[begin:end] {
@@ -55,9 +57,8 @@ func (w *worker) growCache(n int) int {
 		}
 
 		// Then, if we still don't have enough space, remove the oldest events.
-		capacity := end - begin + n
-		if capacity > maxCacheCapacity {
-			begin += capacity - maxCacheCapacity
+		if c := end - begin + capacity; c > maxCacheCapacity {
+			begin += c - maxCacheCapacity
 		}
 	}
 
@@ -66,9 +67,9 @@ func (w *worker) growCache(n int) int {
 	copy(w.recentEvents, w.recentEvents[begin:end])
 
 	w.recentEvents = w.recentEvents[:end-begin]
-	w.recentEvents = slices.Grow(w.recentEvents, n)
+	w.recentEvents = slices.Grow(w.recentEvents, capacity)
 
-	return n
+	return n - capacity
 }
 
 // appendEventToCache appends the given event to the cache of recent events.

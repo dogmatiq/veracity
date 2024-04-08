@@ -26,6 +26,7 @@ func TestAppend(t *testing.T) {
 		Journals   *memoryjournal.BinaryStore
 		Supervisor *Supervisor
 		Packer     *envelope.Packer
+		Barrier    chan struct{}
 	}
 
 	setup := func(t test.TestingT) (deps dependencies) {
@@ -41,6 +42,8 @@ func TestAppend(t *testing.T) {
 			Marshaler:   Marshaler,
 		}
 
+		deps.Barrier = make(chan struct{})
+
 		return deps
 	}
 
@@ -51,26 +54,26 @@ func TestAppend(t *testing.T) {
 
 		cases := []struct {
 			Desc          string
-			InduceFailure func(*dependencies)
+			InduceFailure func(context.Context, *testing.T, *dependencies)
 		}{
 			{
 				Desc: "no faults",
-				InduceFailure: func(*dependencies) {
-				},
 			},
 			{
 				Desc: "failure to open journal",
-				InduceFailure: func(deps *dependencies) {
+				InduceFailure: func(_ context.Context, t *testing.T, deps *dependencies) {
 					test.FailOnJournalOpen(
 						deps.Journals,
 						eventstreamjournal.Name(streamID),
 						errors.New("<error>"),
 					)
+					t.Log("configured journal store to fail when opening the journal")
+					close(deps.Barrier)
 				},
 			},
 			{
 				Desc: "failure before appending to journal",
-				InduceFailure: func(deps *dependencies) {
+				InduceFailure: func(_ context.Context, t *testing.T, deps *dependencies) {
 					test.FailBeforeJournalAppend(
 						deps.Journals,
 						eventstreamjournal.Name(streamID),
@@ -79,11 +82,13 @@ func TestAppend(t *testing.T) {
 						},
 						errors.New("<error>"),
 					)
+					t.Log("configured journal store to fail before appending a record")
+					close(deps.Barrier)
 				},
 			},
 			{
 				Desc: "failure after appending to journal",
-				InduceFailure: func(deps *dependencies) {
+				InduceFailure: func(_ context.Context, t *testing.T, deps *dependencies) {
 					test.FailAfterJournalAppend(
 						deps.Journals,
 						eventstreamjournal.Name(streamID),
@@ -92,6 +97,56 @@ func TestAppend(t *testing.T) {
 						},
 						errors.New("<error>"),
 					)
+					t.Log("configured journal store to fail after appending a record")
+					close(deps.Barrier)
+				},
+			},
+			{
+				Desc: "optimistic concurrency conflict",
+				InduceFailure: func(ctx context.Context, t *testing.T, deps *dependencies) {
+					go func() {
+						if _, err := deps.Supervisor.AppendQueue.Do(
+							ctx,
+							AppendRequest{
+								StreamID: streamID,
+								Events: []*envelopepb.Envelope{
+									deps.Packer.Pack(MessageX1),
+								},
+							},
+						); err != nil {
+							t.Error(err)
+							return
+						}
+
+						t.Log("confirmed that the supervisor-under-test is running")
+
+						s := &Supervisor{
+							Journals: deps.Journals,
+							Logger:   spruce.NewLogger(t),
+						}
+
+						defer test.
+							RunInBackground(t, "conflict-generating-supervisor", s.Run).
+							UntilStopped().
+							Stop()
+
+						if _, err := s.AppendQueue.Do(
+							ctx,
+							AppendRequest{
+								StreamID: streamID,
+								Events: []*envelopepb.Envelope{
+									deps.Packer.Pack(MessageX2),
+								},
+							},
+						); err != nil {
+							t.Error(err)
+							return
+						}
+
+						t.Log("appended events using a different supervisor to induce a journal conflict")
+
+						close(deps.Barrier)
+					}()
 				},
 			},
 		}
@@ -101,10 +156,10 @@ func TestAppend(t *testing.T) {
 				tctx := test.WithContext(t)
 				deps := setup(tctx)
 
-				t.Log("append some initial events to the stream")
+				t.Log("seeding the event stream with some initial events")
 
 				supervisor := test.
-					RunInBackground(t, "supervisor", deps.Supervisor.Run).
+					RunInBackground(t, "event-seeding-supervisor", deps.Supervisor.Run).
 					UntilStopped()
 
 				res, err := deps.Supervisor.AppendQueue.Do(
@@ -124,13 +179,34 @@ func TestAppend(t *testing.T) {
 
 				supervisor.StopAndWait()
 
-				t.Log("induce a failure")
+				// Open a journal that was can use for verifying results
+				// _before_ inducing any failure.
+				j, err := eventstreamjournal.Open(tctx, deps.Journals, streamID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer j.Close()
 
-				c.InduceFailure(&deps)
+				if c.InduceFailure != nil {
+					c.InduceFailure(tctx, t, &deps)
+				} else {
+					close(deps.Barrier)
+				}
 
 				supervisor = test.
-					RunInBackground(t, "supervisor", deps.Supervisor.Run).
+					RunInBackground(t, "supervisor-under-test", deps.Supervisor.Run).
 					RepeatedlyUntilStopped()
+
+				<-deps.Barrier
+
+				// Read the journal bounds as they exist before the test
+				// commences.
+				begin, end, err := j.Bounds(tctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				t.Logf("proceeding with test, journal bounds are [%d, %d)", begin, end)
 
 				event := deps.Packer.Pack(MessageE1)
 
@@ -159,16 +235,11 @@ func TestAppend(t *testing.T) {
 
 				t.Log("ensure that the event was appended to the stream exactly once")
 
-				j, err := eventstreamjournal.Open(tctx, deps.Journals, streamID)
-				if err != nil {
-					t.Fatal(err)
-				}
-
 				var events []*envelopepb.Envelope
 
 				if err := j.Range(
 					tctx,
-					1,
+					end, // only read the records appended during the test
 					func(
 						ctx context.Context,
 						_ journal.Position,

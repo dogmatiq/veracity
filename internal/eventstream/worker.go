@@ -48,7 +48,7 @@ type worker struct {
 // shutdown by the supervisor, or the idle timeout expires.
 func (w *worker) Run(ctx context.Context) (err error) {
 	defer func() {
-		if err != nil {
+		if err != nil && err != context.Canceled {
 			w.Logger.Debug(
 				"event stream worker stopped due to an error",
 				slog.String("error", err.Error()),
