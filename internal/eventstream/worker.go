@@ -2,213 +2,180 @@ package eventstream
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/persistencekit/journal"
 	"github.com/dogmatiq/veracity/internal/eventstream/internal/eventstreamjournal"
-	"github.com/dogmatiq/veracity/internal/fsm"
 	"github.com/dogmatiq/veracity/internal/messaging"
 	"github.com/dogmatiq/veracity/internal/signaling"
 )
 
-const defaultIdleTimeout = 5 * time.Minute
-
 // A worker manages the state of an event stream.
 type worker struct {
+	// StreamID is the ID of the event stream that the worker manages.
+	StreamID *uuidpb.UUID
+
 	// Journal stores the event stream's state.
 	Journal journal.Journal[*eventstreamjournal.Record]
 
 	// AppendQueue is a queue of requests to append events to the stream.
 	AppendQueue messaging.ExchangeQueue[AppendRequest, AppendResponse]
 
+	// SubscribeQueue is a queue of requests to subscribe to the stream.
+	SubscribeQueue messaging.ExchangeQueue[*Subscriber, messaging.None]
+
+	// UnsubscribeQueue is a queue of requests to unsubscribe from the stream.
+	UnsubscribeQueue messaging.ExchangeQueue[*Subscriber, messaging.None]
+
 	// Shutdown signals the worker to stop when it next becomes idle.
 	Shutdown signaling.Latch
-
-	// IdleTimeout is the maximum amount of time the worker will sit idle before
-	// shutting down. If it is non-positive, defaultIdleTimeout is used.
-	IdleTimeout time.Duration
 
 	// Logger is the target for log messages about the stream.
 	Logger *slog.Logger
 
-	pos journal.Position
-	off Offset
+	nextPos      journal.Position
+	nextOffset   Offset
+	recentEvents []Event
+	idleTimer    *time.Timer
+	subscribers  map[*Subscriber]struct{}
 }
 
 // Run starts the worker.
 //
-// It processes requests until ctx is canceled, r.Shutdown is latched, or
-// an error occurrs.
+// It processes requests until ctx is canceled, an error occurs, the worker is
+// shutdown by the supervisor, or the idle timeout expires.
 func (w *worker) Run(ctx context.Context) (err error) {
-	w.Logger.DebugContext(ctx, "event stream worker started")
-	defer w.Logger.DebugContext(ctx, "event stream worker stopped")
+	defer func() {
+		if err != nil && err != context.Canceled {
+			w.Logger.Debug(
+				"event stream worker stopped due to an error",
+				slog.String("error", err.Error()),
+				slog.Uint64("next_journal_position", uint64(w.nextPos)),
+				slog.Uint64("next_stream_offset", uint64(w.nextOffset)),
+				slog.Int("subscriber_count", len(w.subscribers)),
+			)
+		}
+
+		for sub := range w.subscribers {
+			sub.canceled.Signal()
+		}
+	}()
 
 	pos, rec, ok, err := journal.LastRecord(ctx, w.Journal)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to find most recent journal record: %w", err)
 	}
 
 	if ok {
-		w.pos = pos + 1
-		w.off = Offset(rec.StreamOffsetAfter)
+		w.nextPos = pos + 1
+		w.nextOffset = Offset(rec.StreamOffsetAfter)
 	}
 
-	return fsm.Start(ctx, w.idleState)
-}
+	w.Logger.Debug(
+		"event stream worker started",
+		slog.Uint64("next_journal_position", uint64(w.nextPos)),
+		slog.Uint64("next_stream_offset", uint64(w.nextOffset)),
+	)
 
-// idleState waits for a request or the shutdown signal.
-func (w *worker) idleState(ctx context.Context) fsm.Action {
-	duration := w.IdleTimeout
-	if duration <= 0 {
-		duration = defaultIdleTimeout
-	}
+	w.resetIdleTimer()
+	defer w.idleTimer.Stop()
 
-	timeout := time.NewTimer(duration)
-	defer timeout.Stop()
-
-	select {
-	case <-ctx.Done():
-		return fsm.Stop()
-
-	case <-w.Shutdown.Signaled():
-		return fsm.Stop()
-
-	case <-timeout.C:
-		return fsm.Stop()
-
-	case ex := <-w.AppendQueue.Recv():
-		return fsm.With(ex).EnterState(w.handleAppendState)
-	}
-}
-
-// handleAppendState appends events to the stream.
-func (w *worker) handleAppendState(
-	ctx context.Context,
-	ex messaging.Exchange[AppendRequest, AppendResponse],
-) fsm.Action {
-	n := len(ex.Request.Events)
-	if n == 0 {
-		panic("cannot record zero events")
-	}
-
-	res, err := w.appendEvents(ctx, ex.Request)
-	if err != nil {
-		ex.Err(err)
-		return fsm.Fail(err)
-	}
-
-	ex.Ok(res)
-
-	if res.AppendedByPriorAttempt {
-		return fsm.EnterState(w.idleState)
-	}
-
-	return fsm.EnterState(w.idleState)
-}
-
-// appendEvents writes the events in req to the journal if they have not been
-// written already. It returns the offset of the first event.
-func (w *worker) appendEvents(
-	ctx context.Context,
-	req AppendRequest,
-) (AppendResponse, error) {
-	if w.mightBeDuplicates(req) {
-		if rec, err := w.findAppendRecord(ctx, req); err == nil {
-			for i, e := range req.Events {
-				w.Logger.WarnContext(
-					ctx,
-					"ignored event that has already been appended to the stream",
-					slog.Uint64("stream_offset", uint64(rec.StreamOffsetBefore)+uint64(i)),
-					slog.String("message_id", e.MessageId.AsString()),
-					slog.String("description", e.Description),
-				)
-			}
-
-			return AppendResponse{
-				BeginOffset:            Offset(rec.StreamOffsetBefore),
-				EndOffset:              Offset(rec.StreamOffsetAfter),
-				AppendedByPriorAttempt: true,
-			}, nil
-		} else if err != journal.ErrNotFound {
-			return AppendResponse{}, err
+	for {
+		ok, err := w.tick(ctx)
+		if !ok || err != nil {
+			return err
 		}
 	}
+}
 
-	before := w.off
-	after := w.off + Offset(len(req.Events))
+// tick handles a single event stream operation.
+func (w *worker) tick(ctx context.Context) (bool, error) {
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
 
-	if err := w.Journal.Append(
+	case ex := <-w.AppendQueue.Recv():
+		res, err := w.handleAppend(ctx, ex.Request)
+		if err != nil {
+			ex.Err(errShuttingDown)
+		} else {
+			ex.Ok(res)
+		}
+		return true, err
+
+	case ex := <-w.SubscribeQueue.Recv():
+		w.handleSubscribe(ex.Request)
+		ex.Zero()
+		return true, nil
+
+	case ex := <-w.UnsubscribeQueue.Recv():
+		w.handleUnsubscribe(ex.Request)
+		ex.Zero()
+		return true, nil
+
+	case <-w.idleTimer.C:
+		return w.handleIdle(ctx)
+
+	case <-w.Shutdown.Signaled():
+		w.Logger.Debug(
+			"event stream worker stopped by supervisor",
+			slog.Uint64("next_journal_position", uint64(w.nextPos)),
+			slog.Uint64("next_stream_offset", uint64(w.nextOffset)),
+			slog.Int("subscriber_count", len(w.subscribers)),
+		)
+		return false, nil
+	}
+}
+
+// catchUpWithJournal reads the journal to catch up with any records that have
+// been appended by other nodes.
+//
+// It is called whenever the worker has some indication that it may be out of
+// date, such as when there is an OCC conflict. It is also called periodically
+// by otherwise idle workers.
+func (w *worker) catchUpWithJournal(ctx context.Context) error {
+	recordCount := 0
+	eventCount := 0
+
+	if err := w.Journal.Range(
 		ctx,
-		w.pos,
-		eventstreamjournal.
-			NewRecordBuilder().
-			WithStreamOffsetBefore(uint64(before)).
-			WithStreamOffsetAfter(uint64(after)).
-			WithEventsAppended(&eventstreamjournal.EventsAppended{
-				Events: req.Events,
-			}).
-			Build(),
-	); err != nil {
-		return AppendResponse{}, err
+		w.nextPos,
+		func(
+			ctx context.Context,
+			pos journal.Position,
+			rec *eventstreamjournal.Record,
+		) (ok bool, err error) {
+			recordCount++
+
+			if n := int(rec.StreamOffsetAfter - rec.StreamOffsetBefore); n != 0 {
+				if eventCount == 0 {
+					w.Logger.Warn("event stream journal contains records with undelivered events")
+				}
+				w.publishEvents(pos, rec)
+				eventCount += n
+			}
+
+			w.nextPos = pos + 1
+			w.nextOffset = Offset(rec.StreamOffsetAfter)
+
+			return true, nil
+		},
+	); journal.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("unable to range over journal: %w", err)
 	}
 
-	for i, e := range req.Events {
-		w.Logger.InfoContext(
-			ctx,
-			"appended event to the stream",
-			slog.Uint64("stream_offset", uint64(before)+uint64(i)),
-			slog.String("message_id", e.MessageId.AsString()),
-			slog.String("description", e.Description),
+	if recordCount != 0 {
+		w.Logger.Debug(
+			"processed latest records from event stream journal",
+			slog.Uint64("next_journal_position", uint64(w.nextPos)),
+			slog.Uint64("next_stream_offset", uint64(w.nextOffset)),
+			slog.Int("journal_record_count", recordCount),
+			slog.Int("event_count", eventCount),
 		)
 	}
 
-	w.pos++
-	w.off = after
-
-	return AppendResponse{
-		BeginOffset:            before,
-		EndOffset:              after,
-		AppendedByPriorAttempt: false,
-	}, nil
-}
-
-// mightBeDuplicates returns true if it's possible that the events in req have
-// already been appended to the stream.
-func (w *worker) mightBeDuplicates(req AppendRequest) bool {
-	// The events can't be duplicates if the lowest possible offset that
-	// they could have been appended is the current end of the stream.
-	return req.LowestPossibleOffset < w.off
-}
-
-// findAppendRecord searches the journal to find the record that contains the
-// append operation for the given events.
-//
-// TODO: This is a brute-force approach that searches the journal directly
-// (though efficiently). We could improve upon this approach by keeping some
-// in-memory state of recent event IDs (either explicitly, or via a bloom
-// filter, for example).
-func (w *worker) findAppendRecord(
-	ctx context.Context,
-	req AppendRequest,
-) (*eventstreamjournal.Record, error) {
-	return journal.ScanFromSearchResult(
-		ctx,
-		w.Journal,
-		0,
-		w.pos,
-		eventstreamjournal.SearchByOffset(uint64(req.LowestPossibleOffset)),
-		func(
-			ctx context.Context,
-			_ journal.Position,
-			rec *eventstreamjournal.Record,
-		) (*eventstreamjournal.Record, bool, error) {
-			if op := rec.GetEventsAppended(); op != nil {
-				targetID := req.Events[0].MessageId
-				candidateID := op.Events[0].MessageId
-				return rec, candidateID.Equal(targetID), nil
-			}
-			return nil, false, nil
-		},
-	)
+	return nil
 }

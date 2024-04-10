@@ -216,7 +216,7 @@ func (r TaskRunner) run(
 
 		task.err = fn(ctx)
 
-		if task.err == context.Canceled && ctx.Err() == context.Canceled {
+		if errors.Is(task.err, context.Canceled) && ctx.Err() == context.Canceled {
 			task.err = context.Cause(ctx)
 		}
 
