@@ -7,7 +7,6 @@ import (
 
 // Exchange encapsulates a request/response pair.
 type Exchange[Req, Res any] struct {
-	Context  context.Context
 	Request  Req
 	Response chan<- Failable[Res]
 }
@@ -46,7 +45,7 @@ func (q *ExchangeQueue[Req, Res]) Do(ctx context.Context, req Req) (Res, error) 
 	case <-ctx.Done():
 		var zero Res
 		return zero, ctx.Err()
-	case q.Send() <- Exchange[Req, Res]{ctx, req, response}:
+	case q.Send() <- Exchange[Req, Res]{req, response}:
 	}
 
 	select {
