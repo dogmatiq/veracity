@@ -14,7 +14,7 @@ const (
 	// catchUpTimeout is the amount of time a worker WITH SUBSCRIBERS will wait
 	// after appending events before "catching up" with any journal records that
 	// have been appended by other nodes.
-	catchUpTimeout = 10 * time.Second
+	catchUpTimeout = 1 * time.Millisecond
 )
 
 // resetIdleTimer starts or resets the idle timer.
@@ -43,12 +43,19 @@ func (w *worker) resetIdleTimer() {
 func (w *worker) handleIdle(ctx context.Context) (bool, error) {
 	if len(w.subscribers) == 0 {
 		w.Logger.Debug(
-			"event stream worker stopped due to inactivity",
+			"event stream worker is idle, shutting down",
 			slog.Uint64("next_journal_position", uint64(w.nextPos)),
 			slog.Uint64("next_stream_offset", uint64(w.nextOffset)),
 		)
 		return false, nil
 	}
+
+	w.Logger.Debug(
+		"event stream worker is idle but has subscribers, polling journal",
+		slog.Uint64("next_journal_position", uint64(w.nextPos)),
+		slog.Uint64("next_stream_offset", uint64(w.nextOffset)),
+		slog.Int("subscriber_count", len(w.subscribers)),
+	)
 
 	if err := w.catchUpWithJournal(ctx); err != nil {
 		return false, err

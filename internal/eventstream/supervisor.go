@@ -21,8 +21,8 @@ var errShuttingDown = errors.New("event stream sub-system is shutting down")
 type Supervisor struct {
 	Journals         journal.BinaryStore
 	AppendQueue      messaging.ExchangeQueue[AppendRequest, AppendResponse]
-	SubscribeQueue   messaging.RequestQueue[*Subscriber]
-	UnsubscribeQueue messaging.RequestQueue[*Subscriber]
+	SubscribeQueue   messaging.ExchangeQueue[*Subscriber, messaging.None]
+	UnsubscribeQueue messaging.ExchangeQueue[*Subscriber, messaging.None]
 	Logger           *slog.Logger
 
 	shutdown      signaling.Latch
@@ -93,29 +93,29 @@ func (s *Supervisor) appendState(
 // subscribeState forwards a subscribe request to the appropriate worker.
 func (s *Supervisor) subscribeState(
 	ctx context.Context,
-	req messaging.Request[*Subscriber],
+	ex messaging.Exchange[*Subscriber, messaging.None],
 ) fsm.Action {
-	w, err := s.workerByStreamID(ctx, req.Request.StreamID)
+	w, err := s.workerByStreamID(ctx, ex.Request.StreamID)
 	if err != nil {
-		req.Err(errShuttingDown)
+		ex.Err(errShuttingDown)
 		return fsm.Fail(err)
 	}
 
-	return forwardToWorker(ctx, s, w.SubscribeQueue.Send(), req)
+	return forwardToWorker(ctx, s, w.SubscribeQueue.Send(), ex)
 }
 
 // unsubscribeState forwards an unsubscribe request to the appropriate worker.
 func (s *Supervisor) unsubscribeState(
 	ctx context.Context,
-	req messaging.Request[*Subscriber],
+	ex messaging.Exchange[*Subscriber, messaging.None],
 ) fsm.Action {
-	w, ok := s.workers.TryGet(req.Request.StreamID)
+	w, ok := s.workers.TryGet(ex.Request.StreamID)
 	if !ok {
-		req.Ok()
+		ex.Zero()
 		return fsm.EnterState(s.idleState)
 	}
 
-	return forwardToWorker(ctx, s, w.UnsubscribeQueue.Send(), req)
+	return forwardToWorker(ctx, s, w.UnsubscribeQueue.Send(), ex)
 }
 
 func forwardToWorker[

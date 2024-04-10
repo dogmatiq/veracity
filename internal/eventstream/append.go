@@ -52,6 +52,8 @@ func (w *worker) handleAppend(
 		panic("received append request with no events")
 	}
 
+	// Reset the idle timer _after_ whatever work is done so it's duration is
+	// not "eaten up" by the work.
 	defer w.resetIdleTimer()
 
 	if req.LowestPossibleOffset > w.nextOffset {
@@ -78,9 +80,9 @@ func (w *worker) handleAppend(
 			return res, nil
 		}
 
-		res, err = w.writeEventsToJournal(ctx, req)
+		pos, rec, err := w.writeEventsToJournal(ctx, req)
 		if err == nil {
-			w.publishEvents(res.BeginOffset, req.Events)
+			w.publishEvents(pos, rec)
 			return res, nil
 		}
 
@@ -171,41 +173,32 @@ func (w *worker) findPriorAppend(
 func (w *worker) writeEventsToJournal(
 	ctx context.Context,
 	req AppendRequest,
-) (AppendResponse, error) {
-	before := w.nextOffset
-	after := w.nextOffset + Offset(len(req.Events))
+) (journal.Position, *eventstreamjournal.Record, error) {
+	pos := w.nextPos
+	rec := eventstreamjournal.
+		NewRecordBuilder().
+		WithStreamOffsetBefore(uint64(w.nextOffset)).
+		WithStreamOffsetAfter(uint64(w.nextOffset) + uint64(len(req.Events))).
+		WithEventsAppended(&eventstreamjournal.EventsAppended{Events: req.Events}).
+		Build()
 
-	if err := w.Journal.Append(
-		ctx,
-		w.nextPos,
-		eventstreamjournal.
-			NewRecordBuilder().
-			WithStreamOffsetBefore(uint64(before)).
-			WithStreamOffsetAfter(uint64(after)).
-			WithEventsAppended(&eventstreamjournal.EventsAppended{
-				Events: req.Events,
-			}).
-			Build(),
-	); err != nil {
-		return AppendResponse{}, err
-	}
-
-	for index, event := range req.Events {
-		w.Logger.Info(
-			"appended event to the stream",
-			slog.Uint64("journal_position", uint64(w.nextPos)),
-			slog.Uint64("stream_offset", uint64(before)+uint64(index)),
-			slog.String("message_id", event.MessageId.AsString()),
-			slog.String("description", event.Description),
-		)
+	if err := w.Journal.Append(ctx, pos, rec); err != nil {
+		return 0, nil, err
 	}
 
 	w.nextPos++
-	w.nextOffset = after
 
-	return AppendResponse{
-		BeginOffset:            before,
-		EndOffset:              after,
-		AppendedByPriorAttempt: false,
-	}, nil
+	for _, event := range req.Events {
+		w.Logger.Info(
+			"event appended to stream",
+			slog.Uint64("journal_position", uint64(pos)),
+			slog.Uint64("stream_offset", uint64(w.nextOffset)),
+			slog.String("message_id", event.MessageId.AsString()),
+			slog.String("description", event.Description),
+		)
+
+		w.nextOffset++
+	}
+
+	return pos, rec, nil
 }
