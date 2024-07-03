@@ -15,9 +15,9 @@ require (
 	github.com/dogmatiq/primo v0.2.3
 	github.com/dogmatiq/spruce v0.1.1
 	github.com/google/go-cmp v0.6.0
-	go.opentelemetry.io/otel v1.27.0
-	go.opentelemetry.io/otel/metric v1.27.0
-	go.opentelemetry.io/otel/trace v1.27.0
+	go.opentelemetry.io/otel v1.28.0
+	go.opentelemetry.io/otel/metric v1.28.0
+	go.opentelemetry.io/otel/trace v1.28.0
 	golang.org/x/exp v0.0.0-20230810033253-352e893a4cad
 	golang.org/x/sync v0.7.0
 	google.golang.org/grpc v1.65.0
@@ -34,7 +34,7 @@ require (
 	github.com/dogmatiq/linger v1.1.0 // indirect
 	github.com/dogmatiq/projectionkit v0.6.5 // indirect
 	github.com/fxamacker/cbor/v2 v2.6.0 // indirect
-	github.com/go-logr/logr v1.4.1 // indirect
+	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-runewidth v0.0.15 // indirect
