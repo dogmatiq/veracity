@@ -32,8 +32,8 @@ github.com/dogmatiq/marshalkit v0.7.4 h1:7E2XEgNhfwjrk4mpsOZyEwx8oUpr7h4mzy2WicV
 github.com/dogmatiq/marshalkit v0.7.4/go.mod h1:lIwylTALya++9AyMh2ABHclVcVE5N/AaxMQMu3VemsQ=
 github.com/dogmatiq/persistencekit v0.9.3 h1:eDp7J1VaOTM8ZBsKJ6RWSWIG1FjS6gSp+0y1tOqNusk=
 github.com/dogmatiq/persistencekit v0.9.3/go.mod h1:EPIwNBVt09AXP05SZ3OMztyhwZav3Kup0P+LKm8G78A=
-github.com/dogmatiq/primo v0.2.3 h1:iwlPTRxw5Qp3X9UVDBbEN3fUNg4iikDjgy4bniW+Ndw=
-github.com/dogmatiq/primo v0.2.3/go.mod h1:A1GTFF/SdgpvgsO73UbXDpmoKZhCrhKoSG9jXB7M3CE=
+github.com/dogmatiq/primo v0.3.0 h1:2zBjo72lS8e0q/bkhLOAgJ5P/QyhBVt0zRmLUVa9isI=
+github.com/dogmatiq/primo v0.3.0/go.mod h1:z2DfWNz0YmwIKhUEwgJY4xyeWOw0He+9veRRMGQ21UI=
 github.com/dogmatiq/projectionkit v0.6.5 h1:3Ues+QL5oVtJcx4WogMA6XjJF1QyOlcx1uRmUrl2ghI=
 github.com/dogmatiq/projectionkit v0.6.5/go.mod h1:FfbWIzePx6RDAl0yl/FZ/9UaGq6wkEDKvfeDi3dg4EE=
 github.com/dogmatiq/spruce v0.1.1 h1:n4Jbv6MAZvcjowIR21b/4G9opiTKfp3m3+e3W3PTjbM=
