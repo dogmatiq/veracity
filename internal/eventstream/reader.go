@@ -2,349 +2,295 @@ package eventstream
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
-	"github.com/dogmatiq/enginekit/protobuf/envelopepb"
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/persistencekit/journal"
 	"github.com/dogmatiq/veracity/internal/eventstream/internal/eventstreamjournal"
 	"github.com/dogmatiq/veracity/internal/messaging"
-	"github.com/dogmatiq/veracity/internal/signaling"
 )
 
-// A Subscriber is sent events from a stream, by way of a [Reader].
-type Subscriber struct {
-	// StreamID is the ID of the stream from which events are read.
-	StreamID *uuidpb.UUID
-
-	// Offset is the offset of the next event to read.
-	//
-	// It must not be read or modified while the subscription is active. It is
-	// incremented as events are sent to the subscriber.
-	Offset Offset
-
-	// Filter is a predicate function that returns true if the subscriber should
-	// receive the event in the given envelope.
-	//
-	// It is used to avoid filling the subscriber's channel with events they are
-	// not interested in. It is called by the event stream worker in its own
-	// goroutine, and hence must not block.
-	Filter func(*envelopepb.Envelope) bool
-
-	// Events is the channel to which the subscriber's events are sent.
-	Events chan<- Event
-
-	canceled signaling.Event
-}
+// defaultSubscribeTimeout is the default maximum time to wait for a
+// subscription to be acknowledged by the worker before reverting to reading
+// from the journal.
+const defaultSubscribeTimeout = 3 * time.Second
 
 // A Reader reads ordered events from a stream.
 type Reader struct {
 	Journals         journal.BinaryStore
-	SubscribeQueue   *messaging.RequestQueue[*Subscriber]
-	UnsubscribeQueue *messaging.RequestQueue[*Subscriber]
+	SubscribeQueue   *messaging.ExchangeQueue[*Subscriber, messaging.None]
+	UnsubscribeQueue *messaging.ExchangeQueue[*Subscriber, messaging.None]
+	SubscribeTimeout time.Duration
+	Logger           *slog.Logger
 }
 
-// Read reads events from a stream and sends them to the given subscriber.
+// Read sends events from a stream to the given subscriber's events channel.
 //
-// It starts by reading events directly from the stream's journal records. Once
-// it has "caught up" to the end of the journal it receives events in
-// "real-time" from the supervisor of that stream.
-//
-// If the subscriber's channel becomes full, it reverts to reading from the
-// journal until it catches up again.
+// It first attempts to "sync" with the local worker to receive contemporary
+// events in "real-time". If the subscriber's requested offset is too old to be
+// obtained from the worker, or if the events channel becomes full, the reader
+// obtains events directly from the journal until the last record is reached,
+// then the process repeats.
 func (r *Reader) Read(ctx context.Context, sub *Subscriber) error {
-	for {
-		if err := r.readHistorical(ctx, sub); err != nil {
-			return err
-		}
+	if sub.id == nil {
+		sub.id = uuidpb.Generate()
+	}
 
+	for {
 		if err := r.readContemporary(ctx, sub); err != nil {
 			return err
 		}
+
+		if err := r.readHistorical(ctx, sub); err != nil {
+			return err
+		}
 	}
-}
-
-func (r *Reader) readHistorical(ctx context.Context, sub *Subscriber) error {
-	j, err := eventstreamjournal.Open(ctx, r.Journals, sub.StreamID)
-	if err != nil {
-		return err
-	}
-	defer j.Close()
-
-	searchBegin, searchEnd, err := j.Bounds(ctx)
-	if err != nil {
-		return err
-	}
-
-	return journal.RangeFromSearchResult(
-		ctx,
-		j,
-		searchBegin, searchEnd,
-		eventstreamjournal.SearchByOffset(uint64(sub.Offset)),
-		func(
-			ctx context.Context,
-			pos journal.Position,
-			rec *eventstreamjournal.Record,
-		) (bool, error) {
-			begin := Offset(rec.StreamOffsetBefore)
-			end := Offset(rec.StreamOffsetAfter)
-
-			if begin == end {
-				// no events in this record
-				return true, nil
-			}
-
-			if sub.Offset < begin || sub.Offset >= end {
-				return false, fmt.Errorf(
-					"event stream integrity error at journal position %d: expected event at offset %d, but found offset range [%d, %d)",
-					pos,
-					sub.Offset,
-					begin,
-					end,
-				)
-			}
-
-			index := sub.Offset - begin
-
-			for _, env := range rec.GetEventsAppended().Events[index:] {
-				if !sub.Filter(env) {
-					sub.Offset++
-					continue
-				}
-
-				select {
-				case <-ctx.Done():
-					return false, ctx.Err()
-				case sub.Events <- Event{sub.StreamID, sub.Offset, env}:
-					sub.Offset++
-				}
-			}
-
-			return true, nil
-		},
-	)
 }
 
 func (r *Reader) readContemporary(ctx context.Context, sub *Subscriber) error {
 	// TODO: remote read
 
+	r.Logger.Debug(
+		"subscribing to receive contemporary events from local event stream worker",
+		slog.String("stream_id", sub.StreamID.AsString()),
+		slog.String("subscriber_id", sub.id.AsString()),
+		slog.Int("subscriber_headroom", cap(sub.Events)-len(sub.Events)),
+		slog.Uint64("subscriber_stream_offset", uint64(sub.Offset)),
+	)
+
 	if err := r.subscribe(ctx, sub); err != nil {
+		// If the subscription request times out, but the parent context isn't
+		// canceled we revert to reading from the journal (by returning nil).
+		if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+			r.Logger.Warn(
+				"timed-out waiting for local event stream worker to acknowledge subscription",
+				slog.String("stream_id", sub.StreamID.AsString()),
+				slog.String("subscriber_id", sub.id.AsString()),
+				slog.Int("subscriber_headroom", cap(sub.Events)-len(sub.Events)),
+				slog.Uint64("subscriber_stream_offset", uint64(sub.Offset)),
+			)
+			return nil
+		}
+
 		return err
 	}
-	defer r.unsubscribe(ctx, sub)
 
 	select {
 	case <-ctx.Done():
+		r.unsubscribe(sub)
 		return ctx.Err()
 	case <-sub.canceled.Signaled():
+		r.Logger.Debug(
+			"subscription canceled by local event stream worker",
+			slog.String("stream_id", sub.StreamID.AsString()),
+			slog.String("subscriber_id", sub.id.AsString()),
+			slog.Int("subscriber_headroom", cap(sub.Events)-len(sub.Events)),
+			slog.Uint64("subscriber_stream_offset", uint64(sub.Offset)),
+		)
 		return nil
 	}
 }
 
 func (r *Reader) subscribe(ctx context.Context, sub *Subscriber) error {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second) // TODO: make configurable
-	cancel()
+	// Impose our own subscription timeout. This handles the case that the
+	// supervisor/worker is not running or cannot service our subscription
+	// request in a timely manner, in which case we will revert to reading from
+	// the journal.
+	timeout := r.SubscribeTimeout
+	if timeout <= 0 {
+		timeout = defaultSubscribeTimeout
+	}
 
-	if err := r.SubscribeQueue.Do(ctx, sub); err != nil {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	req, done := r.SubscribeQueue.New(sub)
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case r.SubscribeQueue.Send() <- req:
+	}
+
+	// We don't want to use the context timeout waiting for the response,
+	// because then we wont know if the subscription was actually accepted. The
+	// worker ALWAYS sends a response to any subscription request it receives
+	// from the queue.
+	res := <-done
+
+	if _, err := res.Get(); err != nil {
 		return fmt.Errorf("cannot subscribe to event stream: %w", err)
 	}
 
 	return nil
 }
 
-func (r *Reader) unsubscribe(ctx context.Context, sub *Subscriber) error {
-	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	defer cancel()
-
-	// Cancel the unsubscribe context when the subscription is canceled,
-	// regardless of the reason.
-	//
-	// This handles the situation where the subscription is canceled because the
-	// worker shutdown (and hence wont service the unsubscribe request).
-	go func() {
-		<-sub.canceled.Signaled()
-		cancel()
-	}()
-
-	return r.UnsubscribeQueue.Do(ctx, sub)
+func (r *Reader) unsubscribe(sub *Subscriber) {
+	// TODO: use a latch to indicate unsubscribing?
+	req, _ := r.UnsubscribeQueue.New(sub)
+	r.UnsubscribeQueue.Send() <- req
+	<-sub.canceled.Signaled()
 }
 
-// handleSubscribe adds sub to the subscriber list.
-//
-// It delivers any cached events that the subscriber has not yet seen. If the
-// subscriber's requested event is older than the events in the cache the
-// subscription is canceled immediately.
-func (w *worker) handleSubscribe(sub *Subscriber) {
-	if !sub.StreamID.Equal(w.StreamID) {
-		panic("received request for a different stream ID")
+func (r *Reader) readHistorical(ctx context.Context, sub *Subscriber) error {
+	j, err := eventstreamjournal.Open(ctx, r.Journals, sub.StreamID)
+	if err != nil {
+		return fmt.Errorf("unable to open journal: %w", err)
 	}
+	defer j.Close()
 
-	if w.subscribers == nil {
-		w.subscribers = map[*Subscriber]struct{}{}
-	}
-	w.subscribers[sub] = struct{}{}
+	var records, delivered, filtered int
 
-	w.Logger.Debug(
-		"subscription activated",
-		slog.String("channel_address", fmt.Sprint(sub.Events)),
-		slog.Int("channel_capacity", cap(sub.Events)),
-		slog.Int("channel_headroom", cap(sub.Events)-len(sub.Events)),
-		slog.Int("subscriber_count", len(w.subscribers)),
-		slog.Uint64("requested_stream_offset", uint64(sub.Offset)),
-		slog.Uint64("next_stream_offset", uint64(w.nextOffset)),
-	)
+	fn := func(
+		ctx context.Context,
+		pos journal.Position,
+		rec *eventstreamjournal.Record,
+	) (bool, error) {
+		records++
 
-	if sub.Offset >= w.nextOffset {
-		return
-	}
+		begin := Offset(rec.StreamOffsetBefore)
+		end := Offset(rec.StreamOffsetAfter)
 
-	index := w.findInCache(sub.Offset)
-
-	if index == -1 {
-		sub.canceled.Signal()
-		w.Logger.Warn(
-			"subscription canceled immediately due request for historical events",
-			slog.String("channel_address", fmt.Sprint(sub.Events)),
-			slog.Int("channel_capacity", cap(sub.Events)),
-			slog.Int("channel_headroom", cap(sub.Events)-len(sub.Events)),
-			slog.Int("subscriber_count", len(w.subscribers)),
-			slog.Int("cached_event_count", len(w.recentEvents)),
-			slog.Uint64("requested_stream_offset", uint64(sub.Offset)),
-			slog.Uint64("next_stream_offset", uint64(w.nextOffset)),
-		)
-		return
-	}
-
-	for _, event := range w.recentEvents[index:] {
-		if w.deliverEventToSubscriber(event, sub) == subscriptionCanceled {
-			return
-		}
-	}
-}
-
-// handleUnsubscribe removes sub from the subscriber list.
-func (w *worker) handleUnsubscribe(sub *Subscriber) {
-	if !sub.StreamID.Equal(w.StreamID) {
-		panic("received request for a different stream ID")
-	}
-
-	before := len(w.subscribers)
-	delete(w.subscribers, sub)
-	after := len(w.subscribers)
-
-	if before > after {
-		sub.canceled.Signal()
-
-		w.Logger.Debug(
-			"subscription canceled by subscriber",
-			slog.String("channel_address", fmt.Sprint(sub.Events)),
-			slog.Int("channel_capacity", cap(sub.Events)),
-			slog.Int("channel_headroom", cap(sub.Events)-len(sub.Events)),
-			slog.Int("subscriber_count", after),
-		)
-	}
-}
-
-// deliverResult is an enumeration of the possible outcomes of delivering an
-// event to a subscriber.
-type deliverResult int
-
-const (
-	// eventDelivered means that the event was sent to the subscriber's events
-	// channel, which may or may not be buffered.
-	eventDelivered deliverResult = iota
-
-	// eventFiltered means that the event was filtered by the subscriber's
-	// filter function, and did not need to be delivered.
-	eventFiltered
-
-	// subscriptionCanceled means that an attempt was made to send the event to
-	// the subscriber's event channel, but the channel buffer was full (or
-	// unbuffered and not ready to read), and so the subscription was canceled.
-	subscriptionCanceled
-)
-
-// deliverEventToSubscriber attempts to deliver an event to a subscriber's event
-// channel.
-func (w *worker) deliverEventToSubscriber(event Event, sub *Subscriber) deliverResult {
-	if event.Offset > sub.Offset {
-		panic("event is out of order")
-	}
-
-	if event.Offset < sub.Offset {
-		return eventFiltered
-	}
-
-	if !sub.Filter(event.Envelope) {
-		sub.Offset++
-		return eventFiltered
-	}
-
-	select {
-	case sub.Events <- event:
-		sub.Offset++
-		return eventDelivered
-
-	default:
-		delete(w.subscribers, sub)
-		sub.canceled.Signal()
-
-		w.Logger.Warn(
-			"subscription canceled because the subscriber can not keep up with the event stream",
-			slog.String("channel_address", fmt.Sprint(sub.Events)),
-			slog.Int("channel_capacity", cap(sub.Events)),
-			slog.Int("channel_headroom", 0),
-			slog.Int("subscriber_count", len(w.subscribers)),
-			slog.Uint64("stream_offset", uint64(event.Offset)),
-		)
-
-		return subscriptionCanceled
-	}
-}
-
-// publishEvents publishes the events to both the recent event cache and any
-// interested subscribers.
-func (w *worker) publishEvents(
-	offset Offset,
-	events []*envelopepb.Envelope,
-) {
-	skip := w.growCache(len(events))
-
-	for i, env := range events {
-		event := Event{w.StreamID, offset, env}
-		offset++
-
-		if i >= skip {
-			w.appendEventToCache(event)
+		if begin == end {
+			// This condition is not producible at the moment, but is present to
+			// provide forward compatibility with future journal record types.
+			sub.beginPos = pos + 1
+			return true, nil
 		}
 
-		if len(w.subscribers) == 0 {
-			continue
+		if sub.Offset < begin || sub.Offset >= end {
+			return false, fmt.Errorf(
+				"event stream integrity error at journal position %d: expected event at offset %d, but found offset range [%d, %d)",
+				pos,
+				sub.Offset,
+				begin,
+				end,
+			)
 		}
 
-		var delivered, filtered, canceled int
+		sub.beginPos = pos
+		sub.beginPosIsDefinitive = true
 
-		for sub := range w.subscribers {
-			switch w.deliverEventToSubscriber(event, sub) {
-			case eventDelivered:
-				delivered++
-			case eventFiltered:
+		index := sub.Offset - begin
+
+		for _, env := range rec.GetEventsAppended().Events[index:] {
+			if sub.Filter != nil && !sub.Filter(env) {
+				sub.Offset++
 				filtered++
-			case subscriptionCanceled:
-				canceled++
+				continue
+			}
+
+			select {
+			case <-ctx.Done():
+				return false, ctx.Err()
+			case sub.Events <- Event{sub.StreamID, sub.Offset, env}:
+				sub.Offset++
+				delivered++
 			}
 		}
 
-		w.Logger.Debug(
-			"event published to subscribers",
-			slog.Uint64("stream_offset", uint64(event.Offset)),
-			slog.String("message_id", env.MessageId.AsString()),
-			slog.String("description", env.Description),
-			slog.Int("delivered_count", delivered),
-			slog.Int("filtered_count", filtered),
-			slog.Int("canceled_count", canceled),
-		)
+		sub.beginPos++
+
+		return true, nil
 	}
+
+	iter := r.searchHistorical
+	if sub.beginPosIsDefinitive {
+		iter = r.rangeHistorical
+	}
+
+	if err := iter(ctx, sub, j, fn); err != nil {
+		return err
+	}
+
+	r.Logger.Debug(
+		"finished reading historical events from journal",
+		slog.String("stream_id", sub.StreamID.AsString()),
+		slog.String("subscriber_id", sub.id.AsString()),
+		slog.Int("subscriber_headroom", cap(sub.Events)-len(sub.Events)),
+		slog.Uint64("subscriber_stream_offset", uint64(sub.Offset)),
+		slog.Int("journal_record_count", records),
+		slog.Int("events_delivered_count", delivered),
+		slog.Int("events_filtered_count", filtered),
+	)
+
+	return nil
+}
+
+// rangeHistorical delivers all (relevent) events to the subscriber, starting
+// with the events in the record at position sub.beginPos.
+func (r *Reader) rangeHistorical(
+	ctx context.Context,
+	sub *Subscriber,
+	j journal.Journal[*eventstreamjournal.Record],
+	fn journal.RangeFunc[*eventstreamjournal.Record],
+) error {
+	r.Logger.Debug(
+		"ranging over historical events in journal",
+		slog.String("stream_id", sub.StreamID.AsString()),
+		slog.String("subscriber_id", sub.id.AsString()),
+		slog.Int("subscriber_headroom", cap(sub.Events)-len(sub.Events)),
+		slog.Uint64("subscriber_stream_offset", uint64(sub.Offset)),
+		slog.Uint64("journal_begin_position", uint64(sub.beginPos)),
+	)
+
+	if err := j.Range(ctx, sub.beginPos, fn); err != nil {
+		if errors.Is(err, journal.ErrNotFound) {
+			// If we're ranging over a journal record that does not exist it
+			// means we've delivered all events but were unable to subscribe to
+			// receive contemporary events from the worker.
+			return nil
+		}
+		return fmt.Errorf("unable to range over journal: %w", err)
+	}
+
+	return nil
+}
+
+// searchHistorical performs a binary search to find the journal record that
+// contains the next event to deliver to sub, then delivers that event an all
+// subsequent events until the end of the journal.
+func (r *Reader) searchHistorical(
+	ctx context.Context,
+	sub *Subscriber,
+	j journal.Journal[*eventstreamjournal.Record],
+	fn journal.RangeFunc[*eventstreamjournal.Record],
+) error {
+	begin, end, err := j.Bounds(ctx)
+	if err != nil {
+		return fmt.Errorf("unable to read journal bounds: %w", err)
+	}
+
+	begin = max(begin, sub.beginPos)
+
+	r.Logger.Debug(
+		"searching for historical events in journal",
+		slog.String("stream_id", sub.StreamID.AsString()),
+		slog.String("subscriber_id", sub.id.AsString()),
+		slog.Int("subscriber_headroom", cap(sub.Events)-len(sub.Events)),
+		slog.Uint64("subscriber_stream_offset", uint64(sub.Offset)),
+		slog.Uint64("journal_begin_position", uint64(begin)),
+		slog.Uint64("journal_end_position", uint64(end)),
+	)
+
+	if err := journal.RangeFromSearchResult(
+		ctx,
+		j,
+		begin, end,
+		eventstreamjournal.SearchByOffset(uint64(sub.Offset)),
+		fn,
+	); err != nil {
+		if errors.Is(err, journal.ErrNotFound) {
+			// If the event is not in the journal then we don't want to
+			// re-search these same records in the future.
+			sub.beginPos = end
+			return nil
+		}
+		return fmt.Errorf("unable to search journal: %w", err)
+	}
+
+	return nil
 }

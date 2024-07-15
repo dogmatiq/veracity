@@ -2,6 +2,7 @@ package eventstream
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -24,10 +25,10 @@ type worker struct {
 	AppendQueue messaging.ExchangeQueue[AppendRequest, AppendResponse]
 
 	// SubscribeQueue is a queue of requests to subscribe to the stream.
-	SubscribeQueue messaging.RequestQueue[*Subscriber]
+	SubscribeQueue messaging.ExchangeQueue[*Subscriber, messaging.None]
 
 	// UnsubscribeQueue is a queue of requests to unsubscribe from the stream.
-	UnsubscribeQueue messaging.RequestQueue[*Subscriber]
+	UnsubscribeQueue messaging.ExchangeQueue[*Subscriber, messaging.None]
 
 	// Shutdown signals the worker to stop when it next becomes idle.
 	Shutdown signaling.Latch
@@ -65,21 +66,19 @@ func (w *worker) Run(ctx context.Context) (err error) {
 
 	pos, rec, ok, err := journal.LastRecord(ctx, w.Journal)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to find most recent journal record: %w", err)
 	}
 
 	if ok {
 		w.nextPos = pos + 1
 		w.nextOffset = Offset(rec.StreamOffsetAfter)
-
-		w.Logger.Debug(
-			"event stream journal has existing records",
-			slog.Uint64("next_journal_position", uint64(w.nextPos)),
-			slog.Uint64("next_stream_offset", uint64(w.nextOffset)),
-		)
-	} else {
-		w.Logger.Debug("event stream journal is empty")
 	}
+
+	w.Logger.Debug(
+		"event stream worker started",
+		slog.Uint64("next_journal_position", uint64(w.nextPos)),
+		slog.Uint64("next_stream_offset", uint64(w.nextOffset)),
+	)
 
 	w.resetIdleTimer()
 	defer w.idleTimer.Stop()
@@ -109,12 +108,12 @@ func (w *worker) tick(ctx context.Context) (bool, error) {
 
 	case ex := <-w.SubscribeQueue.Recv():
 		w.handleSubscribe(ex.Request)
-		ex.Ok()
+		ex.Zero()
 		return true, nil
 
 	case ex := <-w.UnsubscribeQueue.Recv():
 		w.handleUnsubscribe(ex.Request)
-		ex.Ok()
+		ex.Zero()
 		return true, nil
 
 	case <-w.idleTimer.C:
@@ -151,13 +150,12 @@ func (w *worker) catchUpWithJournal(ctx context.Context) error {
 		) (ok bool, err error) {
 			recordCount++
 
-			events := rec.GetEventsAppended().GetEvents()
-			if len(events) != 0 {
+			if n := int(rec.StreamOffsetAfter - rec.StreamOffsetBefore); n != 0 {
 				if eventCount == 0 {
-					w.Logger.Warn("event stream contains events that were not appended by this worker")
+					w.Logger.Warn("event stream journal contains records with undelivered events")
 				}
-				w.publishEvents(Offset(rec.StreamOffsetBefore), events)
-				eventCount += len(events)
+				w.publishEvents(pos, rec)
+				eventCount += n
 			}
 
 			w.nextPos = pos + 1
@@ -165,17 +163,17 @@ func (w *worker) catchUpWithJournal(ctx context.Context) error {
 
 			return true, nil
 		},
-	); err != nil {
-		return err
+	); journal.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("unable to range over journal: %w", err)
 	}
 
 	if recordCount != 0 {
 		w.Logger.Debug(
-			"caught up to the end of the event stream journal",
-			slog.Int("record_count", recordCount),
-			slog.Int("event_count", eventCount),
+			"processed latest records from event stream journal",
 			slog.Uint64("next_journal_position", uint64(w.nextPos)),
 			slog.Uint64("next_stream_offset", uint64(w.nextOffset)),
+			slog.Int("journal_record_count", recordCount),
+			slog.Int("event_count", eventCount),
 		)
 	}
 

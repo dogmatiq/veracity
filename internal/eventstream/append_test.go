@@ -105,7 +105,7 @@ func TestAppend(t *testing.T) {
 				Desc: "optimistic concurrency conflict",
 				InduceFailure: func(ctx context.Context, t *testing.T, deps *dependencies) {
 					go func() {
-						if _, err := deps.Supervisor.AppendQueue.Do(
+						if _, err := deps.Supervisor.Append.Do(
 							ctx,
 							AppendRequest{
 								StreamID: streamID,
@@ -130,7 +130,7 @@ func TestAppend(t *testing.T) {
 							UntilStopped().
 							Stop()
 
-						if _, err := s.AppendQueue.Do(
+						if _, err := s.Append.Do(
 							ctx,
 							AppendRequest{
 								StreamID: streamID,
@@ -162,7 +162,7 @@ func TestAppend(t *testing.T) {
 					RunInBackground(t, "event-seeding-supervisor", deps.Supervisor.Run).
 					UntilStopped()
 
-				res, err := deps.Supervisor.AppendQueue.Do(
+				res, err := deps.Supervisor.Append.Do(
 					tctx,
 					AppendRequest{
 						StreamID: streamID,
@@ -220,7 +220,7 @@ func TestAppend(t *testing.T) {
 					t.Logf("append an event, attempt #%d", attempt)
 					attempt++
 
-					_, err := deps.Supervisor.AppendQueue.Do(tctx, req)
+					_, err := deps.Supervisor.Append.Do(tctx, req)
 					if err == nil {
 						break
 					}
