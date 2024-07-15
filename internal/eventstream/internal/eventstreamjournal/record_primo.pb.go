@@ -8,6 +8,15 @@ package eventstreamjournal
 
 import envelopepb "github.com/dogmatiq/enginekit/protobuf/envelopepb"
 
+// TryGetEventsAppended returns x.Operation.EventsAppended if x.Operation is a [Record_EventsAppended].
+// Otherwise, ok is false and v is the zero-value.
+func (x *Record) TryGetEventsAppended() (v *EventsAppended, ok bool) {
+	if x, ok := x.GetOperation().(*Record_EventsAppended); ok {
+		return x.EventsAppended, true
+	}
+	return v, false
+}
+
 type RecordBuilder struct {
 	prototype Record
 }
@@ -98,19 +107,53 @@ func (b *EventsAppendedBuilder) WithEvents(v []*envelopepb.Envelope) *EventsAppe
 	return b
 }
 
-// Switch_Record_Operation invokes one of the given functions based on
+// MustSwitch_Record_Operation invokes one of the given functions based on
 // the value of x.Operation.
 //
 // It panics if x.Operation is nil.
-func Switch_Record_Operation(
+func MustSwitch_Record_Operation(
 	x *Record,
 	caseEventsAppended func(*EventsAppended),
 ) {
-	switch v := x.Operation.(type) {
+	switch v := x.GetOperation().(type) {
 	case *Record_EventsAppended:
 		caseEventsAppended(v.EventsAppended)
 	default:
-		panic("Switch_Record_Operation: x.Operation is nil")
+		panic("MustSwitch_Record_Operation: x.Operation is nil")
+	}
+}
+
+// Switch_Record_Operation invokes one of the given functions based on
+// the value of x.Operation.
+//
+// It calls none() if x.Operation is nil.
+func Switch_Record_Operation(
+	x *Record,
+	caseEventsAppended func(*EventsAppended),
+	none func(),
+) {
+	switch v := x.GetOperation().(type) {
+	case *Record_EventsAppended:
+		caseEventsAppended(v.EventsAppended)
+	default:
+		none()
+	}
+}
+
+// MustMap_Record_Operation maps x.Operation to a value of type T by invoking
+// one of the given functions.
+//
+// It invokes the function that corresponds to the value of x.Operation,
+// and returns that function's result. It panics if x.Operation is nil.
+func MustMap_Record_Operation[T any](
+	x *Record,
+	caseEventsAppended func(*EventsAppended) T,
+) T {
+	switch v := x.GetOperation().(type) {
+	case *Record_EventsAppended:
+		return caseEventsAppended(v.EventsAppended)
+	default:
+		panic("MustMap_Record_Operation: x.Operation is nil")
 	}
 }
 
@@ -118,16 +161,17 @@ func Switch_Record_Operation(
 // one of the given functions.
 //
 // It invokes the function that corresponds to the value of x.Operation,
-// and returns that function's result. It panics if x.Operation is nil.
+// and returns that function's result. It calls none() if x.Operation is nil.
 func Map_Record_Operation[T any](
 	x *Record,
 	caseEventsAppended func(*EventsAppended) T,
+	none func() T,
 ) T {
-	switch v := x.Operation.(type) {
+	switch v := x.GetOperation().(type) {
 	case *Record_EventsAppended:
 		return caseEventsAppended(v.EventsAppended)
 	default:
-		panic("Map_Record_Operation: x.Operation is nil")
+		return none()
 	}
 }
 

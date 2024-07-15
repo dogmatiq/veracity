@@ -11,6 +11,33 @@ import (
 	uuidpb "github.com/dogmatiq/enginekit/protobuf/uuidpb"
 )
 
+// TryGetCommandEnqueued returns x.Operation.CommandEnqueued if x.Operation is a [Record_CommandEnqueued].
+// Otherwise, ok is false and v is the zero-value.
+func (x *Record) TryGetCommandEnqueued() (v *CommandEnqueued, ok bool) {
+	if x, ok := x.GetOperation().(*Record_CommandEnqueued); ok {
+		return x.CommandEnqueued, true
+	}
+	return v, false
+}
+
+// TryGetCommandHandled returns x.Operation.CommandHandled if x.Operation is a [Record_CommandHandled].
+// Otherwise, ok is false and v is the zero-value.
+func (x *Record) TryGetCommandHandled() (v *CommandHandled, ok bool) {
+	if x, ok := x.GetOperation().(*Record_CommandHandled); ok {
+		return x.CommandHandled, true
+	}
+	return v, false
+}
+
+// TryGetEventsAppendedToStream returns x.Operation.EventsAppendedToStream if x.Operation is a [Record_EventsAppendedToStream].
+// Otherwise, ok is false and v is the zero-value.
+func (x *Record) TryGetEventsAppendedToStream() (v *EventsAppendedToStream, ok bool) {
+	if x, ok := x.GetOperation().(*Record_EventsAppendedToStream); ok {
+		return x.EventsAppendedToStream, true
+	}
+	return v, false
+}
+
 type RecordBuilder struct {
 	prototype Record
 }
@@ -214,17 +241,17 @@ func (b *EventsAppendedToStreamBuilder) WithEventOffset(v uint64) *EventsAppende
 	return b
 }
 
-// Switch_Record_Operation invokes one of the given functions based on
+// MustSwitch_Record_Operation invokes one of the given functions based on
 // the value of x.Operation.
 //
 // It panics if x.Operation is nil.
-func Switch_Record_Operation(
+func MustSwitch_Record_Operation(
 	x *Record,
 	caseCommandEnqueued func(*CommandEnqueued),
 	caseCommandHandled func(*CommandHandled),
 	caseEventsAppendedToStream func(*EventsAppendedToStream),
 ) {
-	switch v := x.Operation.(type) {
+	switch v := x.GetOperation().(type) {
 	case *Record_CommandEnqueued:
 		caseCommandEnqueued(v.CommandEnqueued)
 	case *Record_CommandHandled:
@@ -232,22 +259,45 @@ func Switch_Record_Operation(
 	case *Record_EventsAppendedToStream:
 		caseEventsAppendedToStream(v.EventsAppendedToStream)
 	default:
-		panic("Switch_Record_Operation: x.Operation is nil")
+		panic("MustSwitch_Record_Operation: x.Operation is nil")
 	}
 }
 
-// Map_Record_Operation maps x.Operation to a value of type T by invoking
+// Switch_Record_Operation invokes one of the given functions based on
+// the value of x.Operation.
+//
+// It calls none() if x.Operation is nil.
+func Switch_Record_Operation(
+	x *Record,
+	caseCommandEnqueued func(*CommandEnqueued),
+	caseCommandHandled func(*CommandHandled),
+	caseEventsAppendedToStream func(*EventsAppendedToStream),
+	none func(),
+) {
+	switch v := x.GetOperation().(type) {
+	case *Record_CommandEnqueued:
+		caseCommandEnqueued(v.CommandEnqueued)
+	case *Record_CommandHandled:
+		caseCommandHandled(v.CommandHandled)
+	case *Record_EventsAppendedToStream:
+		caseEventsAppendedToStream(v.EventsAppendedToStream)
+	default:
+		none()
+	}
+}
+
+// MustMap_Record_Operation maps x.Operation to a value of type T by invoking
 // one of the given functions.
 //
 // It invokes the function that corresponds to the value of x.Operation,
 // and returns that function's result. It panics if x.Operation is nil.
-func Map_Record_Operation[T any](
+func MustMap_Record_Operation[T any](
 	x *Record,
 	caseCommandEnqueued func(*CommandEnqueued) T,
 	caseCommandHandled func(*CommandHandled) T,
 	caseEventsAppendedToStream func(*EventsAppendedToStream) T,
 ) T {
-	switch v := x.Operation.(type) {
+	switch v := x.GetOperation().(type) {
 	case *Record_CommandEnqueued:
 		return caseCommandEnqueued(v.CommandEnqueued)
 	case *Record_CommandHandled:
@@ -255,7 +305,31 @@ func Map_Record_Operation[T any](
 	case *Record_EventsAppendedToStream:
 		return caseEventsAppendedToStream(v.EventsAppendedToStream)
 	default:
-		panic("Map_Record_Operation: x.Operation is nil")
+		panic("MustMap_Record_Operation: x.Operation is nil")
+	}
+}
+
+// Map_Record_Operation maps x.Operation to a value of type T by invoking
+// one of the given functions.
+//
+// It invokes the function that corresponds to the value of x.Operation,
+// and returns that function's result. It calls none() if x.Operation is nil.
+func Map_Record_Operation[T any](
+	x *Record,
+	caseCommandEnqueued func(*CommandEnqueued) T,
+	caseCommandHandled func(*CommandHandled) T,
+	caseEventsAppendedToStream func(*EventsAppendedToStream) T,
+	none func() T,
+) T {
+	switch v := x.GetOperation().(type) {
+	case *Record_CommandEnqueued:
+		return caseCommandEnqueued(v.CommandEnqueued)
+	case *Record_CommandHandled:
+		return caseCommandHandled(v.CommandHandled)
+	case *Record_EventsAppendedToStream:
+		return caseEventsAppendedToStream(v.EventsAppendedToStream)
+	default:
+		return none()
 	}
 }
 
