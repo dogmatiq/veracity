@@ -97,7 +97,7 @@ func (s *Supervisor) initState(ctx context.Context) fsm.Action {
 		) (ok bool, err error) {
 			s.pos = pos + 1
 
-			integrationjournal.Switch_Record_Operation(
+			integrationjournal.MustSwitch_Record_Operation(
 				record,
 				func(op *integrationjournal.CommandEnqueued) {
 					unhandled = append(unhandled, op.GetCommand())
