@@ -10,8 +10,8 @@ github.com/dogmatiq/dapper v0.5.3 h1:DZkitO0TiokaiZt+9J7UNnagW2ezSYmJUlDTXLWGf8g
 github.com/dogmatiq/dapper v0.5.3/go.mod h1:lrBXvNri2wXkk1T0muaTUqd5lVDwIBRKeOzVRU46XI0=
 github.com/dogmatiq/discoverkit v0.1.2 h1:NFgFe151bINH3/mNrIS6w0fiEWToSVwIHrjCDiEHw/Y=
 github.com/dogmatiq/discoverkit v0.1.2/go.mod h1:mUFlbosF4i5papOkUa+OfTLv09AU/1cAU7GvN0Qd+VI=
-github.com/dogmatiq/dogma v0.13.0 h1:MKk9MHErGKD53Y+43I4fcoPZMQjX0N2DUZEc4rLp+Hk=
-github.com/dogmatiq/dogma v0.13.0/go.mod h1:9lyVA+6V2+E/exV0IrBOrkUiyFwIATEhv+b0vnB2umQ=
+github.com/dogmatiq/dogma v0.13.1 h1:b1nsqYNmICEG2egvZ43K8w04Jma+MWYL6yF5Ad12y9o=
+github.com/dogmatiq/dogma v0.13.1/go.mod h1:9lyVA+6V2+E/exV0IrBOrkUiyFwIATEhv+b0vnB2umQ=
 github.com/dogmatiq/dyad v1.0.0 h1:T50WQ9rAzCMcT941wVH5RW5+tAGRssuVlNog+ZMQR54=
 github.com/dogmatiq/dyad v1.0.0/go.mod h1:PrUQr7OCSEUjAkhi7ad8BjxFPKe0I9yP2f1kGimPcJE=
 github.com/dogmatiq/enginekit v0.10.2 h1:7XUbvLr37nEbd7LII/862mglSH/g/zDJU3ZHzg6PUmg=
