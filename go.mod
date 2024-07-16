@@ -4,9 +4,9 @@ go 1.22
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0
-	github.com/dogmatiq/configkit v0.13.0
+	github.com/dogmatiq/configkit v0.13.1
 	github.com/dogmatiq/discoverkit v0.1.2
-	github.com/dogmatiq/dogma v0.13.0
+	github.com/dogmatiq/dogma v0.13.1
 	github.com/dogmatiq/enginekit v0.10.2
 	github.com/dogmatiq/example v0.0.0-20230606031437-2bd84c72050b
 	github.com/dogmatiq/ferrite v1.3.0
@@ -30,7 +30,7 @@ require (
 	github.com/dogmatiq/dapper v0.5.3 // indirect
 	github.com/dogmatiq/dyad v1.0.0 // indirect
 	github.com/dogmatiq/iago v0.4.0 // indirect
-	github.com/dogmatiq/interopspec v0.5.3 // indirect
+	github.com/dogmatiq/interopspec v0.5.4 // indirect
 	github.com/dogmatiq/linger v1.1.0 // indirect
 	github.com/dogmatiq/projectionkit v0.6.5 // indirect
 	github.com/fxamacker/cbor/v2 v2.6.0 // indirect
@@ -41,9 +41,9 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/net v0.25.0 // indirect
-	golang.org/x/sys v0.20.0 // indirect
-	golang.org/x/text v0.15.0 // indirect
+	golang.org/x/net v0.27.0 // indirect
+	golang.org/x/sys v0.22.0 // indirect
+	golang.org/x/text v0.16.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240528184218-531527333157 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
