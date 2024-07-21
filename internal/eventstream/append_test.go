@@ -33,7 +33,7 @@ func TestAppend(t *testing.T) {
 
 		deps.Supervisor = &Supervisor{
 			Journals: deps.Journals,
-			Logger:   spruce.NewLogger(t),
+			Logger:   spruce.NewTestLogger(t),
 		}
 
 		deps.Packer = &envelope.Packer{
