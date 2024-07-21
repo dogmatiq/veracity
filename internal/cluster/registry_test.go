@@ -36,7 +36,7 @@ func TestRegistry(t *testing.T) {
 			Keyspaces:     keyspaces,
 			Node:          deps.Node,
 			RenewInterval: 10 * time.Millisecond,
-			Logger:        spruce.NewLogger(t),
+			Logger:        spruce.NewTestLogger(t),
 		}
 
 		deps.MembershipChanged = make(chan MembershipChanged)
