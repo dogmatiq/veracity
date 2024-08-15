@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0
-	github.com/dogmatiq/configkit v0.13.2
+	github.com/dogmatiq/configkit v0.13.3
 	github.com/dogmatiq/discoverkit v0.1.2
 	github.com/dogmatiq/dogma v0.13.1
 	github.com/dogmatiq/enginekit v0.10.2
