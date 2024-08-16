@@ -2,8 +2,8 @@ github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UF
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/dogmatiq/configkit v0.13.3 h1:2SW2jBuYZ9PWsjjBhv7pd7OLhuBJ+jcYX3PmEbBDd9U=
-github.com/dogmatiq/configkit v0.13.3/go.mod h1:qd+QnJSig1NPuBpPuEFKYL1RXH88+XODRT5tz2g1314=
+github.com/dogmatiq/configkit v0.13.4 h1:5hfWDMV5fmG1hf1VZFCFicdiLhP7QxW5+O9FNMnkml4=
+github.com/dogmatiq/configkit v0.13.4/go.mod h1:lwCG/to/1ZEJJXGyxCxqQvg7HIb8dDrQv4Xc40K32Dw=
 github.com/dogmatiq/cosyne v0.2.0 h1:tO957BpS4I9kqSw31ds6Ef4CXvV8zPAqWzbXKElsGWg=
 github.com/dogmatiq/cosyne v0.2.0/go.mod h1:dD8EZjbRX7FFw9t6P7l1nwoZbA7YxtOCfl9ZZAHPucU=
 github.com/dogmatiq/dapper v0.5.3 h1:DZkitO0TiokaiZt+9J7UNnagW2ezSYmJUlDTXLWGf8g=
