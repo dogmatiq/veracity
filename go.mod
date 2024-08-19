@@ -6,7 +6,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/dogmatiq/configkit v0.13.4
 	github.com/dogmatiq/discoverkit v0.1.2
-	github.com/dogmatiq/dogma v0.13.1
+	github.com/dogmatiq/dogma v0.14.1
 	github.com/dogmatiq/enginekit v0.10.2
 	github.com/dogmatiq/example v0.0.0-20230606031437-2bd84c72050b
 	github.com/dogmatiq/ferrite v1.4.0
