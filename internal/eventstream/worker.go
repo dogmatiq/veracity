@@ -130,7 +130,7 @@ func (w *worker) appendEvents(
 				EndOffset:              Offset(rec.StreamOffsetAfter),
 				AppendedByPriorAttempt: true,
 			}, nil
-		} else if err != journal.ErrNotFound {
+		} else if !journal.IsNotFound(err) {
 			return AppendResponse{}, err
 		}
 	}
@@ -195,8 +195,10 @@ func (w *worker) findAppendRecord(
 	return journal.ScanFromSearchResult(
 		ctx,
 		w.Journal,
-		0,
-		w.pos,
+		journal.Interval{
+			Begin: 0,
+			End:   w.pos,
+		},
 		eventstreamjournal.SearchByOffset(uint64(req.LowestPossibleOffset)),
 		func(
 			ctx context.Context,
