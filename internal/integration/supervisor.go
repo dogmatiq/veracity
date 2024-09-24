@@ -68,14 +68,14 @@ func (s *Supervisor) Run(ctx context.Context) error {
 }
 
 func (s *Supervisor) initState(ctx context.Context) fsm.Action {
-	begin, end, err := s.journal.Bounds(ctx)
+	bounds, err := s.journal.Bounds(ctx)
 	if err != nil {
 		return fsm.Fail(err)
 	}
 
-	s.pos = begin
+	s.pos = bounds.Begin
 
-	if s.pos == end {
+	if bounds.IsEmpty() {
 		return fsm.EnterState(s.idleState)
 	}
 
