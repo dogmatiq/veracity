@@ -222,14 +222,14 @@ func (o *RegistryObserver) pollState(ctx context.Context) fsm.Action {
 
 	ev := MembershipChanged{}
 
-	for id, node := range o.nodes {
-		if _, ok := nodes[id]; !ok {
+	for id, node := range o.nodes.All() {
+		if !nodes.Has(id) {
 			ev.Deregistered = append(ev.Deregistered, node)
 		}
 	}
 
-	for id, node := range nodes {
-		if _, ok := o.nodes[id]; !ok {
+	for id, node := range nodes.All() {
+		if !o.nodes.Has(id) {
 			ev.Registered = append(ev.Registered, node)
 		}
 	}

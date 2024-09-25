@@ -39,7 +39,7 @@ func TestPartitioner(t *testing.T) {
 			t.Parallel()
 
 			p := &Partitioner{}
-			remaining := uuidpb.Set{}
+			remaining := uuidpb.OrderedSet{}
 
 			for range 10 {
 				id := uuidpb.Generate()
@@ -50,7 +50,7 @@ func TestPartitioner(t *testing.T) {
 			start := time.Now()
 			timeout := 5 * time.Second
 
-			for len(remaining) != 0 {
+			for remaining.Len() != 0 {
 				if time.Since(start) > timeout {
 					t.Fatal("timed-out waiting for workloads to be distributed")
 				}
