@@ -99,11 +99,11 @@ func (s *Supervisor) forwardAppendState(
 
 // shutdownState signals all workers to shutdown and waits for them to finish.
 func (s *Supervisor) shutdownState(context.Context) fsm.Action {
-	for _, w := range s.workers {
+	for _, w := range s.workers.All() {
 		w.Shutdown.Signal()
 	}
 
-	for len(s.workers) > 0 {
+	for s.workers.Len() > 0 {
 		res := <-s.workerStopped
 		s.workers.Delete(res.StreamID)
 	}
