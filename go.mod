@@ -12,7 +12,7 @@ require (
 	github.com/dogmatiq/enginekit v0.11.0
 	github.com/dogmatiq/example v0.0.0-20240819065034-95f11196afb3
 	github.com/dogmatiq/ferrite v1.4.0
-	github.com/dogmatiq/marshalkit v0.7.5
+	github.com/dogmatiq/marshalkit v0.7.6
 	github.com/dogmatiq/persistencekit v0.10.0
 	github.com/dogmatiq/primo v0.3.1
 	github.com/dogmatiq/spruce v0.2.2
