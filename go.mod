@@ -9,7 +9,7 @@ require (
 	github.com/dogmatiq/configkit v0.13.8
 	github.com/dogmatiq/discoverkit v0.1.2
 	github.com/dogmatiq/dogma v0.14.2
-	github.com/dogmatiq/enginekit v0.11.0
+	github.com/dogmatiq/enginekit v0.11.1
 	github.com/dogmatiq/example v0.0.0-20240819065034-95f11196afb3
 	github.com/dogmatiq/ferrite v1.4.0
 	github.com/dogmatiq/marshalkit v0.7.6
