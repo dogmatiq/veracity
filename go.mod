@@ -6,9 +6,9 @@ toolchain go1.23.0
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0
-	github.com/dogmatiq/configkit v0.13.8
+	github.com/dogmatiq/configkit v0.14.0
 	github.com/dogmatiq/discoverkit v0.1.2
-	github.com/dogmatiq/dogma v0.14.2
+	github.com/dogmatiq/dogma v0.14.3
 	github.com/dogmatiq/enginekit v0.11.1
 	github.com/dogmatiq/example v0.0.0-20240819065034-95f11196afb3
 	github.com/dogmatiq/ferrite v1.4.0
@@ -42,9 +42,9 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/net v0.28.0 // indirect
-	golang.org/x/sys v0.24.0 // indirect
-	golang.org/x/text v0.17.0 // indirect
+	golang.org/x/net v0.29.0 // indirect
+	golang.org/x/sys v0.25.0 // indirect
+	golang.org/x/text v0.18.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
