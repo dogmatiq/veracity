@@ -10,7 +10,6 @@ import (
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/persistencekit/journal"
 	"github.com/dogmatiq/persistencekit/kv"
-	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/eventstream"
 	"github.com/dogmatiq/veracity/internal/fsm"
 	"github.com/dogmatiq/veracity/internal/integration/internal/integrationjournal"
@@ -36,7 +35,7 @@ type Supervisor struct {
 	HandlerIdentity *identitypb.Identity
 	Journals        journal.BinaryStore
 	Keyspaces       kv.BinaryStore
-	Packer          *envelope.Packer
+	Packer          *envelopepb.Packer
 	EventRecorder   EventRecorder
 
 	eventStreamID             *uuidpb.UUID
@@ -184,7 +183,14 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 
 	var envs []*envelopepb.Envelope
 	for _, ev := range sc.evs {
-		envs = append(envs, s.Packer.Pack(ev, envelope.WithCause(cmd), envelope.WithHandler(s.HandlerIdentity)))
+		envs = append(
+			envs,
+			s.Packer.Pack(
+				ev,
+				envelopepb.WithCause(cmd),
+				envelopepb.WithHandler(s.HandlerIdentity),
+			),
+		)
 	}
 
 	if s.eventStreamID == nil {

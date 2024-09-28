@@ -9,10 +9,9 @@ require (
 	github.com/dogmatiq/configkit v0.14.0
 	github.com/dogmatiq/discoverkit v0.1.2
 	github.com/dogmatiq/dogma v0.14.3
-	github.com/dogmatiq/enginekit v0.12.0
+	github.com/dogmatiq/enginekit v0.12.1
 	github.com/dogmatiq/example v0.0.0-20240928215850-83b14743c287
 	github.com/dogmatiq/ferrite v1.4.0
-	github.com/dogmatiq/marshalkit v0.9.0
 	github.com/dogmatiq/persistencekit v0.10.0
 	github.com/dogmatiq/primo v0.3.1
 	github.com/dogmatiq/spruce v0.2.2
@@ -38,6 +37,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
+	github.com/onsi/ginkgo/v2 v2.20.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/net v0.29.0 // indirect

@@ -4,15 +4,15 @@ import (
 	"sync/atomic"
 	"time"
 
+	. "github.com/dogmatiq/enginekit/enginetest/stubs"
+	"github.com/dogmatiq/enginekit/protobuf/envelopepb"
 	"github.com/dogmatiq/enginekit/protobuf/identitypb"
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
-	. "github.com/dogmatiq/marshalkit/fixtures"
-	"github.com/dogmatiq/veracity/internal/envelope"
 )
 
-func newPacker() *envelope.Packer {
+func newPacker() *envelopepb.Packer {
 	var counter atomic.Uint64
-	return &envelope.Packer{
+	return &envelopepb.Packer{
 		Application: identitypb.New("<app>", uuidpb.Generate()),
 		Marshaler:   Marshaler,
 		Now: func() time.Time {

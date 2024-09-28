@@ -10,7 +10,7 @@ var nodeID = ferrite.
 	WithConstraint(
 		"must be a UUID",
 		func(v string) bool {
-			id, err := uuidpb.FromString(v)
+			id, err := uuidpb.Parse(v)
 			if err != nil {
 				return false
 			}
@@ -27,11 +27,7 @@ func (c *Config) finalizeNodeID() {
 
 	if c.UseEnv {
 		if v, ok := nodeID.Value(); ok {
-			id, err := uuidpb.FromString(v)
-			if err != nil {
-				panic(err)
-			}
-			c.NodeID = id
+			c.NodeID = uuidpb.MustParse(v)
 			return
 		}
 	}

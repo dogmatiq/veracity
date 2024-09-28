@@ -16,7 +16,6 @@ import (
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/persistencekit/driver/memory/memoryjournal"
 	"github.com/dogmatiq/persistencekit/driver/memory/memorykv"
-	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/eventstream"
 	. "github.com/dogmatiq/veracity/internal/integration"
 	"github.com/dogmatiq/veracity/internal/integration/internal/integrationjournal"
@@ -28,7 +27,7 @@ import (
 
 func TestSupervisor(t *testing.T) {
 	type dependencies struct {
-		Packer        *envelope.Packer
+		Packer        *envelopepb.Packer
 		Journals      *memoryjournal.BinaryStore
 		Keyspaces     *memorykv.BinaryStore
 		Handler       *IntegrationMessageHandlerStub

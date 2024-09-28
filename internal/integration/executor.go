@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/dogmatiq/dogma"
-	"github.com/dogmatiq/veracity/internal/envelope"
+	"github.com/dogmatiq/enginekit/protobuf/envelopepb"
 	"github.com/dogmatiq/veracity/internal/messaging"
 )
 
@@ -12,7 +12,7 @@ import (
 // dispatches the command to an exchange queue.
 type CommandExecutor struct {
 	ExecuteQueue *messaging.ExchangeQueue[ExecuteRequest, ExecuteResponse]
-	Packer       *envelope.Packer
+	Packer       *envelopepb.Packer
 }
 
 // ExecuteCommand enqueues a command.

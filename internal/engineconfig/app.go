@@ -6,21 +6,20 @@ import (
 
 	"github.com/dogmatiq/configkit"
 	"github.com/dogmatiq/dogma"
+	"github.com/dogmatiq/enginekit/marshaler"
+	"github.com/dogmatiq/enginekit/marshaler/codecs/json"
+	"github.com/dogmatiq/enginekit/marshaler/codecs/protobuf"
+	"github.com/dogmatiq/enginekit/protobuf/envelopepb"
 	"github.com/dogmatiq/enginekit/protobuf/identitypb"
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
-	"github.com/dogmatiq/marshalkit"
-	"github.com/dogmatiq/marshalkit/codec"
-	"github.com/dogmatiq/marshalkit/codec/json"
-	"github.com/dogmatiq/marshalkit/codec/protobuf"
-	"github.com/dogmatiq/veracity/internal/envelope"
 	"github.com/dogmatiq/veracity/internal/integration"
 )
 
 type applicationVisitor struct {
 	*Config
 
-	marshaler marshalkit.ValueMarshaler
-	packer    *envelope.Packer
+	marshaler marshaler.Marshaler
+	packer    *envelopepb.Packer
 }
 
 func (c applicationVisitor) VisitRichApplication(ctx context.Context, cfg configkit.RichApplication) error {
@@ -29,9 +28,9 @@ func (c applicationVisitor) VisitRichApplication(ctx context.Context, cfg config
 		types = append(types, t.ReflectType())
 	}
 
-	m, err := codec.NewMarshaler(
+	m, err := marshaler.New(
 		types,
-		[]codec.Codec{
+		[]marshaler.Codec{
 			protobuf.DefaultNativeCodec,
 			json.DefaultCodec,
 		},
@@ -42,7 +41,7 @@ func (c applicationVisitor) VisitRichApplication(ctx context.Context, cfg config
 
 	c.marshaler = m
 
-	c.packer = &envelope.Packer{
+	c.packer = &envelopepb.Packer{
 		Site:        c.SiteID,
 		Application: marshalIdentity(cfg.Identity()),
 		Marshaler:   c.marshaler,
@@ -90,7 +89,7 @@ func (c applicationVisitor) VisitRichProjection(context.Context, configkit.RichP
 }
 
 func marshalIdentity(id configkit.Identity) *identitypb.Identity {
-	key, err := uuidpb.FromString(id.Key)
+	key, err := uuidpb.Parse(id.Key)
 	if err != nil {
 		panic(err)
 	}
