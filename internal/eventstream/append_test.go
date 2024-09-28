@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	. "github.com/dogmatiq/dogma/fixtures"
+	. "github.com/dogmatiq/enginekit/enginetest/stubs"
 	"github.com/dogmatiq/enginekit/protobuf/envelopepb"
 	"github.com/dogmatiq/enginekit/protobuf/identitypb"
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
@@ -112,9 +112,9 @@ func TestAppend(t *testing.T) {
 					AppendRequest{
 						StreamID: streamID,
 						Events: []*envelopepb.Envelope{
-							deps.Packer.Pack(MessageE1),
-							deps.Packer.Pack(MessageE2),
-							deps.Packer.Pack(MessageE3),
+							deps.Packer.Pack(EventE1),
+							deps.Packer.Pack(EventE2),
+							deps.Packer.Pack(EventE3),
 						},
 					},
 				)
@@ -132,7 +132,7 @@ func TestAppend(t *testing.T) {
 					RunInBackground(t, "supervisor", deps.Supervisor.Run).
 					RepeatedlyUntilStopped()
 
-				event := deps.Packer.Pack(MessageE1)
+				event := deps.Packer.Pack(EventE1)
 
 				req := AppendRequest{
 					StreamID: streamID,

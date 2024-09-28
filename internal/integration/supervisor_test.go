@@ -10,11 +10,10 @@ import (
 	"time"
 
 	"github.com/dogmatiq/dogma"
-	. "github.com/dogmatiq/dogma/fixtures"
+	. "github.com/dogmatiq/enginekit/enginetest/stubs"
 	"github.com/dogmatiq/enginekit/protobuf/envelopepb"
 	"github.com/dogmatiq/enginekit/protobuf/identitypb"
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
-	. "github.com/dogmatiq/marshalkit/fixtures"
 	"github.com/dogmatiq/persistencekit/driver/memory/memoryjournal"
 	"github.com/dogmatiq/persistencekit/driver/memory/memorykv"
 	"github.com/dogmatiq/veracity/internal/envelope"
@@ -32,7 +31,7 @@ func TestSupervisor(t *testing.T) {
 		Packer        *envelope.Packer
 		Journals      *memoryjournal.BinaryStore
 		Keyspaces     *memorykv.BinaryStore
-		Handler       *IntegrationMessageHandler
+		Handler       *IntegrationMessageHandlerStub
 		EventRecorder *eventRecorderStub
 		Supervisor    *Supervisor
 		Executor      *CommandExecutor
@@ -45,7 +44,7 @@ func TestSupervisor(t *testing.T) {
 
 		deps.Keyspaces = &memorykv.BinaryStore{}
 
-		deps.Handler = &IntegrationMessageHandler{}
+		deps.Handler = &IntegrationMessageHandlerStub{}
 
 		deps.EventRecorder = &eventRecorderStub{}
 
@@ -292,13 +291,13 @@ func TestSupervisor(t *testing.T) {
 					s dogma.IntegrationCommandScope,
 					c dogma.Command,
 				) error {
-					if c != MessageC1 {
-						return fmt.Errorf("unexpected command: got %s, want %s", c, MessageC1)
+					if c != CommandA1 {
+						return fmt.Errorf("unexpected command: got %s, want %s", c, CommandA1)
 					}
 
-					s.RecordEvent(MessageE1)
-					s.RecordEvent(MessageE2)
-					s.RecordEvent(MessageE3)
+					s.RecordEvent(EventA1)
+					s.RecordEvent(EventA2)
+					s.RecordEvent(EventA3)
 
 					handled <- struct{}{}
 
@@ -326,7 +325,7 @@ func TestSupervisor(t *testing.T) {
 					return uuidpb.Generate(), eventstream.Offset(rand.Uint32()), nil
 				}
 
-				cmd := deps.Packer.Pack(MessageC1)
+				cmd := deps.Packer.Pack(CommandA1)
 
 				c.InduceFailure(&deps)
 
@@ -358,28 +357,28 @@ func TestSupervisor(t *testing.T) {
 							SourceApplication: deps.Packer.Application,
 							SourceHandler:     deps.Supervisor.HandlerIdentity,
 							CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
-							Description:       MessageE1.MessageDescription(),
-							PortableName:      MessageEPortableName,
-							MediaType:         MessageE1Packet.MediaType,
-							Data:              MessageE1Packet.Data,
+							Description:       "event(stubs.TypeA:A1, valid)",
+							PortableName:      "EventStub[TypeA]",
+							MediaType:         `application/json; type="EventStub[TypeA]"`,
+							Data:              []byte(`{"content":"A1"}`),
 						},
 						{
 							SourceApplication: deps.Packer.Application,
 							SourceHandler:     deps.Supervisor.HandlerIdentity,
 							CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
-							Description:       MessageE2.MessageDescription(),
-							PortableName:      MessageEPortableName,
-							MediaType:         MessageE2Packet.MediaType,
-							Data:              MessageE2Packet.Data,
+							Description:       "event(stubs.TypeA:A2, valid)",
+							PortableName:      "EventStub[TypeA]",
+							MediaType:         `application/json; type="EventStub[TypeA]"`,
+							Data:              []byte(`{"content":"A2"}`),
 						},
 						{
 							SourceApplication: deps.Packer.Application,
 							SourceHandler:     deps.Supervisor.HandlerIdentity,
 							CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
-							Description:       MessageE3.MessageDescription(),
-							PortableName:      MessageEPortableName,
-							MediaType:         MessageE3Packet.MediaType,
-							Data:              MessageE3Packet.Data,
+							Description:       "event(stubs.TypeA:A3, valid)",
+							PortableName:      "EventStub[TypeA]",
+							MediaType:         `application/json; type="EventStub[TypeA]"`,
+							Data:              []byte(`{"content":"A3"}`),
 						},
 					},
 					LowestPossibleOffset: lowestPossibleOffset,
@@ -497,7 +496,7 @@ func TestSupervisor(t *testing.T) {
 			return nil
 		}
 
-		if err := deps.Executor.ExecuteCommand(tctx, MessageC1); err != nil {
+		if err := deps.Executor.ExecuteCommand(tctx, CommandA1); err != nil {
 			t.Fatal(err)
 		}
 
@@ -568,18 +567,18 @@ func TestSupervisor(t *testing.T) {
 			c dogma.Command,
 		) error {
 			switch c {
-			case MessageC1:
-				s.RecordEvent(MessageE1)
-			case MessageC2:
-				s.RecordEvent(MessageE2)
+			case CommandA1:
+				s.RecordEvent(EventA1)
+			case CommandA2:
+				s.RecordEvent(EventA2)
 			}
 			return nil
 		}
 
-		if err := deps.Executor.ExecuteCommand(tctx, MessageC1); err != nil {
+		if err := deps.Executor.ExecuteCommand(tctx, CommandA1); err != nil {
 			t.Fatal(err)
 		}
-		if err := deps.Executor.ExecuteCommand(tctx, MessageC2); err != nil {
+		if err := deps.Executor.ExecuteCommand(tctx, CommandA2); err != nil {
 			t.Fatal(err)
 		}
 
@@ -594,10 +593,10 @@ func TestSupervisor(t *testing.T) {
 							SourceApplication: deps.Packer.Application,
 							SourceHandler:     deps.Supervisor.HandlerIdentity,
 							CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
-							Description:       MessageE1.MessageDescription(),
-							PortableName:      MessageEPortableName,
-							MediaType:         MessageE1Packet.MediaType,
-							Data:              MessageE1Packet.Data,
+							Description:       `event(stubs.TypeA:A1, valid)`,
+							PortableName:      `EventStub[TypeA]`,
+							MediaType:         `application/json; type="EventStub[TypeA]"`,
+							Data:              []byte(`{"content":"A1"}`),
 						},
 					},
 					LowestPossibleOffset: 10,
@@ -621,10 +620,10 @@ func TestSupervisor(t *testing.T) {
 							SourceApplication: deps.Packer.Application,
 							SourceHandler:     deps.Supervisor.HandlerIdentity,
 							CreatedAt:         timestamppb.New(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
-							Description:       MessageE2.MessageDescription(),
-							PortableName:      MessageEPortableName,
-							MediaType:         MessageE2Packet.MediaType,
-							Data:              MessageE2Packet.Data,
+							Description:       `event(stubs.TypeA:A2, valid)`,
+							PortableName:      `EventStub[TypeA]`,
+							MediaType:         `application/json; type="EventStub[TypeA]"`,
+							Data:              []byte(`{"content":"A2"}`),
 						},
 					},
 					LowestPossibleOffset: 11,
