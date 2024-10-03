@@ -8,8 +8,8 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/dogmatiq/configkit v0.14.0
 	github.com/dogmatiq/discoverkit v0.1.2
-	github.com/dogmatiq/dogma v0.14.3
-	github.com/dogmatiq/enginekit v0.13.0
+	github.com/dogmatiq/dogma v0.15.0
+	github.com/dogmatiq/enginekit v0.16.0
 	github.com/dogmatiq/example v0.0.0-20240928215850-83b14743c287
 	github.com/dogmatiq/ferrite v1.4.0
 	github.com/dogmatiq/persistencekit v0.10.0
