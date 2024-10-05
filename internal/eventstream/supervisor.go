@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/dogmatiq/enginekit/collections/maps"
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/persistencekit/journal"
 	"github.com/dogmatiq/veracity/internal/eventstream/internal/eventstreamjournal"
@@ -24,7 +25,7 @@ type Supervisor struct {
 	Logger      *slog.Logger
 
 	shutdown      signaling.Latch
-	workers       uuidpb.Map[*worker]
+	workers       maps.Proto[*uuidpb.UUID, *worker]
 	workerStopped chan workerResult
 }
 
@@ -35,7 +36,6 @@ type workerResult struct {
 
 // Run starts the supervisor.
 func (s *Supervisor) Run(ctx context.Context) error {
-	s.workers = uuidpb.Map[*worker]{}
 	s.workerStopped = make(chan workerResult)
 
 	return fsm.Start(
@@ -57,7 +57,7 @@ func (s *Supervisor) idleState(ctx context.Context) fsm.Action {
 		return fsm.Stop()
 
 	case res := <-s.workerStopped:
-		s.workers.Delete(res.StreamID)
+		s.workers.Remove(res.StreamID)
 		if res.Err != nil {
 			return fsm.Fail(res.Err)
 		}
@@ -85,7 +85,7 @@ func (s *Supervisor) forwardAppendState(
 		return fsm.Stop()
 
 	case res := <-s.workerStopped:
-		s.workers.Delete(res.StreamID)
+		s.workers.Remove(res.StreamID)
 		if res.Err != nil {
 			ex.Err(errShuttingDown)
 			return fsm.Fail(res.Err)
@@ -105,7 +105,7 @@ func (s *Supervisor) shutdownState(context.Context) fsm.Action {
 
 	for s.workers.Len() > 0 {
 		res := <-s.workerStopped
-		s.workers.Delete(res.StreamID)
+		s.workers.Remove(res.StreamID)
 	}
 
 	return fsm.Stop()

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dogmatiq/enginekit/collections/sets"
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	. "github.com/dogmatiq/veracity/internal/cluster"
 )
@@ -39,7 +40,7 @@ func TestPartitioner(t *testing.T) {
 			t.Parallel()
 
 			p := &Partitioner{}
-			remaining := uuidpb.OrderedSet{}
+			remaining := sets.NewOrderedByMember[*uuidpb.UUID]()
 
 			for range 10 {
 				id := uuidpb.Generate()
@@ -56,7 +57,7 @@ func TestPartitioner(t *testing.T) {
 				}
 
 				id := p.Route(uuidpb.Generate())
-				remaining.Delete(id)
+				remaining.Remove(id)
 			}
 		})
 

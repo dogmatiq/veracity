@@ -173,7 +173,11 @@ func (s *Supervisor) handleCommand(ctx context.Context, cmd *envelopepb.Envelope
 
 	sc := &scope{}
 
-	if err := s.Handler.HandleCommand(ctx, sc, c); err != nil {
+	if err := s.Handler.HandleCommand(
+		ctx,
+		sc,
+		c.(dogma.Command),
+	); err != nil {
 		return err
 	}
 

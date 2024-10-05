@@ -40,7 +40,7 @@ func (e *Engine) ExecuteCommand(
 		panic("command must not be nil")
 	}
 
-	if err := c.Validate(); err != nil {
+	if err := c.Validate(nil); err != nil {
 		panic(fmt.Sprintf("command is invalid: %s", err))
 	}
 

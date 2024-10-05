@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dogmatiq/enginekit/collections/maps"
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/persistencekit/kv"
 	"github.com/dogmatiq/veracity/internal/cluster/internal/registrypb"
@@ -174,7 +175,7 @@ type RegistryObserver struct {
 	PollInterval      time.Duration
 
 	keyspace     kv.Keyspace[*uuidpb.UUID, *registrypb.Registration]
-	nodes        uuidpb.Map[Node]
+	nodes        maps.Proto[*uuidpb.UUID, Node]
 	readyForPoll *time.Ticker
 }
 
@@ -186,8 +187,6 @@ func (o *RegistryObserver) Run(ctx context.Context) error {
 		return err
 	}
 	defer o.keyspace.Close()
-
-	o.nodes = uuidpb.Map[Node]{}
 
 	interval := o.PollInterval
 	if interval <= 0 {
@@ -254,7 +253,7 @@ func (o *RegistryObserver) publishState(ctx context.Context, ev MembershipChange
 		}
 
 		for _, node := range ev.Deregistered {
-			o.nodes.Delete(node.ID)
+			o.nodes.Remove(node.ID)
 		}
 
 		return fsm.EnterState(o.idleState)
@@ -262,8 +261,8 @@ func (o *RegistryObserver) publishState(ctx context.Context, ev MembershipChange
 }
 
 // loadNodes loads the current set of nodes from the registry.
-func (o *RegistryObserver) loadNodes(ctx context.Context) (uuidpb.Map[Node], error) {
-	nodes := uuidpb.Map[Node]{}
+func (o *RegistryObserver) loadNodes(ctx context.Context) (*maps.Proto[*uuidpb.UUID, Node], error) {
+	nodes := maps.NewProto[*uuidpb.UUID, Node]()
 
 	return nodes, o.keyspace.Range(
 		ctx,

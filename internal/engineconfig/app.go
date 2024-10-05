@@ -24,7 +24,7 @@ type applicationVisitor struct {
 
 func (c applicationVisitor) VisitRichApplication(ctx context.Context, cfg configkit.RichApplication) error {
 	var types []reflect.Type
-	for t := range cfg.MessageTypes().All() {
+	for t := range cfg.MessageTypes() {
 		types = append(types, t.ReflectType())
 	}
 
@@ -77,7 +77,7 @@ func (c applicationVisitor) VisitRichIntegration(_ context.Context, cfg configki
 		c.Application.Executors = map[reflect.Type]dogma.CommandExecutor{}
 	}
 
-	for t := range cfg.MessageTypes().Consumed {
+	for t := range cfg.MessageTypes().Consumed() {
 		c.Application.Executors[t.ReflectType()] = exec
 	}
 
