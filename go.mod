@@ -1,9 +1,6 @@
 module github.com/dogmatiq/veracity
 
 go 1.23
-
-toolchain go1.23.0
-
 require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/dogmatiq/configkit v0.16.0
@@ -20,7 +17,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.35.0
 	go.opentelemetry.io/otel/trace v1.35.0
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56
-	golang.org/x/sync v0.11.0
+	golang.org/x/sync v0.12.0
 	google.golang.org/grpc v1.71.0
 	google.golang.org/protobuf v1.36.5
 	pgregory.net/rapid v1.1.0
