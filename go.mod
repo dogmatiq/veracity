@@ -1,6 +1,9 @@
 module github.com/dogmatiq/veracity
 
-go 1.23
+go 1.23.0
+
+toolchain go1.23.6
+
 require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/dogmatiq/configkit v0.16.0
