@@ -11,7 +11,7 @@ require (
 	github.com/dogmatiq/dogma v0.15.0
 	github.com/dogmatiq/enginekit v0.16.1
 	github.com/dogmatiq/example v0.0.0-20241005111935-66dfd1c45b34
-	github.com/dogmatiq/ferrite v1.4.0
+	github.com/dogmatiq/ferrite v1.5.0
 	github.com/dogmatiq/persistencekit v0.10.0
 	github.com/dogmatiq/primo v0.3.1
 	github.com/dogmatiq/spruce v0.2.2
@@ -37,13 +37,12 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
-	github.com/onsi/ginkgo/v2 v2.20.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/net v0.36.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
+	golang.org/x/net v0.39.0 // indirect
+	golang.org/x/sys v0.32.0 // indirect
+	golang.org/x/text v0.24.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250115164207-1a7da9e5054f // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
