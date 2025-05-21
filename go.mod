@@ -16,9 +16,9 @@ require (
 	github.com/dogmatiq/primo v0.3.1
 	github.com/dogmatiq/spruce v0.2.2
 	github.com/google/go-cmp v0.7.0
-	go.opentelemetry.io/otel v1.35.0
-	go.opentelemetry.io/otel/metric v1.35.0
-	go.opentelemetry.io/otel/trace v1.35.0
+	go.opentelemetry.io/otel v1.36.0
+	go.opentelemetry.io/otel/metric v1.36.0
+	go.opentelemetry.io/otel/trace v1.36.0
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56
 	golang.org/x/sync v0.14.0
 	google.golang.org/grpc v1.72.1
