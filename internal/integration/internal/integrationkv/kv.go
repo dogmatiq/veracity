@@ -8,22 +8,22 @@ import (
 	"github.com/dogmatiq/persistencekit/marshaler"
 )
 
-// OpenHandledCommands opens the keyspace that contains the set of handled
+// OpenAcceptedCommands opens the keyspace that contains the set of accepted
 // command IDs for the integration handler with the given key.
-func OpenHandledCommands(
+func OpenAcceptedCommands(
 	ctx context.Context,
 	s kv.BinaryStore,
 	key *uuidpb.UUID,
 ) (kv.Keyspace[*uuidpb.UUID, bool], error) {
 	store := kv.NewMarshalingStore(s, uuidMarshaler, marshaler.Bool)
-	name := HandledCommandsKeyspace(key)
+	name := AcceptedCommandsKeyspace(key)
 	return store.Open(ctx, name)
 }
 
 var uuidMarshaler = marshaler.NewProto[*uuidpb.UUID]()
 
-// HandledCommandsKeyspace returns the name of the keyspace that contains the
+// AcceptedCommandsKeyspace returns the name of the keyspace that contains the
 // set of handled command IDs for the integration handler with the given key.
-func HandledCommandsKeyspace(key *uuidpb.UUID) string {
-	return "integration:" + key.AsString() + ":handled-commands"
+func AcceptedCommandsKeyspace(key *uuidpb.UUID) string {
+	return "integration:" + key.AsString() + ":accepted-commands"
 }

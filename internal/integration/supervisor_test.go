@@ -246,11 +246,11 @@ func TestSupervisor(t *testing.T) {
 				},
 			},
 			{
-				Desc: "failure before adding command to handled-commands keyspace",
+				Desc: "failure before marking the command as accepted",
 				InduceFailure: func(deps *dependencies) {
 					test.FailBeforeKeyspaceSet(
 						deps.Keyspaces,
-						integrationkv.HandledCommandsKeyspace(deps.Supervisor.HandlerIdentity.Key),
+						integrationkv.AcceptedCommandsKeyspace(deps.Supervisor.HandlerIdentity.Key),
 						func(k, v []byte) bool {
 							return true
 						},
@@ -258,11 +258,11 @@ func TestSupervisor(t *testing.T) {
 				},
 			},
 			{
-				Desc: "failure after adding command to handled-commands keyspace",
+				Desc: "failure after marking the command as accepted",
 				InduceFailure: func(deps *dependencies) {
 					test.FailAfterKeyspaceSet(
 						deps.Keyspaces,
-						integrationkv.HandledCommandsKeyspace(deps.Supervisor.HandlerIdentity.Key),
+						integrationkv.AcceptedCommandsKeyspace(deps.Supervisor.HandlerIdentity.Key),
 						func(k, v []byte) bool {
 							return true
 						},

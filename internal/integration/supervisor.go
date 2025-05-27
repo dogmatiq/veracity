@@ -49,7 +49,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	}
 	defer s.journal.Close()
 
-	s.acceptedCommands, err = integrationkv.OpenHandledCommands(ctx, s.Keyspaces, s.HandlerIdentity.Key)
+	s.acceptedCommands, err = integrationkv.OpenAcceptedCommands(ctx, s.Keyspaces, s.HandlerIdentity.Key)
 	if err != nil {
 		return err
 	}
