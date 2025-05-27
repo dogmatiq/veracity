@@ -29,12 +29,12 @@ type Supervisor struct {
 	Packer          *envelopepb.Packer
 	Events          EventRecorder
 
-	journal         journal.Journal[*integrationjournal.Record]
-	journalPos      journal.Position
-	eventStreamID   *uuidpb.UUID
-	eventOffsetHint eventstream.Offset
-	handled         kv.Keyspace[*uuidpb.UUID, bool]
-	shutdown        signaling.Latch
+	journal          journal.Journal[*integrationjournal.Record]
+	journalPos       journal.Position
+	eventStreamID    *uuidpb.UUID
+	eventOffsetHint  eventstream.Offset
+	acceptedCommands kv.Keyspace[*uuidpb.UUID, bool]
+	shutdownLatch    signaling.Latch
 }
 
 // Run starts the supervisor.
@@ -49,11 +49,11 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	}
 	defer s.journal.Close()
 
-	s.handled, err = integrationkv.OpenHandledCommands(ctx, s.Keyspaces, s.HandlerIdentity.Key)
+	s.acceptedCommands, err = integrationkv.OpenHandledCommands(ctx, s.Keyspaces, s.HandlerIdentity.Key)
 	if err != nil {
 		return err
 	}
-	defer s.handled.Close()
+	defer s.acceptedCommands.Close()
 
 	return fsm.Start(ctx, s.recover)
 }
@@ -61,7 +61,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 // Shutdown instructs the supervisor to shutdown when it next enters the idle
 // state.
 func (s *Supervisor) Shutdown() {
-	s.shutdown.Signal()
+	s.shutdownLatch.Signal()
 }
 
 // recover discovers any pending work in the journal, and completes it before
@@ -135,8 +135,8 @@ func (s *Supervisor) recover(ctx context.Context) fsm.Action {
 		}
 	}
 
-	for _, cmd := range unhandled {
-		if err := s.handleCommand(ctx, cmd); err != nil {
+	for _, env := range unhandled {
+		if err := s.handleCommand(ctx, env); err != nil {
 			return fsm.Fail(err)
 		}
 	}
@@ -156,7 +156,7 @@ func (s *Supervisor) idle(ctx context.Context) fsm.Action {
 	case <-ctx.Done():
 		return fsm.Stop()
 
-	case <-s.shutdown.Signaled():
+	case <-s.shutdownLatch.Signaled():
 		return fsm.Stop()
 
 	case req := <-s.Commands.Recv():
@@ -170,15 +170,18 @@ func (s *Supervisor) accept(
 	ctx context.Context,
 	req ackqueue.Request[*envelopepb.Envelope],
 ) fsm.Action {
+	// Do not add the command to the journal if it has already been accepted
+	// once before.
+	//
 	// TODO: there are optimizations to be made here (i.e. in-memory list of
 	// recent commands, bloom filter, etc).
-	alreadyHandled, err := s.handled.Has(ctx, req.Value.GetMessageId())
+	alreadyAccepted, err := s.acceptedCommands.Has(ctx, req.Value.GetMessageId())
 	if err != nil {
 		req.Nack(err)
 		return fsm.Fail(err)
 	}
 
-	if alreadyHandled {
+	if alreadyAccepted {
 		req.Ack()
 		return fsm.EnterState(s.idle)
 	}
@@ -212,6 +215,16 @@ func (s *Supervisor) accept(
 // handleCommand dispatches a command to the [dogma.IntegrationMessageHandler]
 // and persists the result to the journal.
 func (s *Supervisor) handleCommand(ctx context.Context, env *envelopepb.Envelope) error {
+	// Mark the command as accepted so that it is never accepted again, even
+	// once the journal has been truncated.
+	//
+	// We do this before handling the command as regardless of how we reached
+	// this point (new request vs recovery), we know we have accepted the
+	// command.
+	if err := s.acceptedCommands.Set(ctx, env.GetMessageId(), true); err != nil {
+		return err
+	}
+
 	cmd, err := s.Packer.Unpack(env)
 	if err != nil {
 		return err
@@ -228,12 +241,6 @@ func (s *Supervisor) handleCommand(ctx context.Context, env *envelopepb.Envelope
 		sc,
 		cmd.(dogma.Command),
 	); err != nil {
-		return err
-	}
-
-	// TODO: Is this in the right place? Should we do this before or after
-	// persisting the result to the journal.
-	if err := s.handled.Set(ctx, env.GetMessageId(), true); err != nil {
 		return err
 	}
 
