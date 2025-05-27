@@ -82,8 +82,16 @@ func (s *Supervisor) recover(ctx context.Context) fsm.Action {
 	// Otherwise, we may have unhandled commands, or events that have not yet
 	// been recorded to an event stream.
 	var (
-		unhandled  []*envelopepb.Envelope
-		unrecorded []*integrationjournal.CommandHandled
+		// unhandledCommands is the list of commands that were accepted by the
+		// supervisor but have either not been passed to the handler, or the
+		// result of doing so has not been recorded to the journal and therefore
+		// they must be retried.
+		unhandledCommands []*envelopepb.Envelope
+
+		// unappendedEvents is the list of events that were recorded by handler
+		// during command handling, but may not yet have been appended to an
+		// event stream.
+		unappendedEvents []*integrationjournal.CommandHandled
 	)
 
 	// Range over the journal to build a list of pending work.
@@ -99,24 +107,24 @@ func (s *Supervisor) recover(ctx context.Context) fsm.Action {
 
 			integrationjournal.MustSwitch_Record_Operation(
 				record,
-				func(op *integrationjournal.CommandEnqueued) {
-					unhandled = append(unhandled, op.GetCommand())
+				func(op *integrationjournal.CommandAccepted) {
+					unhandledCommands = append(unhandledCommands, op.GetCommand())
 				},
 				func(op *integrationjournal.CommandHandled) {
-					for i, env := range unhandled {
+					for i, env := range unhandledCommands {
 						if proto.Equal(env.GetMessageId(), op.GetCommandId()) {
-							unhandled = slices.Delete(unhandled, i, i+1)
+							unhandledCommands = slices.Delete(unhandledCommands, i, i+1)
 							break
 						}
 					}
 					if len(op.GetEvents()) > 0 {
-						unrecorded = append(unrecorded, op)
+						unappendedEvents = append(unappendedEvents, op)
 					}
 				},
 				func(op *integrationjournal.EventsAppendedToStream) {
-					for i, rec := range unrecorded {
+					for i, rec := range unappendedEvents {
 						if proto.Equal(rec.GetCommandId(), op.GetCommandId()) {
-							unrecorded = slices.Delete(unrecorded, i, i+1)
+							unappendedEvents = slices.Delete(unappendedEvents, i, i+1)
 							break
 						}
 					}
@@ -129,13 +137,13 @@ func (s *Supervisor) recover(ctx context.Context) fsm.Action {
 		return fsm.Fail(err)
 	}
 
-	for _, op := range unrecorded {
-		if err := s.recordEvents(ctx, op); err != nil {
+	for _, op := range unappendedEvents {
+		if err := s.appendEvents(ctx, op); err != nil {
 			return fsm.Fail(err)
 		}
 	}
 
-	for _, env := range unhandled {
+	for _, env := range unhandledCommands {
 		if err := s.handleCommand(ctx, env); err != nil {
 			return fsm.Fail(err)
 		}
@@ -152,6 +160,8 @@ func (s *Supervisor) recover(ctx context.Context) fsm.Action {
 
 // idle waits for a command request to be received, or the shutdown signal.
 func (s *Supervisor) idle(ctx context.Context) fsm.Action {
+	// TODO: should we truncate if idle for a certain period of time?
+
 	select {
 	case <-ctx.Done():
 		return fsm.Stop()
@@ -160,18 +170,19 @@ func (s *Supervisor) idle(ctx context.Context) fsm.Action {
 		return fsm.Stop()
 
 	case req := <-s.Commands.Recv():
-		return fsm.With(req).EnterState(s.accept)
+		return fsm.With(req).EnterState(s.acceptCommand)
 	}
 }
 
 // accept processes a command request by persisting it to the journal, then
 // handling the command.
-func (s *Supervisor) accept(
+func (s *Supervisor) acceptCommand(
 	ctx context.Context,
 	req ackqueue.Request[*envelopepb.Envelope],
 ) fsm.Action {
-	// Do not add the command to the journal if it has already been accepted
-	// once before.
+	// Do not accept the command if it has already been accepted in the past.
+	// This check provides command-level idempotency, even if the journal has
+	// been truncated.
 	//
 	// TODO: there are optimizations to be made here (i.e. in-memory list of
 	// recent commands, bloom filter, etc).
@@ -191,8 +202,8 @@ func (s *Supervisor) accept(
 		s.journalPos,
 		integrationjournal.
 			NewRecordBuilder().
-			WithCommandEnqueued(
-				&integrationjournal.CommandEnqueued{
+			WithCommandAccepted(
+				&integrationjournal.CommandAccepted{
 					Command: req.Value,
 				},
 			).
@@ -218,9 +229,9 @@ func (s *Supervisor) handleCommand(ctx context.Context, env *envelopepb.Envelope
 	// Mark the command as accepted so that it is never accepted again, even
 	// once the journal has been truncated.
 	//
-	// We do this before handling the command as regardless of how we reached
-	// this point (new request vs recovery), we know we have accepted the
-	// command.
+	// We do this here (before handling the command) because regardless of how
+	// we reached this point (new request vs recovery), we know the command must
+	// have been accepted.
 	if err := s.acceptedCommands.Set(ctx, env.GetMessageId(), true); err != nil {
 		return err
 	}
@@ -250,9 +261,9 @@ func (s *Supervisor) handleCommand(ctx context.Context, env *envelopepb.Envelope
 	}
 
 	if len(sc.events) != 0 {
+		// Determine which event stream to which the events should be appended,
+		// then use this stream from now on.
 		if s.eventStreamID == nil {
-			// Determine which event stream to which the events should be
-			// appended, then use this stream from now on.
 			s.eventStreamID, s.eventOffsetHint, err = s.Events.SelectEventStream(ctx)
 			if err != nil {
 				return err
@@ -275,12 +286,12 @@ func (s *Supervisor) handleCommand(ctx context.Context, env *envelopepb.Envelope
 	}
 	s.journalPos++
 
-	return s.recordEvents(ctx, op)
+	return s.appendEvents(ctx, op)
 }
 
-// recordEvents appends the events produced by a command to their target event
+// appendEvents appends the events produced by a command to their target event
 // stream.
-func (s *Supervisor) recordEvents(
+func (s *Supervisor) appendEvents(
 	ctx context.Context,
 	op *integrationjournal.CommandHandled,
 ) error {

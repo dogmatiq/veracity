@@ -10,15 +10,15 @@ import "github.com/dogmatiq/enginekit/protobuf/envelopepb/envelope.proto";
 // integration supervisor.
 message Record {
   oneof operation {
-    CommandEnqueued command_enqueued = 1;
+    CommandAccepted command_accepted = 1;
     CommandHandled command_handled = 2;
     EventsAppendedToStream events_appended_to_stream = 3;
   }
 }
 
-// CommandEnqueued is an operation that indicates a command has been enqueued
+// CommandAccepted is an operation that indicates a command has been accepted
 // for handling.
-message CommandEnqueued {
+message CommandAccepted {
   // Command is the envelope containing the command to be handled.
   dogma.protobuf.Envelope command = 1;
 }

@@ -29,7 +29,7 @@ type Record struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Operation:
 	//
-	//	*Record_CommandEnqueued
+	//	*Record_CommandAccepted
 	//	*Record_CommandHandled
 	//	*Record_EventsAppendedToStream
 	Operation     isRecord_Operation `protobuf_oneof:"operation"`
@@ -74,10 +74,10 @@ func (x *Record) GetOperation() isRecord_Operation {
 	return nil
 }
 
-func (x *Record) GetCommandEnqueued() *CommandEnqueued {
+func (x *Record) GetCommandAccepted() *CommandAccepted {
 	if x != nil {
-		if x, ok := x.Operation.(*Record_CommandEnqueued); ok {
-			return x.CommandEnqueued
+		if x, ok := x.Operation.(*Record_CommandAccepted); ok {
+			return x.CommandAccepted
 		}
 	}
 	return nil
@@ -105,8 +105,8 @@ type isRecord_Operation interface {
 	isRecord_Operation()
 }
 
-type Record_CommandEnqueued struct {
-	CommandEnqueued *CommandEnqueued `protobuf:"bytes,1,opt,name=command_enqueued,json=commandEnqueued,proto3,oneof"`
+type Record_CommandAccepted struct {
+	CommandAccepted *CommandAccepted `protobuf:"bytes,1,opt,name=command_accepted,json=commandAccepted,proto3,oneof"`
 }
 
 type Record_CommandHandled struct {
@@ -117,15 +117,15 @@ type Record_EventsAppendedToStream struct {
 	EventsAppendedToStream *EventsAppendedToStream `protobuf:"bytes,3,opt,name=events_appended_to_stream,json=eventsAppendedToStream,proto3,oneof"`
 }
 
-func (*Record_CommandEnqueued) isRecord_Operation() {}
+func (*Record_CommandAccepted) isRecord_Operation() {}
 
 func (*Record_CommandHandled) isRecord_Operation() {}
 
 func (*Record_EventsAppendedToStream) isRecord_Operation() {}
 
-// CommandEnqueued is an operation that indicates a command has been enqueued
+// CommandAccepted is an operation that indicates a command has been accepted
 // for handling.
-type CommandEnqueued struct {
+type CommandAccepted struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Command is the envelope containing the command to be handled.
 	Command       *envelopepb.Envelope `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
@@ -133,20 +133,20 @@ type CommandEnqueued struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CommandEnqueued) Reset() {
-	*x = CommandEnqueued{}
+func (x *CommandAccepted) Reset() {
+	*x = CommandAccepted{}
 	mi := &file_github_com_dogmatiq_veracity_internal_integration_internal_integrationjournal_record_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CommandEnqueued) String() string {
+func (x *CommandAccepted) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CommandEnqueued) ProtoMessage() {}
+func (*CommandAccepted) ProtoMessage() {}
 
-func (x *CommandEnqueued) ProtoReflect() protoreflect.Message {
+func (x *CommandAccepted) ProtoReflect() protoreflect.Message {
 	mi := &file_github_com_dogmatiq_veracity_internal_integration_internal_integrationjournal_record_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -158,12 +158,12 @@ func (x *CommandEnqueued) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CommandEnqueued.ProtoReflect.Descriptor instead.
-func (*CommandEnqueued) Descriptor() ([]byte, []int) {
+// Deprecated: Use CommandAccepted.ProtoReflect.Descriptor instead.
+func (*CommandAccepted) Descriptor() ([]byte, []int) {
 	return file_github_com_dogmatiq_veracity_internal_integration_internal_integrationjournal_record_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *CommandEnqueued) GetCommand() *envelopepb.Envelope {
+func (x *CommandAccepted) GetCommand() *envelopepb.Envelope {
 	if x != nil {
 		return x.Command
 	}
@@ -322,11 +322,11 @@ const file_github_com_dogmatiq_veracity_internal_integration_internal_integratio
 	"\n" +
 	"Zgithub.com/dogmatiq/veracity/internal/integration/internal/integrationjournal/record.proto\x12\x1fveracity.integration.journal.v1\x1a8github.com/dogmatiq/enginekit/protobuf/uuidpb/uuid.proto\x1a@github.com/dogmatiq/enginekit/protobuf/envelopepb/envelope.proto\"\xc6\x02\n" +
 	"\x06Record\x12]\n" +
-	"\x10command_enqueued\x18\x01 \x01(\v20.veracity.integration.journal.v1.CommandEnqueuedH\x00R\x0fcommandEnqueued\x12Z\n" +
+	"\x10command_accepted\x18\x01 \x01(\v20.veracity.integration.journal.v1.CommandAcceptedH\x00R\x0fcommandAccepted\x12Z\n" +
 	"\x0fcommand_handled\x18\x02 \x01(\v2/.veracity.integration.journal.v1.CommandHandledH\x00R\x0ecommandHandled\x12t\n" +
 	"\x19events_appended_to_stream\x18\x03 \x01(\v27.veracity.integration.journal.v1.EventsAppendedToStreamH\x00R\x16eventsAppendedToStreamB\v\n" +
 	"\toperation\"E\n" +
-	"\x0fCommandEnqueued\x122\n" +
+	"\x0fCommandAccepted\x122\n" +
 	"\acommand\x18\x01 \x01(\v2\x18.dogma.protobuf.EnvelopeR\acommand\"\xd6\x01\n" +
 	"\x0eCommandHandled\x123\n" +
 	"\n" +
@@ -356,17 +356,17 @@ func file_github_com_dogmatiq_veracity_internal_integration_internal_integration
 var file_github_com_dogmatiq_veracity_internal_integration_internal_integrationjournal_record_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_github_com_dogmatiq_veracity_internal_integration_internal_integrationjournal_record_proto_goTypes = []any{
 	(*Record)(nil),                 // 0: veracity.integration.journal.v1.Record
-	(*CommandEnqueued)(nil),        // 1: veracity.integration.journal.v1.CommandEnqueued
+	(*CommandAccepted)(nil),        // 1: veracity.integration.journal.v1.CommandAccepted
 	(*CommandHandled)(nil),         // 2: veracity.integration.journal.v1.CommandHandled
 	(*EventsAppendedToStream)(nil), // 3: veracity.integration.journal.v1.EventsAppendedToStream
 	(*envelopepb.Envelope)(nil),    // 4: dogma.protobuf.Envelope
 	(*uuidpb.UUID)(nil),            // 5: dogma.protobuf.UUID
 }
 var file_github_com_dogmatiq_veracity_internal_integration_internal_integrationjournal_record_proto_depIdxs = []int32{
-	1, // 0: veracity.integration.journal.v1.Record.command_enqueued:type_name -> veracity.integration.journal.v1.CommandEnqueued
+	1, // 0: veracity.integration.journal.v1.Record.command_accepted:type_name -> veracity.integration.journal.v1.CommandAccepted
 	2, // 1: veracity.integration.journal.v1.Record.command_handled:type_name -> veracity.integration.journal.v1.CommandHandled
 	3, // 2: veracity.integration.journal.v1.Record.events_appended_to_stream:type_name -> veracity.integration.journal.v1.EventsAppendedToStream
-	4, // 3: veracity.integration.journal.v1.CommandEnqueued.command:type_name -> dogma.protobuf.Envelope
+	4, // 3: veracity.integration.journal.v1.CommandAccepted.command:type_name -> dogma.protobuf.Envelope
 	5, // 4: veracity.integration.journal.v1.CommandHandled.command_id:type_name -> dogma.protobuf.UUID
 	4, // 5: veracity.integration.journal.v1.CommandHandled.events:type_name -> dogma.protobuf.Envelope
 	5, // 6: veracity.integration.journal.v1.CommandHandled.event_stream_id:type_name -> dogma.protobuf.UUID
@@ -387,7 +387,7 @@ func file_github_com_dogmatiq_veracity_internal_integration_internal_integration
 		return
 	}
 	file_github_com_dogmatiq_veracity_internal_integration_internal_integrationjournal_record_proto_msgTypes[0].OneofWrappers = []any{
-		(*Record_CommandEnqueued)(nil),
+		(*Record_CommandAccepted)(nil),
 		(*Record_CommandHandled)(nil),
 		(*Record_EventsAppendedToStream)(nil),
 	}

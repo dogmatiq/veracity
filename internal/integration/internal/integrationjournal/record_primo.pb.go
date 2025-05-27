@@ -11,11 +11,11 @@ import (
 	uuidpb "github.com/dogmatiq/enginekit/protobuf/uuidpb"
 )
 
-// TryGetCommandEnqueued returns x.Operation.CommandEnqueued if x.Operation is a [Record_CommandEnqueued].
+// TryGetCommandAccepted returns x.Operation.CommandAccepted if x.Operation is a [Record_CommandAccepted].
 // Otherwise, ok is false and v is the zero-value.
-func (x *Record) TryGetCommandEnqueued() (v *CommandEnqueued, ok bool) {
-	if x, ok := x.GetOperation().(*Record_CommandEnqueued); ok {
-		return x.CommandEnqueued, true
+func (x *Record) TryGetCommandAccepted() (v *CommandAccepted, ok bool) {
+	if x, ok := x.GetOperation().(*Record_CommandAccepted); ok {
+		return x.CommandAccepted, true
 	}
 	return v, false
 }
@@ -67,10 +67,10 @@ func (b *RecordBuilder) Build() *Record {
 	}
 }
 
-// WithCommandEnqueued configures the builder to set the Operation field to a
-// [Record_CommandEnqueued] value containing v, then returns b
-func (b *RecordBuilder) WithCommandEnqueued(v *CommandEnqueued) *RecordBuilder {
-	b.prototype.Operation = &Record_CommandEnqueued{CommandEnqueued: v}
+// WithCommandAccepted configures the builder to set the Operation field to a
+// [Record_CommandAccepted] value containing v, then returns b
+func (b *RecordBuilder) WithCommandAccepted(v *CommandAccepted) *RecordBuilder {
+	b.prototype.Operation = &Record_CommandAccepted{CommandAccepted: v}
 	return b
 }
 
@@ -88,13 +88,13 @@ func (b *RecordBuilder) WithEventsAppendedToStream(v *EventsAppendedToStream) *R
 	return b
 }
 
-type CommandEnqueuedBuilder struct {
-	prototype CommandEnqueued
+type CommandAcceptedBuilder struct {
+	prototype CommandAccepted
 }
 
-// NewCommandEnqueuedBuilder returns a builder that constructs [CommandEnqueued] messages.
-func NewCommandEnqueuedBuilder() *CommandEnqueuedBuilder {
-	return &CommandEnqueuedBuilder{}
+// NewCommandAcceptedBuilder returns a builder that constructs [CommandAccepted] messages.
+func NewCommandAcceptedBuilder() *CommandAcceptedBuilder {
+	return &CommandAcceptedBuilder{}
 }
 
 // From configures the builder to use x as the prototype for new messages,
@@ -102,24 +102,24 @@ func NewCommandEnqueuedBuilder() *CommandEnqueuedBuilder {
 //
 // It performs a shallow copy of x, such that any changes made via the builder
 // do not modify x. It does not make a copy of the field values themselves.
-func (b *CommandEnqueuedBuilder) From(x *CommandEnqueued) *CommandEnqueuedBuilder {
+func (b *CommandAcceptedBuilder) From(x *CommandAccepted) *CommandAcceptedBuilder {
 	b.prototype.Command = x.Command
 	return b
 }
 
-// Build returns a new [CommandEnqueued] containing the values configured via the builder.
+// Build returns a new [CommandAccepted] containing the values configured via the builder.
 //
 // Each call returns a new message, such that future changes to the builder do
 // not modify previously constructed messages.
-func (b *CommandEnqueuedBuilder) Build() *CommandEnqueued {
-	return &CommandEnqueued{
+func (b *CommandAcceptedBuilder) Build() *CommandAccepted {
+	return &CommandAccepted{
 		Command: b.prototype.Command,
 	}
 }
 
 // WithCommand configures the builder to set the Command field to v,
 // then returns b.
-func (b *CommandEnqueuedBuilder) WithCommand(v *envelopepb.Envelope) *CommandEnqueuedBuilder {
+func (b *CommandAcceptedBuilder) WithCommand(v *envelopepb.Envelope) *CommandAcceptedBuilder {
 	b.prototype.Command = v
 	return b
 }
@@ -247,13 +247,13 @@ func (b *EventsAppendedToStreamBuilder) WithEventOffset(v uint64) *EventsAppende
 // It panics if x.Operation is nil.
 func MustSwitch_Record_Operation(
 	x *Record,
-	caseCommandEnqueued func(*CommandEnqueued),
+	caseCommandAccepted func(*CommandAccepted),
 	caseCommandHandled func(*CommandHandled),
 	caseEventsAppendedToStream func(*EventsAppendedToStream),
 ) {
 	switch v := x.GetOperation().(type) {
-	case *Record_CommandEnqueued:
-		caseCommandEnqueued(v.CommandEnqueued)
+	case *Record_CommandAccepted:
+		caseCommandAccepted(v.CommandAccepted)
 	case *Record_CommandHandled:
 		caseCommandHandled(v.CommandHandled)
 	case *Record_EventsAppendedToStream:
@@ -269,14 +269,14 @@ func MustSwitch_Record_Operation(
 // It calls none() if x.Operation is nil.
 func Switch_Record_Operation(
 	x *Record,
-	caseCommandEnqueued func(*CommandEnqueued),
+	caseCommandAccepted func(*CommandAccepted),
 	caseCommandHandled func(*CommandHandled),
 	caseEventsAppendedToStream func(*EventsAppendedToStream),
 	none func(),
 ) {
 	switch v := x.GetOperation().(type) {
-	case *Record_CommandEnqueued:
-		caseCommandEnqueued(v.CommandEnqueued)
+	case *Record_CommandAccepted:
+		caseCommandAccepted(v.CommandAccepted)
 	case *Record_CommandHandled:
 		caseCommandHandled(v.CommandHandled)
 	case *Record_EventsAppendedToStream:
@@ -293,13 +293,13 @@ func Switch_Record_Operation(
 // and returns that function's result. It panics if x.Operation is nil.
 func MustMap_Record_Operation[T any](
 	x *Record,
-	caseCommandEnqueued func(*CommandEnqueued) T,
+	caseCommandAccepted func(*CommandAccepted) T,
 	caseCommandHandled func(*CommandHandled) T,
 	caseEventsAppendedToStream func(*EventsAppendedToStream) T,
 ) T {
 	switch v := x.GetOperation().(type) {
-	case *Record_CommandEnqueued:
-		return caseCommandEnqueued(v.CommandEnqueued)
+	case *Record_CommandAccepted:
+		return caseCommandAccepted(v.CommandAccepted)
 	case *Record_CommandHandled:
 		return caseCommandHandled(v.CommandHandled)
 	case *Record_EventsAppendedToStream:
@@ -316,14 +316,14 @@ func MustMap_Record_Operation[T any](
 // and returns that function's result. It calls none() if x.Operation is nil.
 func Map_Record_Operation[T any](
 	x *Record,
-	caseCommandEnqueued func(*CommandEnqueued) T,
+	caseCommandAccepted func(*CommandAccepted) T,
 	caseCommandHandled func(*CommandHandled) T,
 	caseEventsAppendedToStream func(*EventsAppendedToStream) T,
 	none func() T,
 ) T {
 	switch v := x.GetOperation().(type) {
-	case *Record_CommandEnqueued:
-		return caseCommandEnqueued(v.CommandEnqueued)
+	case *Record_CommandAccepted:
+		return caseCommandAccepted(v.CommandAccepted)
 	case *Record_CommandHandled:
 		return caseCommandHandled(v.CommandHandled)
 	case *Record_EventsAppendedToStream:
@@ -333,10 +333,10 @@ func Map_Record_Operation[T any](
 	}
 }
 
-// SetCommandEnqueued sets the x.Operation field to a [Record_CommandEnqueued] value containing v,
+// SetCommandAccepted sets the x.Operation field to a [Record_CommandAccepted] value containing v,
 // then returns x.
-func (x *Record) SetCommandEnqueued(v *CommandEnqueued) {
-	x.Operation = &Record_CommandEnqueued{CommandEnqueued: v}
+func (x *Record) SetCommandAccepted(v *CommandAccepted) {
+	x.Operation = &Record_CommandAccepted{CommandAccepted: v}
 }
 
 // SetCommandHandled sets the x.Operation field to a [Record_CommandHandled] value containing v,
@@ -352,7 +352,7 @@ func (x *Record) SetEventsAppendedToStream(v *EventsAppendedToStream) {
 }
 
 // SetCommand sets the x.Command field to v, then returns x.
-func (x *CommandEnqueued) SetCommand(v *envelopepb.Envelope) {
+func (x *CommandAccepted) SetCommand(v *envelopepb.Envelope) {
 	x.Command = v
 }
 

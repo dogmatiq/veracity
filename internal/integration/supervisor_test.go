@@ -83,26 +83,26 @@ func TestSupervisor(t *testing.T) {
 				},
 			},
 			{
-				Desc: "failure before appending CommandEnqueued record to the journal",
+				Desc: "failure before appending CommandAccepted record to the journal",
 				InduceFailure: func(deps *dependencies) {
 					test.FailBeforeJournalAppend(
 						deps.Journals,
 						integrationjournal.Name(deps.Supervisor.HandlerIdentity.Key),
 						func(r *integrationjournal.Record) bool {
-							return r.GetCommandEnqueued() != nil
+							return r.GetCommandAccepted() != nil
 						},
 						errors.New("<error>"),
 					)
 				},
 			},
 			{
-				Desc: "failure after appending CommandEnqueued record to the journal",
+				Desc: "failure after appending CommandAccepted record to the journal",
 				InduceFailure: func(deps *dependencies) {
 					test.FailAfterJournalAppend(
 						deps.Journals,
 						integrationjournal.Name(deps.Supervisor.HandlerIdentity.Key),
 						func(r *integrationjournal.Record) bool {
-							return r.GetCommandEnqueued() != nil
+							return r.GetCommandAccepted() != nil
 						},
 						errors.New("<error>"),
 					)
