@@ -142,7 +142,7 @@ func (b *CommandHandledBuilder) From(x *CommandHandled) *CommandHandledBuilder {
 	b.prototype.CommandId = x.CommandId
 	b.prototype.Events = x.Events
 	b.prototype.EventStreamId = x.EventStreamId
-	b.prototype.LowestPossibleEventOffset = x.LowestPossibleEventOffset
+	b.prototype.OffsetHint = x.OffsetHint
 	return b
 }
 
@@ -152,10 +152,10 @@ func (b *CommandHandledBuilder) From(x *CommandHandled) *CommandHandledBuilder {
 // not modify previously constructed messages.
 func (b *CommandHandledBuilder) Build() *CommandHandled {
 	return &CommandHandled{
-		CommandId:                 b.prototype.CommandId,
-		Events:                    b.prototype.Events,
-		EventStreamId:             b.prototype.EventStreamId,
-		LowestPossibleEventOffset: b.prototype.LowestPossibleEventOffset,
+		CommandId:     b.prototype.CommandId,
+		Events:        b.prototype.Events,
+		EventStreamId: b.prototype.EventStreamId,
+		OffsetHint:    b.prototype.OffsetHint,
 	}
 }
 
@@ -180,10 +180,10 @@ func (b *CommandHandledBuilder) WithEventStreamId(v *uuidpb.UUID) *CommandHandle
 	return b
 }
 
-// WithLowestPossibleEventOffset configures the builder to set the LowestPossibleEventOffset field to v,
+// WithOffsetHint configures the builder to set the OffsetHint field to v,
 // then returns b.
-func (b *CommandHandledBuilder) WithLowestPossibleEventOffset(v uint64) *CommandHandledBuilder {
-	b.prototype.LowestPossibleEventOffset = v
+func (b *CommandHandledBuilder) WithOffsetHint(v uint64) *CommandHandledBuilder {
+	b.prototype.OffsetHint = v
 	return b
 }
 
@@ -371,9 +371,9 @@ func (x *CommandHandled) SetEventStreamId(v *uuidpb.UUID) {
 	x.EventStreamId = v
 }
 
-// SetLowestPossibleEventOffset sets the x.LowestPossibleEventOffset field to v, then returns x.
-func (x *CommandHandled) SetLowestPossibleEventOffset(v uint64) {
-	x.LowestPossibleEventOffset = v
+// SetOffsetHint sets the x.OffsetHint field to v, then returns x.
+func (x *CommandHandled) SetOffsetHint(v uint64) {
+	x.OffsetHint = v
 }
 
 // SetCommandId sets the x.CommandId field to v, then returns x.

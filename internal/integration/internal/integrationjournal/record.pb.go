@@ -180,12 +180,17 @@ type CommandHandled struct {
 	// chronological order.
 	Events []*envelopepb.Envelope `protobuf:"bytes,2,rep,name=events,proto3" json:"events,omitempty"`
 	// EventStreamId is the ID of the stream to which the events will be appended.
+	//
+	// It is undefined if the command did not produce any events.
 	EventStreamId *uuidpb.UUID `protobuf:"bytes,3,opt,name=event_stream_id,json=eventStreamId,proto3" json:"event_stream_id,omitempty"`
-	// LowestPossibleEventOffset is the next offset of the stream, at the time it
-	// was selected.
-	LowestPossibleEventOffset uint64 `protobuf:"varint,4,opt,name=lowest_possible_event_offset,json=lowestPossibleEventOffset,proto3" json:"lowest_possible_event_offset,omitempty"`
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	// OffsetHint is the next offset of the stream, at the time it was selected
+	// for use. The events produced by this message cannot possibly exist before
+	// this offset.
+	//
+	// It is undefined if the command did not produce any events.
+	OffsetHint    uint64 `protobuf:"varint,4,opt,name=offset_hint,json=offsetHint,proto3" json:"offset_hint,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CommandHandled) Reset() {
@@ -239,9 +244,9 @@ func (x *CommandHandled) GetEventStreamId() *uuidpb.UUID {
 	return nil
 }
 
-func (x *CommandHandled) GetLowestPossibleEventOffset() uint64 {
+func (x *CommandHandled) GetOffsetHint() uint64 {
 	if x != nil {
-		return x.LowestPossibleEventOffset
+		return x.OffsetHint
 	}
 	return 0
 }
@@ -322,13 +327,14 @@ const file_github_com_dogmatiq_veracity_internal_integration_internal_integratio
 	"\x19events_appended_to_stream\x18\x03 \x01(\v27.veracity.integration.journal.v1.EventsAppendedToStreamH\x00R\x16eventsAppendedToStreamB\v\n" +
 	"\toperation\"E\n" +
 	"\x0fCommandEnqueued\x122\n" +
-	"\acommand\x18\x01 \x01(\v2\x18.dogma.protobuf.EnvelopeR\acommand\"\xf6\x01\n" +
+	"\acommand\x18\x01 \x01(\v2\x18.dogma.protobuf.EnvelopeR\acommand\"\xd6\x01\n" +
 	"\x0eCommandHandled\x123\n" +
 	"\n" +
 	"command_id\x18\x01 \x01(\v2\x14.dogma.protobuf.UUIDR\tcommandId\x120\n" +
 	"\x06events\x18\x02 \x03(\v2\x18.dogma.protobuf.EnvelopeR\x06events\x12<\n" +
-	"\x0fevent_stream_id\x18\x03 \x01(\v2\x14.dogma.protobuf.UUIDR\reventStreamId\x12?\n" +
-	"\x1clowest_possible_event_offset\x18\x04 \x01(\x04R\x19lowestPossibleEventOffset\"\xae\x01\n" +
+	"\x0fevent_stream_id\x18\x03 \x01(\v2\x14.dogma.protobuf.UUIDR\reventStreamId\x12\x1f\n" +
+	"\voffset_hint\x18\x04 \x01(\x04R\n" +
+	"offsetHint\"\xae\x01\n" +
 	"\x16EventsAppendedToStream\x123\n" +
 	"\n" +
 	"command_id\x18\x01 \x01(\v2\x14.dogma.protobuf.UUIDR\tcommandId\x12<\n" +

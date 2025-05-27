@@ -38,33 +38,29 @@ func TestSupervisor(t *testing.T) {
 
 	setup := func(test.TestingT) (deps dependencies) {
 		deps.Packer = newPacker()
-
 		deps.Journals = &memoryjournal.BinaryStore{}
-
 		deps.Keyspaces = &memorykv.BinaryStore{}
-
 		deps.Handler = &IntegrationMessageHandlerStub{}
-
 		deps.EventRecorder = &eventRecorderStub{}
 
 		deps.Supervisor = &Supervisor{
+			Handler:         deps.Handler,
 			HandlerIdentity: identitypb.New("<handler>", uuidpb.Generate()),
 			Journals:        deps.Journals,
 			Keyspaces:       deps.Keyspaces,
 			Packer:          deps.Packer,
-			Handler:         deps.Handler,
-			EventRecorder:   deps.EventRecorder,
+			Events:          deps.EventRecorder,
 		}
 
 		deps.Executor = &CommandExecutor{
-			ExecuteQueue: &deps.Supervisor.ExecuteQueue,
-			Packer:       deps.Packer,
+			Commands: &deps.Supervisor.Commands,
+			Packer:   deps.Packer,
 		}
 
 		return deps
 	}
 
-	t.Run("it executes commands once regardless of errors", func(t *testing.T) {
+	t.Run("it executes commands exactly once regardless of errors", func(t *testing.T) {
 		t.Parallel()
 
 		cases := []struct {
@@ -73,9 +69,8 @@ func TestSupervisor(t *testing.T) {
 			ExpectMultipleEventAppendRequests bool
 		}{
 			{
-				Desc: "no faults",
-				InduceFailure: func(*dependencies) {
-				},
+				Desc:          "no errors",
+				InduceFailure: func(*dependencies) {},
 			},
 			{
 				Desc: "failure to open journal",
@@ -114,7 +109,7 @@ func TestSupervisor(t *testing.T) {
 				},
 			},
 			{
-				Desc: "failure before handler records events",
+				Desc: "failure in handler before recording any events",
 				InduceFailure: func(deps *dependencies) {
 					var done atomic.Bool
 					handle := deps.Handler.HandleCommandFunc
@@ -133,7 +128,7 @@ func TestSupervisor(t *testing.T) {
 				},
 			},
 			{
-				Desc: "failure after handler records events",
+				Desc: "failure in handler after recording events",
 				InduceFailure: func(deps *dependencies) {
 					var done atomic.Bool
 					handle := deps.Handler.HandleCommandFunc
@@ -150,6 +145,7 @@ func TestSupervisor(t *testing.T) {
 						if done.CompareAndSwap(false, true) {
 							return errors.New("<error>")
 						}
+
 						return nil
 					}
 				},
@@ -199,8 +195,7 @@ func TestSupervisor(t *testing.T) {
 				},
 			},
 			{
-				Desc:                              "failure after events appended to stream",
-				ExpectMultipleEventAppendRequests: true,
+				Desc: "failure after events appended to stream",
 				InduceFailure: func(deps *dependencies) {
 					var done atomic.Bool
 					record := deps.EventRecorder.AppendEventsFunc
@@ -221,10 +216,10 @@ func TestSupervisor(t *testing.T) {
 						return res, nil
 					}
 				},
+				ExpectMultipleEventAppendRequests: true,
 			},
 			{
-				Desc:                              "failure before appending EventsAppendedToStream record to the journal",
-				ExpectMultipleEventAppendRequests: true,
+				Desc: "failure before appending EventsAppendedToStream record to the journal",
 				InduceFailure: func(deps *dependencies) {
 					test.FailBeforeJournalAppend(
 						deps.Journals,
@@ -235,6 +230,7 @@ func TestSupervisor(t *testing.T) {
 						errors.New("<error>"),
 					)
 				},
+				ExpectMultipleEventAppendRequests: true,
 			},
 			{
 				Desc: "failure after appending EventsAppendedToStream record to the journal",
@@ -276,15 +272,14 @@ func TestSupervisor(t *testing.T) {
 		}
 
 		for _, c := range cases {
-			c := c
-
 			t.Run(c.Desc, func(t *testing.T) {
 				t.Parallel()
 
 				tctx := test.WithContext(t)
 				deps := setup(tctx)
-
 				handled := make(chan struct{}, 100)
+				appendRequests := make(chan eventstream.AppendRequest, 100)
+
 				deps.Handler.HandleCommandFunc = func(
 					_ context.Context,
 					s dogma.IntegrationCommandScope,
@@ -303,7 +298,6 @@ func TestSupervisor(t *testing.T) {
 					return nil
 				}
 
-				appendRequests := make(chan eventstream.AppendRequest, 100)
 				deps.EventRecorder.AppendEventsFunc = func(
 					ctx context.Context,
 					req eventstream.AppendRequest,
@@ -312,32 +306,29 @@ func TestSupervisor(t *testing.T) {
 					return eventstream.AppendResponse{}, nil
 				}
 
+				eventStreamID := uuidpb.Generate()
+				eventOffsetHint := eventstream.Offset(1)
+
 				var isFirstSelect atomic.Bool
-				streamID := uuidpb.Generate()
-				lowestPossibleOffset := eventstream.Offset(1)
 				deps.EventRecorder.SelectEventStreamFunc = func(
 					ctx context.Context,
 				) (*uuidpb.UUID, eventstream.Offset, error) {
 					if isFirstSelect.CompareAndSwap(false, true) {
-						return streamID, lowestPossibleOffset, nil
+						return eventStreamID, eventOffsetHint, nil
 					}
 					return uuidpb.Generate(), eventstream.Offset(rand.Uint32()), nil
 				}
 
-				cmd := deps.Packer.Pack(CommandA1)
-
 				c.InduceFailure(&deps)
 
-				supervisor := test.
+				supervisorTask := test.
 					RunInBackground(t, "supervisor", deps.Supervisor.Run).
 					RepeatedlyUntilSuccess()
 
-				req := ExecuteRequest{
-					Command: cmd,
-				}
+				cmd := deps.Packer.Pack(CommandA1)
 
 				for {
-					_, err := deps.Supervisor.ExecuteQueue.Do(tctx, req)
+					err := deps.Supervisor.Commands.Push(tctx, cmd)
 
 					if tctx.Err() != nil {
 						t.Fatal(tctx.Err())
@@ -350,7 +341,7 @@ func TestSupervisor(t *testing.T) {
 				}
 
 				expectedAppendRequest := eventstream.AppendRequest{
-					StreamID: streamID,
+					StreamID: eventStreamID,
 					Events: []*envelopepb.Envelope{
 						{
 							SourceApplication: deps.Packer.Application,
@@ -377,7 +368,7 @@ func TestSupervisor(t *testing.T) {
 							Data:              []byte(`{"content":"A3"}`),
 						},
 					},
-					LowestPossibleOffset: lowestPossibleOffset,
+					OffsetHint: eventOffsetHint,
 				}
 
 				test.
@@ -407,7 +398,7 @@ func TestSupervisor(t *testing.T) {
 					)
 
 				deps.Supervisor.Shutdown()
-				supervisor.WaitForSuccess()
+				supervisorTask.WaitForSuccess()
 				close(appendRequests)
 
 				if c.ExpectMultipleEventAppendRequests {
@@ -432,14 +423,15 @@ func TestSupervisor(t *testing.T) {
 					)
 				}
 
-				// TODO: look into resetting the latch
+				// TODO: look into resetting the latch instead of creating a new
+				// Supervisor.
 				secondSupervisor := &Supervisor{
 					HandlerIdentity: deps.Supervisor.HandlerIdentity,
 					Journals:        deps.Journals,
 					Keyspaces:       deps.Keyspaces,
 					Packer:          deps.Packer,
 					Handler:         deps.Handler,
-					EventRecorder:   deps.EventRecorder,
+					Events:          deps.EventRecorder,
 				}
 
 				rehandled := make(chan struct{}, 100)
@@ -452,17 +444,16 @@ func TestSupervisor(t *testing.T) {
 					return nil
 				}
 
-				supervisor = test.
+				secondSupervisorTask := test.
 					RunInBackground(t, "supervisor", secondSupervisor.Run).
 					BeforeTestEnds()
 
-				if _, err := secondSupervisor.ExecuteQueue.Do(tctx, req); err != nil {
+				if err := secondSupervisor.Commands.Push(tctx, cmd); err != nil {
 					t.Fatal(err)
 				}
 
 				secondSupervisor.Shutdown()
-
-				supervisor.WaitForSuccess()
+				secondSupervisorTask.WaitForSuccess()
 
 				test.
 					ExpectChannelWouldBlock(
@@ -522,7 +513,7 @@ func TestSupervisor(t *testing.T) {
 			)
 	})
 
-	t.Run("it increases the lowest possible offset after appending events", func(t *testing.T) {
+	t.Run("it increases the offset hint after appending events", func(t *testing.T) {
 		t.Parallel()
 
 		tctx := test.WithContext(t)
@@ -540,6 +531,7 @@ func TestSupervisor(t *testing.T) {
 			appendRequests <- req
 			numEvents := uint64(len(req.Events))
 			endOffset := endOffset.Add(numEvents)
+
 			return eventstream.AppendResponse{
 				EndOffset:   eventstream.Offset(endOffset),
 				BeginOffset: eventstream.Offset(endOffset - numEvents),
@@ -594,7 +586,7 @@ func TestSupervisor(t *testing.T) {
 							Data:              []byte(`{"content":"A1"}`),
 						},
 					},
-					LowestPossibleOffset: 10,
+					OffsetHint: 10,
 				},
 				protocmp.IgnoreFields(
 					&envelopepb.Envelope{},
@@ -620,7 +612,7 @@ func TestSupervisor(t *testing.T) {
 							Data:              []byte(`{"content":"A2"}`),
 						},
 					},
-					LowestPossibleOffset: 11,
+					OffsetHint: 11,
 				},
 				protocmp.IgnoreFields(
 					&envelopepb.Envelope{},

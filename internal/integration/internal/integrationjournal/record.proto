@@ -34,11 +34,16 @@ message CommandHandled {
   repeated dogma.protobuf.Envelope events = 2;
 
   // EventStreamId is the ID of the stream to which the events will be appended.
+  //
+  // It is undefined if the command did not produce any events.
   dogma.protobuf.UUID event_stream_id = 3;
 
-  // LowestPossibleEventOffset is the next offset of the stream, at the time it
-  // was selected.
-  uint64 lowest_possible_event_offset = 4;
+  // OffsetHint is the next offset of the stream, at the time it was selected
+  // for use. The events produced by this message cannot possibly exist before
+  // this offset.
+  //
+  // It is undefined if the command did not produce any events.
+  uint64 offset_hint = 4;
 }
 
 // EventsAppendedToStream is an operation that indicates that the events

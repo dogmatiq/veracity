@@ -14,9 +14,10 @@ type AppendRequest struct {
 	// empty.
 	Events []*envelopepb.Envelope
 
-	// LowestPossibleOffset is the lowest offset within the stream at which
-	// these events may have already been appended.
-	LowestPossibleOffset Offset
+	// OffsetHint is the lowest offset within the stream at which these events
+	// may have already been appended. The stream may ignore any events before
+	// this offset when deduplicating the events.
+	OffsetHint Offset
 }
 
 // AppendResponse is the successful result of an [AppendRequest].

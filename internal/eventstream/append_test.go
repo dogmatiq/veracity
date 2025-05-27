@@ -147,7 +147,7 @@ func TestAppend(t *testing.T) {
 						break
 					}
 
-					req.LowestPossibleOffset = res.EndOffset
+					req.OffsetHint = res.EndOffset
 				}
 
 				t.Log("stop the supervisor gracefully")

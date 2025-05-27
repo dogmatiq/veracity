@@ -178,7 +178,7 @@ func (w *worker) appendEvents(
 func (w *worker) mightBeDuplicates(req AppendRequest) bool {
 	// The events can't be duplicates if the lowest possible offset that
 	// they could have been appended is the current end of the stream.
-	return req.LowestPossibleOffset < w.off
+	return req.OffsetHint < w.off
 }
 
 // findAppendRecord searches the journal to find the record that contains the
@@ -199,9 +199,9 @@ func (w *worker) findAppendRecord(
 			Begin: 0,
 			End:   w.pos,
 		},
-		eventstreamjournal.SearchByOffset(uint64(req.LowestPossibleOffset)),
+		eventstreamjournal.SearchByOffset(uint64(req.OffsetHint)),
 		func(
-			ctx context.Context,
+			_ context.Context,
 			_ journal.Position,
 			rec *eventstreamjournal.Record,
 		) (*eventstreamjournal.Record, bool, error) {

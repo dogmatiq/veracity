@@ -67,8 +67,8 @@ func (c applicationVisitor) VisitRichIntegration(_ context.Context, cfg configki
 	}
 
 	exec := &integration.CommandExecutor{
-		ExecuteQueue: &sup.ExecuteQueue,
-		Packer:       c.packer,
+		Commands: &sup.Commands,
+		Packer:   c.packer,
 	}
 
 	c.Tasks = append(c.Tasks, sup.Run)
