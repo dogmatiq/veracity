@@ -2,8 +2,13 @@ package ackqueue
 
 import (
 	"context"
+	"errors"
 	"sync"
 )
+
+// ErrNack is the error produced when a negative acknowledgement is
+// received in response to a [Request].
+var ErrNack = errors.New("negative acknowledgement received")
 
 // Request is a container for an "acknowledgable" value of type T, which is sent
 // via a [Queue].
@@ -20,11 +25,8 @@ func (v Request[T]) Ack() {
 
 // Nack negatively acknowledges the value, indicating that it has not been
 // successfully processed by the receiver.
-func (v Request[T]) Nack(err error) {
-	if err == nil {
-		panic("ackqueue: cannot nack with a nil error")
-	}
-	v.Acknowledgement <- err
+func (v Request[T]) Nack() {
+	v.Acknowledgement <- ErrNack
 }
 
 // Queue is an in-memory queue of T values that can be (negatively) acknowledged

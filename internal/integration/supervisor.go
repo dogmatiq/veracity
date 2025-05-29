@@ -16,6 +16,7 @@ import (
 	"github.com/dogmatiq/veracity/internal/integration/internal/integrationset"
 	"github.com/dogmatiq/veracity/internal/messaging/ackqueue"
 	"github.com/dogmatiq/veracity/internal/signaling"
+	"github.com/dogmatiq/veracity/internal/telemetry"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -28,6 +29,7 @@ type Supervisor struct {
 	Sets            set.BinaryStore
 	Packer          *envelopepb.Packer
 	Events          EventRecorder
+	Telemetry       *telemetry.Provider
 
 	journal          journal.Journal[*integrationjournal.Record]
 	journalPos       journal.Position
@@ -35,12 +37,20 @@ type Supervisor struct {
 	eventOffsetHint  eventstream.Offset
 	acceptedCommands set.Set[*uuidpb.UUID]
 	shutdownLatch    signaling.Latch
+	recorder         *telemetry.Recorder
 }
 
 // Run starts the supervisor.
 //
 // It runs until ctx is canceled, Shutdown() is called, or an error occurs.
 func (s *Supervisor) Run(ctx context.Context) error {
+	s.recorder = s.Telemetry.Recorder(
+		"github.com/dogmatiq/veracity",
+		"integration",
+		telemetry.UUID("handler.key", s.HandlerIdentity.Key),
+		telemetry.String("handler.name", s.HandlerIdentity.Name),
+	)
+
 	var err error
 
 	s.journal, err = integrationjournal.Open(ctx, s.Journals, s.HandlerIdentity.Key)
@@ -65,19 +75,10 @@ func (s *Supervisor) Shutdown() {
 }
 
 // recover discovers any pending work in the journal, and completes it before
-// entering the idle state.
+// entering the `idle state`.
 func (s *Supervisor) recover(ctx context.Context) fsm.Action {
-	bounds, err := s.journal.Bounds(ctx)
-	if err != nil {
-		return fsm.Fail(err)
-	}
-
-	s.journalPos = bounds.Begin
-
-	// There's nothing in the journal, so nothing to recover from.
-	if bounds.IsEmpty() {
-		return fsm.EnterState(s.idle)
-	}
+	ctx, span := s.recorder.StartSpan(ctx, "recover")
+	defer span.End()
 
 	// Otherwise, we may have unhandled commands, or events that have not yet
 	// been recorded to an event stream.
@@ -94,63 +95,93 @@ func (s *Supervisor) recover(ctx context.Context) fsm.Action {
 		unappendedEvents []*integrationjournal.CommandHandled
 	)
 
-	// Range over the journal to build a list of pending work.
-	if err := s.journal.Range(
-		ctx,
-		s.journalPos,
-		func(
-			_ context.Context,
-			pos journal.Position,
-			record *integrationjournal.Record,
-		) (ok bool, err error) {
-			s.journalPos = pos + 1
+	span.Debug("recovering pending operations from journal")
 
-			integrationjournal.MustSwitch_Record_Operation(
-				record,
-				func(op *integrationjournal.CommandAccepted) {
-					unhandledCommands = append(unhandledCommands, op.GetCommand())
-				},
-				func(op *integrationjournal.CommandHandled) {
-					for i, env := range unhandledCommands {
-						if proto.Equal(env.GetMessageId(), op.GetCommandId()) {
-							unhandledCommands = slices.Delete(unhandledCommands, i, i+1)
-							break
-						}
-					}
-					if len(op.GetEvents()) > 0 {
-						unappendedEvents = append(unappendedEvents, op)
-					}
-				},
-				func(op *integrationjournal.EventsAppendedToStream) {
-					for i, rec := range unappendedEvents {
-						if proto.Equal(rec.GetCommandId(), op.GetCommandId()) {
-							unappendedEvents = slices.Delete(unappendedEvents, i, i+1)
-							break
-						}
-					}
-				},
-			)
-
-			return true, err
-		},
-	); err != nil {
+	bounds, err := s.journal.Bounds(ctx)
+	if err != nil {
 		return fsm.Fail(err)
 	}
 
-	for _, op := range unappendedEvents {
-		if err := s.appendEvents(ctx, op); err != nil {
+	s.journalPos = bounds.Begin
+
+	// Range over the journal to build a list of pending operations.
+	if !bounds.IsEmpty() {
+		if err := s.journal.Range(
+			ctx,
+			s.journalPos,
+			func(
+				_ context.Context,
+				pos journal.Position,
+				record *integrationjournal.Record,
+			) (ok bool, err error) {
+				s.journalPos = pos + 1
+
+				integrationjournal.MustSwitch_Record_Operation(
+					record,
+					func(op *integrationjournal.CommandAccepted) {
+						unhandledCommands = append(unhandledCommands, op.GetCommand())
+					},
+					func(op *integrationjournal.CommandHandled) {
+						for i, env := range unhandledCommands {
+							if proto.Equal(env.GetMessageId(), op.GetCommandId()) {
+								unhandledCommands = slices.Delete(unhandledCommands, i, i+1)
+								break
+							}
+						}
+						if len(op.GetEvents()) > 0 {
+							unappendedEvents = append(unappendedEvents, op)
+						}
+					},
+					func(op *integrationjournal.EventsAppendedToStream) {
+						for i, rec := range unappendedEvents {
+							if proto.Equal(rec.GetCommandId(), op.GetCommandId()) {
+								unappendedEvents = slices.Delete(unappendedEvents, i, i+1)
+								break
+							}
+						}
+					},
+				)
+
+				return true, err
+			},
+		); err != nil {
 			return fsm.Fail(err)
 		}
 	}
 
-	for _, env := range unhandledCommands {
-		if err := s.handleCommand(ctx, env); err != nil {
-			return fsm.Fail(err)
+	span.SetAttributes(
+		telemetry.SliceLen("unhandled_commands", unhandledCommands),
+		telemetry.SliceLen("unappended_events", unappendedEvents),
+	)
+
+	if len(unhandledCommands) == 0 && len(unappendedEvents) == 0 {
+		span.Debug("no pending operations found in journal")
+	} else {
+		if len(unappendedEvents) != 0 {
+			span.Debug("journal contains events that have not yet been appended to an event stream")
+
+			for _, op := range unappendedEvents {
+				if err := s.appendEvents(ctx, op); err != nil {
+					return fsm.Fail(err)
+				}
+			}
 		}
+
+		if len(unhandledCommands) != 0 {
+			span.Debug("journal contains commands that have not yet been handled")
+
+			for _, env := range unhandledCommands {
+				if err := s.handleCommand(ctx, env); err != nil {
+					return fsm.Fail(err)
+				}
+			}
+		}
+
+		span.Debug("all pending operations in journal are now complete")
 	}
 
-	// We've now confirmed that there is no pending work in the journal, so the
-	// entire thing can be truncated.
+	// We've now confirmed that there is no pending work remaining in the
+	// journal, so the entire thing can be truncated.
 	if err := s.journal.Truncate(ctx, s.journalPos); err != nil {
 		return fsm.Fail(err)
 	}
@@ -160,7 +191,9 @@ func (s *Supervisor) recover(ctx context.Context) fsm.Action {
 
 // idle waits for a command request to be received, or the shutdown signal.
 func (s *Supervisor) idle(ctx context.Context) fsm.Action {
-	// TODO: should we truncate if idle for a certain period of time?
+	// TODO: should we truncate the journal if we're idle for a certain period
+	// of time and/or if it's over a certain size? Otherwise, it only happens on
+	// startup/recovery.
 
 	select {
 	case <-ctx.Done():
@@ -180,6 +213,9 @@ func (s *Supervisor) acceptCommand(
 	ctx context.Context,
 	req ackqueue.Request[*envelopepb.Envelope],
 ) fsm.Action {
+	ctx, span := s.recorder.StartSpan(ctx, "accept-command")
+	defer span.End()
+
 	// Do not accept the command if it has already been accepted in the past.
 	// This check provides command-level idempotency, even if the journal has
 	// been truncated.
@@ -188,12 +224,13 @@ func (s *Supervisor) acceptCommand(
 	// recent commands, bloom filter, etc).
 	alreadyAccepted, err := s.acceptedCommands.Has(ctx, req.Value.GetMessageId())
 	if err != nil {
-		req.Nack(err)
+		req.Nack()
 		return fsm.Fail(err)
 	}
 
 	if alreadyAccepted {
 		req.Ack()
+		span.Debug("ignored command that has already been accepted for handling")
 		return fsm.EnterState(s.idle)
 	}
 
@@ -209,12 +246,14 @@ func (s *Supervisor) acceptCommand(
 			).
 			Build(),
 	); err != nil {
-		req.Nack(err)
+		req.Nack()
 		return fsm.Fail(err)
 	}
 
 	s.journalPos++
+
 	req.Ack()
+	span.Debug("accepted command for handling")
 
 	if err := s.handleCommand(ctx, req.Value); err != nil {
 		return fsm.Fail(err)
@@ -226,6 +265,17 @@ func (s *Supervisor) acceptCommand(
 // handleCommand dispatches a command to the [dogma.IntegrationMessageHandler]
 // and persists the result to the journal.
 func (s *Supervisor) handleCommand(ctx context.Context, env *envelopepb.Envelope) error {
+	ctx, span := s.recorder.StartSpan(
+		ctx,
+		"handle-command",
+		telemetry.UUID("command.message_id", env.GetMessageId()),
+		telemetry.UUID("command.causation_id", env.GetMessageId()),
+		telemetry.UUID("command.correlation_id", env.GetCorrelationId()),
+		telemetry.String("command.media_type", env.GetMediaType()),
+		telemetry.String("command.description", env.GetDescription()),
+	)
+	defer span.End()
+
 	// Mark the command as accepted so that it is never accepted again, even
 	// once the journal has been truncated.
 	//
@@ -245,6 +295,7 @@ func (s *Supervisor) handleCommand(ctx context.Context, env *envelopepb.Envelope
 		packer:  s.Packer,
 		handler: s.HandlerIdentity,
 		command: env,
+		span:    span,
 	}
 
 	if err := s.Handler.HandleCommand(
@@ -261,7 +312,7 @@ func (s *Supervisor) handleCommand(ctx context.Context, env *envelopepb.Envelope
 	}
 
 	if len(sc.events) != 0 {
-		// Determine which event stream to which the events should be appended,
+		// Determine the event stream to which the events should be appended,
 		// then use this stream from now on.
 		if s.eventStreamID == nil {
 			s.eventStreamID, s.eventOffsetHint, err = s.Events.SelectEventStream(ctx)
@@ -298,6 +349,9 @@ func (s *Supervisor) appendEvents(
 	if len(op.GetEvents()) == 0 {
 		return nil
 	}
+
+	ctx, span := s.recorder.StartSpan(ctx, "append-events")
+	defer span.End()
 
 	res, err := s.Events.AppendEvents(
 		ctx,

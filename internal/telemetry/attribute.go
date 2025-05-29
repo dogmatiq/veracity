@@ -6,6 +6,7 @@ import (
 	"math"
 	"reflect"
 
+	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/exp/constraints"
 )
@@ -16,7 +17,6 @@ type Attr struct {
 	key string
 	str string
 	num uint64
-	sli any
 }
 
 // String returns a string attribute.
@@ -32,6 +32,14 @@ func String[T ~string](k string, v T) Attr {
 // v.String().
 func Stringer(k string, v fmt.Stringer) Attr {
 	return String(k, v.String())
+}
+
+// UUID returns a string attribute set to the string representation of v.
+func UUID(k string, v *uuidpb.UUID) Attr {
+	if v == nil {
+		return Attr{}
+	}
+	return String(k, v.AsString())
 }
 
 // Type returns a string attribute set to the name of T.
@@ -64,6 +72,15 @@ func Int[T constraints.Integer](k string, v T) Attr {
 		key: k,
 		num: uint64(v),
 	}
+}
+
+// SliceLen returns an int64 attribute that is set to the length of the
+// slive v, if it is not empty.
+func SliceLen[S ~[]E, E any](k string, v S) Attr {
+	if n := len(v); n != 0 {
+		return Int(k, n)
+	}
+	return Attr{}
 }
 
 // If conditionally includes an attribute.
@@ -121,6 +138,7 @@ type attrType uint8
 
 const (
 	attrTypeNone attrType = iota
+	attrTypeGroup
 	attrTypeString
 	attrTypeBool
 	attrTypeInt64

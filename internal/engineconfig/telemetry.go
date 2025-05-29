@@ -5,8 +5,8 @@ import (
 
 	"github.com/dogmatiq/veracity/internal/telemetry"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/metric/noop"
-	"go.opentelemetry.io/otel/trace"
+	noopmetric "go.opentelemetry.io/otel/metric/noop"
+	nooptrace "go.opentelemetry.io/otel/trace/noop"
 )
 
 func (c *Config) finalizeTelemetry() {
@@ -14,7 +14,7 @@ func (c *Config) finalizeTelemetry() {
 		if c.UseEnv {
 			c.Telemetry.TracerProvider = otel.GetTracerProvider()
 		} else {
-			c.Telemetry.TracerProvider = trace.NewNoopTracerProvider()
+			c.Telemetry.TracerProvider = nooptrace.NewTracerProvider()
 		}
 	}
 
@@ -22,7 +22,7 @@ func (c *Config) finalizeTelemetry() {
 		if c.UseEnv {
 			c.Telemetry.MeterProvider = otel.GetMeterProvider()
 		} else {
-			c.Telemetry.MeterProvider = noop.NewMeterProvider()
+			c.Telemetry.MeterProvider = noopmetric.NewMeterProvider()
 		}
 	}
 
