@@ -28,8 +28,8 @@ github.com/dogmatiq/jumble v0.1.0 h1:Cb3ExfxY+AoUP4G9/sOwoOdYX8o+kOLK8+dhXAry+QA
 github.com/dogmatiq/jumble v0.1.0/go.mod h1:FCGV2ImXu8zvThxhd4QLstiEdu74vbIVw9bFJSBcKr4=
 github.com/dogmatiq/linger v1.1.0 h1:kGL9sL79qRa6Cr8PhadeJ/ptbum+b48pAaNWWlyVVKg=
 github.com/dogmatiq/linger v1.1.0/go.mod h1:OOWJUwTxNkFolhuVdaTYjO4FmFLjZHZ8EMc5H5qOJ7Q=
-github.com/dogmatiq/persistencekit v0.10.1 h1:qnrXYTZ+v0Mn2bx9u971M57RB7UbHztq/KAzRlHc6sU=
-github.com/dogmatiq/persistencekit v0.10.1/go.mod h1:0G7g9y1YPe9qlGmnWntYizaC588TETQNOEX7N42XpzE=
+github.com/dogmatiq/persistencekit v0.10.2 h1:fu2Y5j/aqHa4U45JuWYEISwFAWRQ1bYhaTqISgucc6E=
+github.com/dogmatiq/persistencekit v0.10.2/go.mod h1:0G7g9y1YPe9qlGmnWntYizaC588TETQNOEX7N42XpzE=
 github.com/dogmatiq/primo v0.3.1 h1:JSqiCh1ma9CbIVzPf8k1vhzQ2Zn/d/WupzElDoiYZw0=
 github.com/dogmatiq/primo v0.3.1/go.mod h1:z2DfWNz0YmwIKhUEwgJY4xyeWOw0He+9veRRMGQ21UI=
 github.com/dogmatiq/projectionkit v0.7.5 h1:TURoHeSgADg6lDN2+eHU+E3wTgr9CZ8HksOgUm5Ed8M=

@@ -9,11 +9,11 @@ import (
 	"github.com/dogmatiq/enginekit/protobuf/identitypb"
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/persistencekit/journal"
-	"github.com/dogmatiq/persistencekit/kv"
+	"github.com/dogmatiq/persistencekit/set"
 	"github.com/dogmatiq/veracity/internal/eventstream"
 	"github.com/dogmatiq/veracity/internal/fsm"
 	"github.com/dogmatiq/veracity/internal/integration/internal/integrationjournal"
-	"github.com/dogmatiq/veracity/internal/integration/internal/integrationkv"
+	"github.com/dogmatiq/veracity/internal/integration/internal/integrationset"
 	"github.com/dogmatiq/veracity/internal/messaging/ackqueue"
 	"github.com/dogmatiq/veracity/internal/signaling"
 	"google.golang.org/protobuf/proto"
@@ -25,7 +25,7 @@ type Supervisor struct {
 	HandlerIdentity *identitypb.Identity
 	Commands        ackqueue.Queue[*envelopepb.Envelope]
 	Journals        journal.BinaryStore
-	Keyspaces       kv.BinaryStore
+	Sets            set.BinaryStore
 	Packer          *envelopepb.Packer
 	Events          EventRecorder
 
@@ -33,7 +33,7 @@ type Supervisor struct {
 	journalPos       journal.Position
 	eventStreamID    *uuidpb.UUID
 	eventOffsetHint  eventstream.Offset
-	acceptedCommands kv.Keyspace[*uuidpb.UUID, bool]
+	acceptedCommands set.Set[*uuidpb.UUID]
 	shutdownLatch    signaling.Latch
 }
 
@@ -49,7 +49,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	}
 	defer s.journal.Close()
 
-	s.acceptedCommands, err = integrationkv.OpenAcceptedCommands(ctx, s.Keyspaces, s.HandlerIdentity.Key)
+	s.acceptedCommands, err = integrationset.OpenAcceptedCommandsSet(ctx, s.Sets, s.HandlerIdentity.Key)
 	if err != nil {
 		return err
 	}
@@ -232,7 +232,7 @@ func (s *Supervisor) handleCommand(ctx context.Context, env *envelopepb.Envelope
 	// We do this here (before handling the command) because regardless of how
 	// we reached this point (new request vs recovery), we know the command must
 	// have been accepted.
-	if err := s.acceptedCommands.Set(ctx, env.GetMessageId(), true); err != nil {
+	if err := s.acceptedCommands.Add(ctx, env.GetMessageId()); err != nil {
 		return err
 	}
 

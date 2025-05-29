@@ -15,11 +15,11 @@ import (
 	"github.com/dogmatiq/enginekit/protobuf/identitypb"
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/persistencekit/driver/memory/memoryjournal"
-	"github.com/dogmatiq/persistencekit/driver/memory/memorykv"
+	"github.com/dogmatiq/persistencekit/driver/memory/memoryset"
 	"github.com/dogmatiq/veracity/internal/eventstream"
 	. "github.com/dogmatiq/veracity/internal/integration"
 	"github.com/dogmatiq/veracity/internal/integration/internal/integrationjournal"
-	"github.com/dogmatiq/veracity/internal/integration/internal/integrationkv"
+	"github.com/dogmatiq/veracity/internal/integration/internal/integrationset"
 	"github.com/dogmatiq/veracity/internal/test"
 	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -29,7 +29,7 @@ func TestSupervisor(t *testing.T) {
 	type dependencies struct {
 		Packer        *envelopepb.Packer
 		Journals      *memoryjournal.BinaryStore
-		Keyspaces     *memorykv.BinaryStore
+		Sets          *memoryset.BinaryStore
 		Handler       *IntegrationMessageHandlerStub
 		EventRecorder *eventRecorderStub
 		Supervisor    *Supervisor
@@ -39,7 +39,7 @@ func TestSupervisor(t *testing.T) {
 	setup := func(test.TestingT) (deps dependencies) {
 		deps.Packer = newPacker()
 		deps.Journals = &memoryjournal.BinaryStore{}
-		deps.Keyspaces = &memorykv.BinaryStore{}
+		deps.Sets = &memoryset.BinaryStore{}
 		deps.Handler = &IntegrationMessageHandlerStub{}
 		deps.EventRecorder = &eventRecorderStub{}
 
@@ -47,7 +47,7 @@ func TestSupervisor(t *testing.T) {
 			Handler:         deps.Handler,
 			HandlerIdentity: identitypb.New("<handler>", uuidpb.Generate()),
 			Journals:        deps.Journals,
-			Keyspaces:       deps.Keyspaces,
+			Sets:            deps.Sets,
 			Packer:          deps.Packer,
 			Events:          deps.EventRecorder,
 		}
@@ -248,10 +248,10 @@ func TestSupervisor(t *testing.T) {
 			{
 				Desc: "failure before marking the command as accepted",
 				InduceFailure: func(deps *dependencies) {
-					test.FailBeforeKeyspaceSet(
-						deps.Keyspaces,
-						integrationkv.AcceptedCommandsKeyspace(deps.Supervisor.HandlerIdentity.Key),
-						func(k, v []byte) bool {
+					test.FailBeforeSetAdd(
+						deps.Sets,
+						integrationset.AcceptedCommandsSet(deps.Supervisor.HandlerIdentity.Key),
+						func(v []byte) bool {
 							return true
 						},
 					)
@@ -260,10 +260,10 @@ func TestSupervisor(t *testing.T) {
 			{
 				Desc: "failure after marking the command as accepted",
 				InduceFailure: func(deps *dependencies) {
-					test.FailAfterKeyspaceSet(
-						deps.Keyspaces,
-						integrationkv.AcceptedCommandsKeyspace(deps.Supervisor.HandlerIdentity.Key),
-						func(k, v []byte) bool {
+					test.FailAfterSetAdd(
+						deps.Sets,
+						integrationset.AcceptedCommandsSet(deps.Supervisor.HandlerIdentity.Key),
+						func(v []byte) bool {
 							return true
 						},
 					)
@@ -428,7 +428,7 @@ func TestSupervisor(t *testing.T) {
 				secondSupervisor := &Supervisor{
 					HandlerIdentity: deps.Supervisor.HandlerIdentity,
 					Journals:        deps.Journals,
-					Keyspaces:       deps.Keyspaces,
+					Sets:            deps.Sets,
 					Packer:          deps.Packer,
 					Handler:         deps.Handler,
 					Events:          deps.EventRecorder,
