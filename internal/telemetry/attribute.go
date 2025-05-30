@@ -2,12 +2,14 @@ package telemetry
 
 import (
 	"fmt"
-	"log/slog"
 	"math"
 	"reflect"
+	"strconv"
+	"time"
 
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/log"
 	"golang.org/x/exp/constraints"
 )
 
@@ -34,11 +36,24 @@ func Stringer(k string, v fmt.Stringer) Attr {
 	return String(k, v.String())
 }
 
-// UUID returns a string attribute set to the string representation of v.
-func UUID(k string, v *uuidpb.UUID) Attr {
-	if v == nil {
-		return Attr{}
+// Binary returns a string attribute containing v, represented as a Go string
+// (with backslash escaped sequences). If the value is longer than 64 bytes, it
+// is truncated to 64 bytes and the key is suffixed with "_truncated".
+func Binary(k string, v []byte) Attr {
+	if len(v) > 64 {
+		v = v[:64]
+		k += "_truncated"
 	}
+
+	return Attr{
+		key: k,
+		typ: attrTypeBinary,
+		str: strconv.QuoteToASCII(string(v)),
+	}
+}
+
+// UUID returns an attribute that is the string representation of a UUID.
+func UUID(k string, v *uuidpb.UUID) Attr {
 	return String(k, v.AsString())
 }
 
@@ -66,29 +81,12 @@ func Bool[T ~bool](k string, v T) Attr {
 }
 
 // Int returns an int64 attribute.
-func Int[T constraints.Integer](k string, v T) Attr {
+func Int[T constraints.Signed](k string, v T) Attr {
 	return Attr{
 		typ: attrTypeInt64,
 		key: k,
 		num: uint64(v),
 	}
-}
-
-// SliceLen returns an int64 attribute that is set to the length of the
-// slive v, if it is not empty.
-func SliceLen[S ~[]E, E any](k string, v S) Attr {
-	if n := len(v); n != 0 {
-		return Int(k, n)
-	}
-	return Attr{}
-}
-
-// If conditionally includes an attribute.
-func If(cond bool, attr Attr) Attr {
-	if cond {
-		return attr
-	}
-	return Attr{}
 }
 
 // Float returns a float64 attribute.
@@ -100,10 +98,22 @@ func Float[T constraints.Float](k string, v T) Attr {
 	}
 }
 
-func (a Attr) otel() (attribute.KeyValue, bool) {
+// Time returns a string attribute containing v in [time.RFC3339Nano] format.
+func Time(k string, v time.Time) Attr {
+	return String(k, v.Format(time.RFC3339Nano))
+}
+
+// Duration returns a string attributing containing v in human readable format.
+func Duration(k string, v time.Duration) Attr {
+	return String(k, v.String())
+}
+
+func (a Attr) asAttrKeyValue() (attribute.KeyValue, bool) {
 	switch a.typ {
 	case attrTypeNone:
 		return attribute.KeyValue{}, false
+	case attrTypeBinary:
+		return attribute.String(a.key, strconv.QuoteToASCII(a.str)), true
 	case attrTypeString:
 		return attribute.String(a.key, a.str), true
 	case attrTypeBool:
@@ -117,18 +127,20 @@ func (a Attr) otel() (attribute.KeyValue, bool) {
 	}
 }
 
-func (a Attr) slog() (slog.Attr, bool) {
+func (a Attr) asLogKeyValue() (log.KeyValue, bool) {
 	switch a.typ {
 	case attrTypeNone:
-		return slog.Attr{}, false
+		return log.KeyValue{}, false
+	case attrTypeBinary:
+		return log.Bytes(a.key, []byte(a.str)), true
 	case attrTypeString:
-		return slog.String(a.key, a.str), true
+		return log.String(a.key, a.str), true
 	case attrTypeBool:
-		return slog.Bool(a.key, a.num != 0), true
+		return log.Bool(a.key, a.num != 0), true
 	case attrTypeInt64:
-		return slog.Int64(a.key, int64(a.num)), true
+		return log.Int64(a.key, int64(a.num)), true
 	case attrTypeFloat64:
-		return slog.Float64(a.key, math.Float64frombits(a.num)), true
+		return log.Float64(a.key, math.Float64frombits(a.num)), true
 	default:
 		panic("unknown attribute type")
 	}
@@ -138,9 +150,33 @@ type attrType uint8
 
 const (
 	attrTypeNone attrType = iota
-	attrTypeGroup
+	attrTypeBinary
 	attrTypeString
 	attrTypeBool
 	attrTypeInt64
 	attrTypeFloat64
 )
+
+func asAttrKeyValues(attrs []Attr) []attribute.KeyValue {
+	kvs := make([]attribute.KeyValue, 0, len(attrs))
+
+	for _, attr := range attrs {
+		if attr, ok := attr.asAttrKeyValue(); ok {
+			kvs = append(kvs, attr)
+		}
+	}
+
+	return kvs
+}
+
+func asLogKeyValues(attrs []Attr) []log.KeyValue {
+	kvs := make([]log.KeyValue, 0, len(attrs))
+
+	for _, attr := range attrs {
+		if attr, ok := attr.asLogKeyValue(); ok {
+			kvs = append(kvs, attr)
+		}
+	}
+
+	return kvs
+}

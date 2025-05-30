@@ -1,46 +1,112 @@
 package telemetry
 
 import (
-	"log/slog"
-	"slices"
+	"runtime/debug"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/log"
+	nooplog "go.opentelemetry.io/otel/log/noop"
 	"go.opentelemetry.io/otel/metric"
+	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
+	nooptrace "go.opentelemetry.io/otel/trace/noop"
 )
 
 // Provider provides Recorder instances scoped to particular subsystems.
+//
+// The zero value of a *Provider is equivalent to a provider configured with
+// no-op tracer, meter and logging providers.
 type Provider struct {
 	TracerProvider trace.TracerProvider
 	MeterProvider  metric.MeterProvider
-	Logger         *slog.Logger
+	LoggerProvider log.LoggerProvider
 	Attrs          []Attr
 }
 
-// Recorder returns a new Recorder instance.
-//
-// pkg is the path to the Go package that is performing the instrumentation. If
-// it is an internal package, use the package path of the public parent package
-// instead.
-//
-// name is the one-word name of the subsystem that the recorder is for, for
-// example "journal" or "aggregate".
-func (p *Provider) Recorder(pkg, name string, attrs ...Attr) *Recorder {
-	r := &Recorder{
-		name: "io.dogmatiq.veracity." + name,
-		attrs: append(
-			slices.Clone(p.Attrs),
-			attrs...,
-		),
-		tracer: p.TracerProvider.Tracer(pkg, tracerVersion),
-		meter:  p.MeterProvider.Meter(pkg, meterVersion),
-		logger: p.Logger,
-	}
+// Recorder records traces, metrics and logs for a particular subsystem.
+type Recorder struct {
+	tracer  trace.Tracer
+	meter   metric.Meter
+	logger  log.Logger
+	attrKVs attribute.Set
+	logKVs  []log.KeyValue
 
-	r.errors = r.Int64Counter(
-		"errors",
-		metric.WithDescription("The number of errors that have occurred."),
-		metric.WithUnit("{error}"),
+	errorCount              Instrument[int64]
+	operationCount          Instrument[int64]
+	operationsInFlightCount Instrument[int64]
+}
+
+// Recorder returns a new Recorder instance.
+func (p *Provider) Recorder(attrs ...Attr) *Recorder {
+	const pkg = "github.com/dogmatiq/veracity/"
+
+	var (
+		tracerProvider trace.TracerProvider
+		meterProvider  metric.MeterProvider
+		loggerProvider log.LoggerProvider
 	)
 
+	if p != nil {
+		tracerProvider = p.TracerProvider
+		meterProvider = p.MeterProvider
+		loggerProvider = p.LoggerProvider
+	}
+
+	if tracerProvider == nil {
+		tracerProvider = nooptrace.NewTracerProvider()
+	}
+
+	if meterProvider == nil {
+		meterProvider = noopmetric.NewMeterProvider()
+	}
+
+	if loggerProvider == nil {
+		loggerProvider = nooplog.NewLoggerProvider()
+	}
+
+	r := &Recorder{
+		tracer:  tracerProvider.Tracer(pkg, tracerVersion),
+		meter:   meterProvider.Meter(pkg, meterVersion),
+		logger:  loggerProvider.Logger(pkg, logVersion),
+		attrKVs: attribute.NewSet(asAttrKeyValues(attrs)...),
+		logKVs:  asLogKeyValues(attrs),
+	}
+
+	r.errorCount = r.Counter("errors", "{error}", "The number of errors that have occurred.")
+	r.operationCount = r.Counter("operations", "{operation}", "The number of operations that have been performed.")
+	r.operationsInFlightCount = r.UpDownCounter("operations.in_flight", "{operation}", "The number of operations that are currently in progress.")
+
 	return r
+}
+
+var (
+	// tracerVersion is a TracerOption that sets the instrumentation version
+	// to the current version of the module.
+	tracerVersion trace.TracerOption
+
+	// meterVersion is a MeterOption that sets the instrumentation version to
+	// the current version of the module.
+	meterVersion metric.MeterOption
+
+	// logVersion is a LoggerOption that sets the instrumentation version to
+	// the current version of the module.
+	logVersion log.LoggerOption
+)
+
+func init() {
+	const modulePath = "github.com/dogmatiq/veracity"
+	version := "unknown"
+
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, dep := range info.Deps {
+			if dep.Path == modulePath {
+				version = dep.Version
+				break
+			}
+		}
+	}
+
+	tracerVersion = trace.WithInstrumentationVersion(version)
+	meterVersion = metric.WithInstrumentationVersion(version)
+	logVersion = log.WithInstrumentationVersion(version)
 }

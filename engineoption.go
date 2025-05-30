@@ -1,12 +1,12 @@
 package veracity
 
 import (
-	"log/slog"
-
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/persistencekit/journal"
 	"github.com/dogmatiq/persistencekit/kv"
+	"github.com/dogmatiq/persistencekit/set"
 	"github.com/dogmatiq/veracity/internal/engineconfig"
+	"go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
@@ -66,14 +66,15 @@ func WithMetricProvider(p metric.MeterProvider) EngineOption {
 	}
 }
 
-// WithLogger is an [EngineOption] that setes the logger used by the engine.
-func WithLogger(l *slog.Logger) EngineOption {
-	if l == nil {
-		panic("logger must not be nil")
+// WithLoggerProvider is an [EngineOption] that sets the OpenTelemetry logger
+// provider used by the engine.
+func WithLoggerProvider(p log.LoggerProvider) EngineOption {
+	if p == nil {
+		panic("logger provider must not be nil")
 	}
 
 	return func(cfg *engineconfig.Config) {
-		cfg.Telemetry.Logger = l
+		cfg.Telemetry.LoggerProvider = p
 	}
 }
 
@@ -90,6 +91,13 @@ func WithJournalStore(s journal.BinaryStore) EngineOption {
 func WithKeyValueStore(s kv.BinaryStore) EngineOption {
 	return func(cfg *engineconfig.Config) {
 		cfg.Persistence.Keyspaces = s
+	}
+}
+
+// WithSetStore is an [EngineOption] that sets the set store used by the engine.
+func WithSetStore(s set.BinaryStore) EngineOption {
+	return func(cfg *engineconfig.Config) {
+		cfg.Persistence.Sets = s
 	}
 }
 
