@@ -37,16 +37,14 @@ type Supervisor struct {
 	eventOffsetHint  eventstream.Offset
 	acceptedCommands set.Set[*uuidpb.UUID]
 	shutdownLatch    signaling.Latch
-	recorder         *telemetry.Recorder
+	telemetry        *telemetry.Recorder
 }
 
 // Run starts the supervisor.
 //
 // It runs until ctx is canceled, Shutdown() is called, or an error occurs.
 func (s *Supervisor) Run(ctx context.Context) error {
-	s.recorder = s.Telemetry.Recorder(
-		"github.com/dogmatiq/veracity",
-		"integration",
+	s.telemetry = s.Telemetry.Recorder(
 		telemetry.UUID("handler.key", s.HandlerIdentity.Key),
 		telemetry.String("handler.name", s.HandlerIdentity.Name),
 	)
@@ -77,7 +75,7 @@ func (s *Supervisor) Shutdown() {
 // recover discovers any pending work in the journal, and completes it before
 // entering the `idle state`.
 func (s *Supervisor) recover(ctx context.Context) fsm.Action {
-	ctx, span := s.recorder.StartSpan(ctx, "recover")
+	ctx, span := s.telemetry.StartSpan(ctx, "integration.recover")
 	defer span.End()
 
 	// Otherwise, we may have unhandled commands, or events that have not yet
@@ -95,7 +93,7 @@ func (s *Supervisor) recover(ctx context.Context) fsm.Action {
 		unappendedEvents []*integrationjournal.CommandHandled
 	)
 
-	span.Debug("recovering pending operations from journal")
+	s.telemetry.Info(ctx, "integration.recover", "recovering pending operations from journal")
 
 	bounds, err := s.journal.Bounds(ctx)
 	if err != nil {
@@ -150,15 +148,19 @@ func (s *Supervisor) recover(ctx context.Context) fsm.Action {
 	}
 
 	span.SetAttributes(
-		telemetry.SliceLen("unhandled_commands", unhandledCommands),
-		telemetry.SliceLen("unappended_events", unappendedEvents),
+		telemetry.Int("unhandled_commands", len(unhandledCommands)),
+		telemetry.Int("unappended_events", len(unappendedEvents)),
 	)
 
 	if len(unhandledCommands) == 0 && len(unappendedEvents) == 0 {
-		span.Debug("no pending operations found in journal")
+		s.telemetry.Info(ctx, "integration.recover.ok", "no pending operations found in journal")
 	} else {
 		if len(unappendedEvents) != 0 {
-			span.Debug("journal contains events that have not yet been appended to an event stream")
+			s.telemetry.Info(
+				ctx,
+				"integration.recover.unappended_event_found",
+				"journal contains events that have not yet been appended to an event stream",
+			)
 
 			for _, op := range unappendedEvents {
 				if err := s.appendEvents(ctx, op); err != nil {
@@ -168,7 +170,11 @@ func (s *Supervisor) recover(ctx context.Context) fsm.Action {
 		}
 
 		if len(unhandledCommands) != 0 {
-			span.Debug("journal contains commands that have not yet been handled")
+			s.telemetry.Info(
+				ctx,
+				"integration.recover.unhandled_command_found",
+				"journal contains commands that have been accepted but not yet handled",
+			)
 
 			for _, env := range unhandledCommands {
 				if err := s.handleCommand(ctx, env); err != nil {
@@ -177,7 +183,7 @@ func (s *Supervisor) recover(ctx context.Context) fsm.Action {
 			}
 		}
 
-		span.Debug("all pending operations in journal are now complete")
+		s.telemetry.Info(ctx, "integration.recover.ok", "all pending operations in journal are now complete")
 	}
 
 	// We've now confirmed that there is no pending work remaining in the
@@ -213,7 +219,17 @@ func (s *Supervisor) acceptCommand(
 	ctx context.Context,
 	req ackqueue.Request[*envelopepb.Envelope],
 ) fsm.Action {
-	ctx, span := s.recorder.StartSpan(ctx, "accept-command")
+	env := req.Value
+
+	ctx, span := s.telemetry.StartSpan(
+		ctx,
+		"integration.accept_command",
+		telemetry.UUID("command.message_id", env.GetMessageId()),
+		telemetry.UUID("command.causation_id", env.GetMessageId()),
+		telemetry.UUID("command.correlation_id", env.GetCorrelationId()),
+		telemetry.String("command.media_type", env.GetMediaType()),
+		telemetry.String("command.description", env.GetDescription()),
+	)
 	defer span.End()
 
 	// Do not accept the command if it has already been accepted in the past.
@@ -222,7 +238,7 @@ func (s *Supervisor) acceptCommand(
 	//
 	// TODO: there are optimizations to be made here (i.e. in-memory list of
 	// recent commands, bloom filter, etc).
-	alreadyAccepted, err := s.acceptedCommands.Has(ctx, req.Value.GetMessageId())
+	alreadyAccepted, err := s.acceptedCommands.Has(ctx, env.GetMessageId())
 	if err != nil {
 		req.Nack()
 		return fsm.Fail(err)
@@ -230,7 +246,13 @@ func (s *Supervisor) acceptCommand(
 
 	if alreadyAccepted {
 		req.Ack()
-		span.Debug("ignored command that has already been accepted for handling")
+
+		s.telemetry.Info(
+			ctx,
+			"integration.accept_command.ok",
+			"acknowledged and ignored command that has already been accepted for handling",
+		)
+
 		return fsm.EnterState(s.idle)
 	}
 
@@ -241,21 +263,20 @@ func (s *Supervisor) acceptCommand(
 			NewRecordBuilder().
 			WithCommandAccepted(
 				&integrationjournal.CommandAccepted{
-					Command: req.Value,
+					Command: env,
 				},
 			).
 			Build(),
 	); err != nil {
+		s.telemetry.Error(ctx, "integration.accept_command.error", err)
 		req.Nack()
 		return fsm.Fail(err)
 	}
 
 	s.journalPos++
-
 	req.Ack()
-	span.Debug("accepted command for handling")
 
-	if err := s.handleCommand(ctx, req.Value); err != nil {
+	if err := s.handleCommand(ctx, env); err != nil {
 		return fsm.Fail(err)
 	}
 
@@ -265,9 +286,9 @@ func (s *Supervisor) acceptCommand(
 // handleCommand dispatches a command to the [dogma.IntegrationMessageHandler]
 // and persists the result to the journal.
 func (s *Supervisor) handleCommand(ctx context.Context, env *envelopepb.Envelope) error {
-	ctx, span := s.recorder.StartSpan(
+	ctx, span := s.telemetry.StartSpan(
 		ctx,
-		"handle-command",
+		"integration.handle_command",
 		telemetry.UUID("command.message_id", env.GetMessageId()),
 		telemetry.UUID("command.causation_id", env.GetMessageId()),
 		telemetry.UUID("command.correlation_id", env.GetCorrelationId()),
@@ -276,26 +297,23 @@ func (s *Supervisor) handleCommand(ctx context.Context, env *envelopepb.Envelope
 	)
 	defer span.End()
 
-	// Mark the command as accepted so that it is never accepted again, even
-	// once the journal has been truncated.
-	//
-	// We do this here (before handling the command) because regardless of how
-	// we reached this point (new request vs recovery), we know the command must
-	// have been accepted.
 	if err := s.acceptedCommands.Add(ctx, env.GetMessageId()); err != nil {
+		s.telemetry.Error(ctx, "integration.handle_command.error", err)
 		return err
 	}
 
 	cmd, err := s.Packer.Unpack(env)
 	if err != nil {
+		s.telemetry.Error(ctx, "integration.handle_command.error", err)
 		return err
 	}
 
 	sc := &scope{
-		packer:  s.Packer,
-		handler: s.HandlerIdentity,
-		command: env,
-		span:    span,
+		ctx:       ctx,
+		packer:    s.Packer,
+		handler:   s.HandlerIdentity,
+		command:   env,
+		telemetry: s.telemetry,
 	}
 
 	if err := s.Handler.HandleCommand(
@@ -303,6 +321,7 @@ func (s *Supervisor) handleCommand(ctx context.Context, env *envelopepb.Envelope
 		sc,
 		cmd.(dogma.Command),
 	); err != nil {
+		s.telemetry.Error(ctx, "integration.handle_command.error", err)
 		return err
 	}
 
@@ -317,6 +336,7 @@ func (s *Supervisor) handleCommand(ctx context.Context, env *envelopepb.Envelope
 		if s.eventStreamID == nil {
 			s.eventStreamID, s.eventOffsetHint, err = s.Events.SelectEventStream(ctx)
 			if err != nil {
+				s.telemetry.Error(ctx, "integration.handle_command.error", err)
 				return err
 			}
 		}
@@ -333,9 +353,12 @@ func (s *Supervisor) handleCommand(ctx context.Context, env *envelopepb.Envelope
 			WithCommandHandled(op).
 			Build(),
 	); err != nil {
+		s.telemetry.Error(ctx, "integration.handle_command.error", err)
 		return err
 	}
 	s.journalPos++
+
+	s.telemetry.Info(ctx, "integration.handle_command.ok", "command handled successfully")
 
 	return s.appendEvents(ctx, op)
 }
@@ -350,7 +373,7 @@ func (s *Supervisor) appendEvents(
 		return nil
 	}
 
-	ctx, span := s.recorder.StartSpan(ctx, "append-events")
+	ctx, span := s.telemetry.StartSpan(ctx, "integration.append_events")
 	defer span.End()
 
 	res, err := s.Events.AppendEvents(
@@ -362,6 +385,7 @@ func (s *Supervisor) appendEvents(
 		},
 	)
 	if err != nil {
+		s.telemetry.Error(ctx, "integration.append_events.error", err)
 		return err
 	}
 
@@ -381,9 +405,12 @@ func (s *Supervisor) appendEvents(
 			).
 			Build(),
 	); err != nil {
+		s.telemetry.Error(ctx, "integration.append_events.error", err)
 		return err
 	}
 	s.journalPos++
+
+	s.telemetry.Info(ctx, "integration.append_events.ok", "events appended to event stream successfully")
 
 	return nil
 }

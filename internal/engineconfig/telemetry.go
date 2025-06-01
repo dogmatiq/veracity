@@ -1,10 +1,10 @@
 package engineconfig
 
 import (
-	"log/slog"
-
 	"github.com/dogmatiq/veracity/internal/telemetry"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/log/global"
+	nooplog "go.opentelemetry.io/otel/log/noop"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	nooptrace "go.opentelemetry.io/otel/trace/noop"
 )
@@ -26,12 +26,16 @@ func (c *Config) finalizeTelemetry() {
 		}
 	}
 
-	if c.Telemetry.Logger == nil {
-		c.Telemetry.Logger = slog.Default()
+	if c.Telemetry.LoggerProvider == nil {
+		if c.UseEnv {
+			c.Telemetry.LoggerProvider = global.GetLoggerProvider()
+		} else {
+			c.Telemetry.LoggerProvider = nooplog.NewLoggerProvider()
+		}
 	}
 
 	c.Telemetry.Attrs = append(
 		c.Telemetry.Attrs,
-		telemetry.String("node_id", c.NodeID.AsString()),
+		telemetry.UUID("node_id", c.NodeID),
 	)
 }

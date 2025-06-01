@@ -77,7 +77,7 @@ func (e *Engine) Run(ctx context.Context) error {
 				ID:        e.config.NodeID,
 				Addresses: addresses,
 			},
-			Logger: e.config.Telemetry.Logger,
+			Telemetry: e.config.Telemetry,
 		}
 		return registrar.Run(ctx)
 	})

@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/dogmatiq/dogma"
@@ -10,11 +11,12 @@ import (
 )
 
 type scope struct {
-	packer  *envelopepb.Packer
-	handler *identitypb.Identity
-	command *envelopepb.Envelope
-	events  []*envelopepb.Envelope
-	span    *telemetry.Span
+	ctx       context.Context
+	packer    *envelopepb.Packer
+	handler   *identitypb.Identity
+	command   *envelopepb.Envelope
+	events    []*envelopepb.Envelope
+	telemetry *telemetry.Recorder
 }
 
 func (s *scope) RecordEvent(e dogma.Event) {
@@ -26,7 +28,9 @@ func (s *scope) RecordEvent(e dogma.Event) {
 
 	s.events = append(s.events, env)
 
-	s.span.Info(
+	s.telemetry.Info(
+		s.ctx,
+		"integration.event_recorded",
 		"event recorded",
 		telemetry.UUID("event.message_id", env.GetMessageId()),
 		telemetry.UUID("event.causation_id", env.GetMessageId()),
@@ -37,5 +41,9 @@ func (s *scope) RecordEvent(e dogma.Event) {
 }
 
 func (s *scope) Log(format string, args ...any) {
-	s.span.Info(fmt.Sprintf(format, args...))
+	s.telemetry.Info(
+		s.ctx,
+		"integration.message_logged",
+		fmt.Sprintf(format, args...),
+	)
 }

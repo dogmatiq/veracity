@@ -11,6 +11,7 @@ import (
 	"github.com/dogmatiq/ferrite"
 	"github.com/dogmatiq/persistencekit/journal"
 	"github.com/dogmatiq/persistencekit/kv"
+	"github.com/dogmatiq/persistencekit/set"
 	"github.com/dogmatiq/veracity/internal/telemetry"
 	"google.golang.org/grpc"
 )
@@ -36,6 +37,7 @@ type Config struct {
 	Persistence struct {
 		Journals  journal.BinaryStore
 		Keyspaces kv.BinaryStore
+		Sets      set.BinaryStore
 	}
 
 	GRPC struct {

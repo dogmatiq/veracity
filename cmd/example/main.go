@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,20 +10,24 @@ import (
 	"github.com/dogmatiq/persistencekit/driver/memory/memoryjournal"
 	"github.com/dogmatiq/persistencekit/driver/memory/memorykv"
 	"github.com/dogmatiq/veracity"
+	"go.opentelemetry.io/otel/exporters/stdout/stdoutlog"
+	"go.opentelemetry.io/otel/sdk/log"
 )
 
 func main() {
+	logExporter, err := stdoutlog.New()
+	if err != nil {
+		panic(err)
+	}
+
 	e := veracity.New(
 		&example.App{},
 		veracity.WithJournalStore(&memoryjournal.BinaryStore{}),
 		veracity.WithKeyValueStore(&memorykv.BinaryStore{}),
-		veracity.WithLogger(
-			slog.New(
-				slog.NewJSONHandler(
-					os.Stdout,
-					&slog.HandlerOptions{
-						Level: slog.LevelDebug,
-					},
+		veracity.WithLoggerProvider(
+			log.NewLoggerProvider(
+				log.WithProcessor(
+					log.NewSimpleProcessor(logExporter),
 				),
 			),
 		),

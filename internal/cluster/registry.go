@@ -3,7 +3,6 @@ package cluster
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/dogmatiq/veracity/internal/cluster/internal/registrypb"
 	"github.com/dogmatiq/veracity/internal/fsm"
 	"github.com/dogmatiq/veracity/internal/signaling"
+	"github.com/dogmatiq/veracity/internal/telemetry"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -35,14 +35,20 @@ type Registrar struct {
 	Node          Node
 	RenewInterval time.Duration
 	Shutdown      signaling.Latch
-	Logger        *slog.Logger
+	Telemetry     *telemetry.Provider
 
-	keyspace kv.Keyspace[*uuidpb.UUID, *registrypb.Registration]
-	interval time.Duration
+	telemetry *telemetry.Recorder
+	keyspace  kv.Keyspace[*uuidpb.UUID, *registrypb.Registration]
+	interval  time.Duration
 }
 
 // Run starts the registrar.
 func (r *Registrar) Run(ctx context.Context) error {
+	r.telemetry = r.Telemetry.Recorder(
+		telemetry.UUID("node.id", r.Node.ID),
+		telemetry.String("node.addresses", strings.Join(r.Node.Addresses, ", ")),
+	)
+
 	var err error
 	r.keyspace, err = newKVStore(r.Keyspaces).Open(ctx, registryKeyspace)
 	if err != nil {
@@ -76,18 +82,26 @@ func (r *Registrar) Run(ctx context.Context) error {
 
 // register adds a node to the registry.
 func (r *Registrar) register(ctx context.Context) error {
+	ctx, span := r.telemetry.StartSpan(ctx, "cluster.register")
+	defer span.End()
+
 	expiresAt, err := r.saveRegistration(ctx)
 	if err != nil {
+		r.telemetry.Error(ctx, "cluster.register.error", err)
 		return err
 	}
 
-	r.Logger.DebugContext(
+	span.SetAttributes(
+		telemetry.Time("registration.expires_at", expiresAt),
+		telemetry.Duration("registration.renew_interval", r.interval),
+	)
+
+	r.telemetry.Info(
 		ctx,
-		"cluster node registered",
-		slog.String("node_id", r.Node.ID.AsString()),
-		slog.String("addresses", strings.Join(r.Node.Addresses, ", ")),
-		slog.Time("expires_at", expiresAt),
-		slog.Duration("renew_interval", r.interval),
+		"cluster.register.ok",
+		"added node to the cluster registry",
+		telemetry.Time("registration.expires_at", expiresAt),
+		telemetry.Duration("registration.renew_interval", r.interval),
 	)
 
 	return nil
@@ -95,47 +109,63 @@ func (r *Registrar) register(ctx context.Context) error {
 
 // deregister removes a node from the registry.
 func (r *Registrar) deregister(ctx context.Context) error {
+	ctx, span := r.telemetry.StartSpan(ctx, "cluster.deregister")
+	defer span.End()
+
 	if err := r.deleteRegistration(ctx); err != nil {
+		r.telemetry.Error(ctx, "cluster.deregister.error", err)
 		return err
 	}
 
-	r.Logger.DebugContext(
+	r.telemetry.Info(
 		ctx,
-		"cluster node deregistered",
-		slog.String("node_id", r.Node.ID.AsString()),
+		"cluster.deregister.ok",
+		"removed node from the cluster registry",
 	)
 
 	return nil
 }
 
 // renew updates a node's registration expiry time.
-func (r *Registrar) renew(ctx context.Context) error {
+func (r *Registrar) renew(ctx context.Context) (err error) {
+	ctx, span := r.telemetry.StartSpan(ctx, "cluster.renew")
+	defer span.End()
+
 	reg, err := r.keyspace.Get(ctx, r.Node.ID)
 	if err != nil {
+		r.telemetry.Error(ctx, "cluster.renew.error", err)
 		return err
 	}
+
 	if reg == nil {
-		return errors.New("cluster node not registered")
+		err := errors.New("cannot renew unregistered cluster node")
+		r.telemetry.Error(ctx, "cluster.renew.error", err)
+		return err
 	}
 
 	if reg.ExpiresAt.AsTime().Before(time.Now()) {
-		if err := r.deleteRegistration(ctx); err != nil {
-			return err
+		err := errors.New("cannot renew expired cluster node registration")
+		r.telemetry.Error(ctx, "cluster.renew.error", err)
+
+		if deleteErr := r.deleteRegistration(ctx); deleteErr != nil {
+			return deleteErr
 		}
-		return errors.New("cluster node registration expired")
+
+		return err
 	}
 
 	expiresAt, err := r.saveRegistration(ctx)
 	if err != nil {
+		r.telemetry.Error(ctx, "cluster.renew.error", err)
 		return err
 	}
 
-	r.Logger.DebugContext(
+	r.telemetry.Info(
 		ctx,
-		"cluster node registration renewed",
-		slog.String("node_id", r.Node.ID.AsString()),
-		slog.Time("expires_at", expiresAt),
-		slog.Duration("renew_interval", r.interval),
+		"cluster.renew.ok",
+		"renewed node's registration in the cluster registry",
+		telemetry.Time("registration.expires_at", expiresAt),
+		telemetry.Duration("registration.renew_interval", r.interval),
 	)
 
 	return nil
@@ -161,9 +191,7 @@ func (r *Registrar) saveRegistration(
 }
 
 // deleteRegistration removes a registration from the registry.
-func (r *Registrar) deleteRegistration(
-	ctx context.Context,
-) error {
+func (r *Registrar) deleteRegistration(ctx context.Context) error {
 	return r.keyspace.Set(ctx, r.Node.ID, nil)
 }
 

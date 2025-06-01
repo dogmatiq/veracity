@@ -16,8 +16,6 @@ import (
 	"github.com/dogmatiq/enginekit/protobuf/uuidpb"
 	"github.com/dogmatiq/persistencekit/driver/memory/memoryjournal"
 	"github.com/dogmatiq/persistencekit/driver/memory/memoryset"
-	"github.com/dogmatiq/persistencekit/journal"
-	"github.com/dogmatiq/persistencekit/set"
 	"github.com/dogmatiq/veracity/internal/eventstream"
 	. "github.com/dogmatiq/veracity/internal/integration"
 	"github.com/dogmatiq/veracity/internal/integration/internal/integrationjournal"
@@ -45,26 +43,13 @@ func TestSupervisor(t *testing.T) {
 		deps.Handler = &IntegrationMessageHandlerStub{}
 		deps.EventRecorder = &eventRecorderStub{}
 
-		telem := test.NewTelemetryProvider(t)
-
 		deps.Supervisor = &Supervisor{
 			Handler:         deps.Handler,
 			HandlerIdentity: identitypb.New("<handler>", uuidpb.Generate()),
-			Journals: journal.WithTelemetry(
-				deps.Journals,
-				telem.TracerProvider,
-				telem.MeterProvider,
-				telem.Logger,
-			),
-			Sets: set.WithTelemetry(
-				deps.Sets,
-				telem.TracerProvider,
-				telem.MeterProvider,
-				telem.Logger,
-			),
-			Packer:    deps.Packer,
-			Events:    deps.EventRecorder,
-			Telemetry: telem,
+			Journals:        deps.Journals,
+			Sets:            deps.Sets,
+			Packer:          deps.Packer,
+			Events:          deps.EventRecorder,
 		}
 
 		deps.Executor = &CommandExecutor{
@@ -447,7 +432,6 @@ func TestSupervisor(t *testing.T) {
 					Packer:          deps.Packer,
 					Handler:         deps.Handler,
 					Events:          deps.EventRecorder,
-					Telemetry:       test.NewTelemetryProvider(t),
 				}
 
 				rehandled := make(chan struct{}, 100)
