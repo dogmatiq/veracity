@@ -36,6 +36,6 @@ func (c *Config) finalizeTelemetry() {
 
 	c.Telemetry.Attrs = append(
 		c.Telemetry.Attrs,
-		telemetry.UUID("node_id", c.NodeID),
+		telemetry.UUID("node.id", c.NodeID),
 	)
 }

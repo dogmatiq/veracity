@@ -2,8 +2,8 @@ package telemetry
 
 import (
 	"runtime/debug"
+	"slices"
 
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/log"
 	nooplog "go.opentelemetry.io/otel/log/noop"
 	"go.opentelemetry.io/otel/metric"
@@ -25,11 +25,9 @@ type Provider struct {
 
 // Recorder records traces, metrics and logs for a particular subsystem.
 type Recorder struct {
-	tracer  trace.Tracer
-	meter   metric.Meter
-	logger  log.Logger
-	attrKVs attribute.Set
-	logKVs  []log.KeyValue
+	tracer trace.Tracer
+	meter  metric.Meter
+	logger log.Logger
 
 	errorCount              Instrument[int64]
 	operationCount          Instrument[int64]
@@ -50,6 +48,11 @@ func (p *Provider) Recorder(attrs ...Attr) *Recorder {
 		tracerProvider = p.TracerProvider
 		meterProvider = p.MeterProvider
 		loggerProvider = p.LoggerProvider
+
+		attrs = append(
+			slices.Clone(p.Attrs),
+			attrs...,
+		)
 	}
 
 	if tracerProvider == nil {
@@ -65,16 +68,26 @@ func (p *Provider) Recorder(attrs ...Attr) *Recorder {
 	}
 
 	r := &Recorder{
-		tracer:  tracerProvider.Tracer(pkg, tracerVersion),
-		meter:   meterProvider.Meter(pkg, meterVersion),
-		logger:  loggerProvider.Logger(pkg, logVersion),
-		attrKVs: attribute.NewSet(asAttrKeyValues(attrs)...),
-		logKVs:  asLogKeyValues(attrs),
+		tracer: tracerProvider.Tracer(
+			pkg,
+			tracerVersion,
+			trace.WithInstrumentationAttributes(asAttrKeyValues(attrs)...),
+		),
+		meter: meterProvider.Meter(
+			pkg,
+			meterVersion,
+			metric.WithInstrumentationAttributes(asAttrKeyValues(attrs)...),
+		),
+		logger: loggerProvider.Logger(
+			pkg,
+			logVersion,
+			log.WithInstrumentationAttributes(asAttrKeyValues(attrs)...),
+		),
 	}
 
 	r.errorCount = r.Counter("errors", "{error}", "The number of errors that have occurred.")
 	r.operationCount = r.Counter("operations", "{operation}", "The number of operations that have been performed.")
-	r.operationsInFlightCount = r.UpDownCounter("operations.in_flight", "{operation}", "The number of operations that are currently in progress.")
+	r.operationsInFlightCount = r.UpDownCounter("operations.inflight", "{operation}", "The number of operations that are currently in progress.")
 
 	return r
 }
