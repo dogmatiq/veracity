@@ -36,7 +36,7 @@ func TestSupervisor(t *testing.T) {
 		Executor      *CommandExecutor
 	}
 
-	setup := func(t test.TestingT) (deps dependencies) {
+	setup := func(test.TestingT) (deps dependencies) {
 		deps.Packer = newPacker()
 		deps.Journals = &memoryjournal.BinaryStore{}
 		deps.Sets = &memoryset.BinaryStore{}

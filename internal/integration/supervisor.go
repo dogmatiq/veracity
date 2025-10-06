@@ -17,7 +17,6 @@ import (
 	"github.com/dogmatiq/veracity/internal/messaging/ackqueue"
 	"github.com/dogmatiq/veracity/internal/signaling"
 	"github.com/dogmatiq/veracity/internal/telemetry"
-	"google.golang.org/protobuf/proto"
 )
 
 // Supervisor dispatches commands to a specific integration message handler.
@@ -78,19 +77,19 @@ func (s *Supervisor) recover(ctx context.Context) fsm.Action {
 	ctx, span := s.telemetry.StartSpan(ctx, "integration.recover")
 	defer span.End()
 
-	// Otherwise, we may have unhandled commands, or events that have not yet
-	// been recorded to an event stream.
+	// We may have unhandled commands or events that have not yet been recorded
+	// to an event stream.
 	var (
-		// unhandledCommands is the list of commands that were accepted by the
-		// supervisor but have either not been passed to the handler, or the
-		// result of doing so has not been recorded to the journal and therefore
-		// they must be retried.
-		unhandledCommands []*envelopepb.Envelope
+		// acceptedCommands is the list of operations representing commands that
+		// were accepted by the supervisor but have either not yet been passed
+		// to the handler, or the result of doing so has not been recorded to
+		// the journal and therefore they must be retried.
+		acceptedCommands []*integrationjournal.CommandAccepted
 
-		// unappendedEvents is the list of events that were recorded by handler
-		// during command handling, but may not yet have been appended to an
-		// event stream.
-		unappendedEvents []*integrationjournal.CommandHandled
+		// handledCommands is the list of commands that have been handled
+		// successfully, but may have events that have not yet been appended to
+		// an event stream.
+		handledCommands []*integrationjournal.CommandHandled
 	)
 
 	s.telemetry.Info(ctx, "integration.recover", "recovering pending operations from journal")
@@ -117,23 +116,21 @@ func (s *Supervisor) recover(ctx context.Context) fsm.Action {
 				integrationjournal.MustSwitch_Record_Operation(
 					record,
 					func(op *integrationjournal.CommandAccepted) {
-						unhandledCommands = append(unhandledCommands, op.GetCommand())
+						acceptedCommands = append(acceptedCommands, op)
 					},
 					func(op *integrationjournal.CommandHandled) {
-						for i, env := range unhandledCommands {
-							if proto.Equal(env.GetMessageId(), op.GetCommandId()) {
-								unhandledCommands = slices.Delete(unhandledCommands, i, i+1)
+						for i, x := range acceptedCommands {
+							if x.GetCommand().GetMessageId().Equal(op.GetCommandId()) {
+								acceptedCommands = slices.Delete(acceptedCommands, i, i+1)
 								break
 							}
 						}
-						if len(op.GetEvents()) > 0 {
-							unappendedEvents = append(unappendedEvents, op)
-						}
+						handledCommands = append(handledCommands, op)
 					},
 					func(op *integrationjournal.EventsAppendedToStream) {
-						for i, rec := range unappendedEvents {
-							if proto.Equal(rec.GetCommandId(), op.GetCommandId()) {
-								unappendedEvents = slices.Delete(unappendedEvents, i, i+1)
+						for i, x := range handledCommands {
+							if x.GetCommandId().Equal(op.GetCommandId()) {
+								handledCommands = slices.Delete(handledCommands, i, i+1)
 								break
 							}
 						}
@@ -148,36 +145,36 @@ func (s *Supervisor) recover(ctx context.Context) fsm.Action {
 	}
 
 	span.SetAttributes(
-		telemetry.Int("unhandled_commands", len(unhandledCommands)),
-		telemetry.Int("unappended_events", len(unappendedEvents)),
+		telemetry.Int("unhandled_commands", len(acceptedCommands)),
+		telemetry.Int("unappended_events", len(handledCommands)),
 	)
 
-	if len(unhandledCommands) == 0 && len(unappendedEvents) == 0 {
+	if len(acceptedCommands) == 0 && len(handledCommands) == 0 {
 		s.telemetry.Info(ctx, "integration.recover.ok", "no pending operations found in journal")
 	} else {
-		if len(unappendedEvents) != 0 {
+		if len(handledCommands) != 0 {
 			s.telemetry.Info(
 				ctx,
 				"integration.recover.unappended_event_found",
 				"journal contains events that have not yet been appended to an event stream",
 			)
 
-			for _, op := range unappendedEvents {
+			for _, op := range handledCommands {
 				if err := s.appendEvents(ctx, op); err != nil {
 					return fsm.Fail(err)
 				}
 			}
 		}
 
-		if len(unhandledCommands) != 0 {
+		if len(acceptedCommands) != 0 {
 			s.telemetry.Info(
 				ctx,
 				"integration.recover.unhandled_command_found",
 				"journal contains commands that have been accepted but not yet handled",
 			)
 
-			for _, env := range unhandledCommands {
-				if err := s.handleCommand(ctx, env); err != nil {
+			for _, op := range acceptedCommands {
+				if err := s.handleCommand(ctx, op.GetCommand()); err != nil {
 					return fsm.Fail(err)
 				}
 			}
