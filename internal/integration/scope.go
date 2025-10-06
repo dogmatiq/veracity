@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/dogmatiq/dogma"
 	"github.com/dogmatiq/enginekit/protobuf/envelopepb"
@@ -12,6 +13,7 @@ import (
 
 type scope struct {
 	ctx       context.Context
+	now       time.Time
 	packer    *envelopepb.Packer
 	handler   *identitypb.Identity
 	command   *envelopepb.Envelope
@@ -38,6 +40,10 @@ func (s *scope) RecordEvent(e dogma.Event) {
 		telemetry.String("event.media_type", env.GetMediaType()),
 		telemetry.String("event.description", env.GetDescription()),
 	)
+}
+
+func (s *scope) Now() time.Time {
+	return s.now
 }
 
 func (s *scope) Log(format string, args ...any) {
